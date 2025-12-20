@@ -1,0 +1,77 @@
+/* settings.wxss */
+
+.about-info {
+  padding: 16rpx 0;
+}
+
+.about-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 16rpx 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.about-item:last-child {
+  border-bottom: none;
+}
+
+.about-item .label {
+  font-size: 24rpx;
+  color: #4a4a4a;
+  font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.about-item .value {
+  font-size: 24rpx;
+  color: #1a1a1a;
+  font-weight: 600;
+  font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.action-list {
+  padding: 8rpx 0;
+}
+
+.action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 1px solid #e0e0e0;
+  cursor: pointer;
+}
+
+.action-item:last-child {
+  border-bottom: none;
+}
+
+.action-item:active {
+  background: #fafafa;
+}
+
+.action-label {
+  font-size: 24rpx;
+  color: #1a1a1a;
+  font-family: 'Courier New', 'Consolas', monospace;
+  letter-spacing: 0.3px;
+}
+
+.action-icon {
+  font-size: 24rpx;
+  color: #6a6a6a;
+}
+
+.system-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  text-align: center;
+  padding: 16rpx 0;
+}
+
+.info-text {
+  font-size: 22rpx;
+  color: #6a6a6a;
+  line-height: 1.5;
+  font-family: 'Courier New', 'Consolas', monospace;
+}

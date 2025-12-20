@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "配置管理",
+  "enablePullDownRefresh": true,
+  "enableShareAppMessage": true,
+  "enableShareTimeline": true,
+  "usingComponents": {}
+}

@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/report/report",
+    "pages/configs/configs",
+    "pages/settings/settings",
+    "pages/ar-align/ar-align",
+    "pages/satellite-coverage/satellite-coverage"
+  ],
+  "permission": {
+    "scope.userLocation": {
+      "desc": "用于AR对星辅助功能，计算卫星方位角"
+    },
+    "scope.camera": {
+      "desc": "用于AR对星辅助功能，实现增强现实对星"
+    }
+  },
+  "requiredPrivateInfos": [
+    "getLocation",
+    "startLocationUpdate"
+  ],
+  "window": {
+    "backgroundColor": "#F6F6F6",
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#2C3E50",
+    "navigationBarTitleText": "卫星链路计算系统",
+    "navigationBarTextStyle": "white"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}

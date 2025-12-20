@@ -1,0 +1,419 @@
+/* report.wxss - 诺奖级学术报告风格 */
+
+page {
+  background: #ffffff;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.academic-report {
+  height: 100vh;
+  padding: 14rpx 16rpx 88rpx 16rpx;
+  font-family: 'Times New Roman', 'SimSun', 'Songti SC', serif;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-top: 80rpx;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ========== 语言切换按钮 ========== */
+.lang-switch {
+  position: absolute;
+  top: 12rpx;
+  left: 16rpx;
+  font-size: 18rpx;
+  color: #1a5f2a;
+  font-weight: 600;
+  padding: 4rpx 10rpx;
+  font-family: 'Georgia', 'Times New Roman', 'Songti SC', 'STSong', serif;
+  z-index: 100;
+}
+
+.lang-switch:active {
+  opacity: 0.6;
+}
+
+/* ========== 报告抬头 ========== */
+.report-masthead {
+  text-align: center;
+  margin-bottom: 10rpx;
+  flex-shrink: 0;
+}
+
+.institution-line {
+  font-size: 16rpx;
+  letter-spacing: 3rpx;
+  color: #666666;
+  font-weight: 400;
+  font-family: 'Times New Roman', serif;
+  text-transform: uppercase;
+}
+
+.report-main-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #000000;
+  letter-spacing: 2rpx;
+  margin: 4rpx 0;
+  font-family: 'Georgia', 'Times New Roman', 'Songti SC', 'STSong', serif;
+}
+
+.title-underline {
+  width: 100rpx;
+  height: 2rpx;
+  background: #000000;
+  margin: 6rpx auto;
+}
+
+.meta-line {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4rpx;
+}
+
+.meta-item {
+  font-size: 17rpx;
+  color: #333333;
+  font-style: italic;
+}
+
+.meta-sep {
+  font-size: 17rpx;
+  color: #999999;
+  margin: 0 5rpx;
+}
+
+/* ========== 结论框 ========== */
+.conclusion-box {
+  display: flex;
+  justify-content: center;
+  gap: 36rpx;
+  padding: 8rpx 16rpx;
+  border: 1rpx solid #000000;
+  border-left: 4rpx solid #000000;
+  margin-bottom: 10rpx;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.conclusion-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6rpx;
+}
+
+.conclusion-label {
+  font-size: 17rpx;
+  color: #666666;
+  font-weight: 400;
+}
+
+.conclusion-value {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #000000;
+  font-family: 'Times New Roman', serif;
+}
+
+.conclusion-value.excellent {
+  color: #1a5f2a;
+}
+
+.conclusion-value.good {
+  color: #2e7d32;
+}
+
+.conclusion-value.qualified {
+  color: #f57c00;
+}
+
+.conclusion-value.poor {
+  color: #c62828;
+}
+
+.unit-small {
+  font-size: 15rpx;
+  font-weight: 400;
+  color: #666666;
+}
+
+/* ========== 报告主体 ========== */
+.report-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.row-section {
+  display: flex;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.row-section.three-col {
+  gap: 6rpx;
+}
+
+.flex-1 {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ========== 区块样式 ========== */
+.section-block {
+  border: 1rpx solid #cccccc;
+  flex-shrink: 0;
+}
+
+.section-header {
+  font-size: 17rpx;
+  font-weight: 600;
+  color: #000000;
+  padding: 5rpx 8rpx;
+  background: linear-gradient(to right, #f0f0f0, #ffffff);
+  border-bottom: 1rpx solid #cccccc;
+  font-family: 'Georgia', 'Times New Roman', 'Songti SC', 'STSong', serif;
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+}
+
+.location-tag {
+  font-size: 15rpx;
+  font-weight: 400;
+  color: #666666;
+  font-style: italic;
+  font-family: 'Times New Roman', serif;
+}
+
+/* ========== 参数流式布局 ========== */
+.param-flow {
+  padding: 4rpx 8rpx;
+}
+
+.param-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 2rpx 0;
+  border-bottom: 1rpx dotted #e0e0e0;
+}
+
+.param-entry:last-child {
+  border-bottom: none;
+}
+
+.param-entry.highlight {
+  background: #f5f5f5;
+  margin: 1rpx -8rpx;
+  padding: 3rpx 8rpx;
+}
+
+.param-entry.highlight .p-value {
+  font-weight: 700;
+}
+
+.p-label {
+  font-size: 16rpx;
+  color: #444444;
+  flex-shrink: 0;
+}
+
+.p-value {
+  font-size: 17rpx;
+  font-weight: 600;
+  color: #000000;
+  text-align: right;
+  font-family: 'Times New Roman', 'Consolas', monospace;
+}
+
+.p-unit {
+  font-size: 14rpx;
+  font-weight: 400;
+  color: #666666;
+}
+
+.p-alt {
+  font-size: 13rpx;
+  font-weight: 400;
+  color: #888888;
+  font-style: italic;
+}
+
+/* ========== 上下行对比布局 ========== */
+.link-compare {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dual-header {
+  display: flex;
+  border-bottom: 1rpx solid #cccccc;
+}
+
+.dual-header .section-header {
+  border-bottom: none;
+  border-right: 1rpx solid #cccccc;
+}
+
+.dual-header .section-header:last-child {
+  border-right: none;
+}
+
+.dual-param-flow {
+  padding: 2rpx 0;
+}
+
+.dual-row {
+  display: flex;
+  border-bottom: 1rpx dotted #e0e0e0;
+}
+
+.dual-row:last-child {
+  border-bottom: none;
+}
+
+.dual-row.highlight {
+  background: #f5f5f5;
+}
+
+.dual-row.highlight .p-value {
+  font-weight: 700;
+}
+
+.dual-cell {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 2rpx 8rpx;
+  border-right: 1rpx solid #e8e8e8;
+}
+
+.dual-cell:last-child {
+  border-right: none;
+}
+
+/* ========== 功放配置 ========== */
+.pa-section {
+  flex-shrink: 0;
+}
+
+.pa-flow {
+  display: flex;
+  padding: 4rpx 8rpx;
+  gap: 16rpx;
+}
+
+.pa-item {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+/* ========== 页脚 ========== */
+.report-footer {
+  text-align: center;
+  padding-top: 6rpx;
+  margin-top: 8rpx;
+  flex-shrink: 0;
+}
+
+.footer-text {
+  font-size: 13rpx;
+  color: #999999;
+  font-style: italic;
+  letter-spacing: 0.5rpx;
+}
+
+/* ========== 操作栏 ========== */
+.action-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 12rpx;
+  padding: 10rpx 16rpx;
+  background: #ffffff;
+  border-top: 1rpx solid #cccccc;
+  z-index: 100;
+}
+
+.action-btn {
+  flex: 1;
+  height: 52rpx;
+  border-radius: 4rpx;
+  font-size: 18rpx;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 1rpx;
+  background: #ffffff;
+  color: #333333;
+  border: 1rpx solid #333333 !important;
+  font-family: 'Georgia', 'Times New Roman', 'Songti SC', 'STSong', serif;
+  line-height: 1;
+}
+
+.action-btn::after {
+  border: none;
+}
+
+.action-btn.primary {
+  background: #1a1a1a;
+  color: #ffffff;
+  border-color: #1a1a1a !important;
+}
+
+/* ========== 响应式优化 ========== */
+@media (max-height: 700px) {
+  .academic-report {
+    padding: 10rpx 14rpx 82rpx 14rpx;
+  }
+  
+  .report-main-title {
+    font-size: 26rpx;
+  }
+  
+  .conclusion-box {
+    padding: 6rpx 12rpx;
+    gap: 28rpx;
+  }
+  
+  .section-header {
+    padding: 4rpx 6rpx;
+    font-size: 16rpx;
+  }
+  
+  .param-flow {
+    padding: 3rpx 6rpx;
+  }
+  
+  .param-entry, .dual-row {
+    padding: 1rpx 0;
+  }
+  
+  .dual-cell {
+    padding: 1rpx 6rpx;
+  }
+  
+  .p-label {
+    font-size: 15rpx;
+  }
+  
+  .p-value {
+    font-size: 16rpx;
+  }
+}

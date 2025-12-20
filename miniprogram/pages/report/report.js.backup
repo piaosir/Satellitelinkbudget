@@ -1,0 +1,514 @@
+// report.js - 对星辅助功能
+const { 
+  calculateSatellitePointing, 
+  calculateScreenPosition, 
+  isAligned,
+  formatLongitude: formatLon
+} = require('../../utils/satellitePointing');
+
+Page({
+  data: {
+    // 界面状态
+    step: 'input', // 'input' | 'camera'
+    
+    // 卫星参数
+    satelliteLongitude: '',
+    longitudeType: 'E', // 'E' 东经 | 'W' 西经
+    
+    // 目标卫星计算结果
+    targetAzimuth: 0,
+    targetElevation: 0,
+    
+    // 用户位置
+    userLatitude: 0,
+    userLongitude: 0,
+    
+    // 设备方向
+    deviceAzimuth: 0,    // 方位角（0-360度，北为0）
+    devicePitch: 0,      // 俯仰角（-90到90度）
+    
+    // 对准状态
+    aligned: false,
+    
+    // UI
+    hintText: '请垂直握持手机，缓慢移动寻找卫星',
+    showPermissionModal: false,
+    
+    // 卫星图标位置
+    satelliteX: 0,
+    satelliteY: 0,
+    satelliteVisible: false
+  },
+    reportTime: '',
+    // 分类数据
+    basicInfo: [],
+    uplinkData: [],
+    downlinkData: [],
+    carrierData: [],
+    budgetData: [],
+    linkPerformance: {}
+  },
+
+  onLoad(options) {
+    const linkNum = parseInt(options.linkNum) || 1;
+    const satelliteParams = app.globalData.satelliteParams;
+    const linkParams = app.globalData.linkParams[linkNum];
+    const results = app.globalData.calculationResults[linkNum];
+    const markedParams = app.globalData.markedParams || [];
+    
+    if (!results) {
+      wx.showModal({
+        title: '提示',
+        content: '请先进行链路计算',
+        success: () => {
+          wx.navigateBack();
+        }
+      });
+      return;
+    }
+    
+    // 格式化分类结果 - 如果有标记参数，只显示标记的
+    const categorizedData = markedParams.length > 0 
+      ? this.categorizeMarkedResults(results, linkParams, markedParams)
+      : this.categorizeResults(results, linkParams);
+    
+    this.setData({
+      linkNum: linkNum,
+      satelliteParams: satelliteParams,
+      linkParams: linkParams,
+      results: results,
+      reportTime: formatDateTime(new Date(), 'YYYY-MM-DD HH:mm:ss'),
+      ...categorizedData
+    });
+  },
+
+  // 将结果分类
+  categorizeResults(results, linkParams) {
+    return {
+      basicInfo: this.getBasicInfo(results, linkParams),
+      uplinkData: this.getUplinkData(results),
+      downlinkData: this.getDownlinkData(results),
+      carrierData: this.getCarrierData(results),
+      budgetData: this.getBudgetData(results),
+      linkPerformance: this.getLinkPerformance(results)
+    };
+  },
+
+  // 根据标记参数生成报告数据
+  categorizeMarkedResults(results, linkParams, markedParams) {
+    // 定义所有参数的映射关系
+    const paramMapping = {
+      // 链路计算结果
+      'bandwidthUsageRatio': { label: '带宽占用比', value: results.bandwidthUsageRatio, unit: '%', section: 'budget' },
+      'powerUsageRatio': { label: '功率占用比', value: results.powerUsageRatio, unit: '%', section: 'budget' },
+      'allocBandwidthResult': { label: '载波带宽', value: results.allocBandwidthResult, unit: 'kHz', section: 'budget' },
+      'PowerBWResult': { label: '功率带宽', value: results.PowerBWResult, unit: 'kHz', section: 'budget' },
+      'selectedPowerResult': { label: '功放实际输出', value: results.selectedPowerResult, unit: 'dBW', section: 'budget' },
+      'selectedPowerWResult': { label: '功放实际输出', value: results.selectedPowerWResult, unit: 'W', section: 'budget' },
+      'paRecommendationdBResult': { label: '功放建议功率', value: results.paRecommendationdBResult, unit: 'dBW', section: 'budget' },
+      'paRecommendation': { label: '功放建议功率', value: results.paRecommendation, unit: 'W', section: 'budget' },
+      'UPCmarginResult': { label: 'UPC', value: results.UPCmarginResult, unit: 'dB', section: 'budget' },
+      'stationEIRPResult': { label: '地球站EIRP', value: results.stationEIRPResult, unit: 'dBW', section: 'budget' },
+      'PFDcResult': { label: '到达卫星的通量密度', value: results.PFDcResult, unit: 'dBW/m²', section: 'budget' },
+      'stationPSDResult': { label: '地球站功率谱密度', value: results.stationPSDResult, unit: 'dBW/Hz', section: 'budget' },
+      'satellitePSDResult': { label: '卫星功率谱密度', value: results.satellitePSDResult, unit: 'dBW/Hz', section: 'budget' },
+      'deltagain': { label: '天线对邻星的旁瓣增益', value: results.deltagain, unit: 'dB', section: 'downlink' },
+      'transponderCapacity': { label: '转发器容量(上行雨)', value: results.transponderCapacity, unit: 'dB/K', section: 'budget' },
+      'eirpPerCarrier': { label: '每载波占卫星EIRP(上行雨)', value: results.eirpPerCarrier, unit: 'dBW', section: 'budget' },
+      'uplinkPowerRatioResult': { label: '上行雨天功率占比', value: results.uplinkPowerRatioResult, unit: '%', section: 'budget' },
+      'downlinkPowerRatioResult': { label: '下行雨天功率占比', value: results.downlinkPowerRatioResult, unit: '%', section: 'budget' },
+      'downlinkComponentResult': { label: '下行雨卫星总C/T', value: results.downlinkComponentResult, unit: 'dB/K', section: 'budget' },
+      'RXtransponderCapacityResult': { label: '转发器容量(下行雨)', value: results.RXtransponderCapacityResult, unit: 'dB/K', section: 'budget' },
+      'RXeirpPerCarrierResult': { label: '每载波占卫星EIRP(下行雨)', value: results.RXeirpPerCarrierResult, unit: 'dBW', section: 'budget' },
+      'transponderBackoffResult': { label: '转发器回退', value: results.transponderBackoffResult, unit: 'dB', section: 'budget' }
+    };
+
+    // 根据标记参数筛选数据
+    const markedData = [];
+    markedParams.forEach(paramKey => {
+      if (paramMapping[paramKey]) {
+        const param = paramMapping[paramKey];
+        markedData.push({
+          label: param.label,
+          value: param.value,
+          unit: param.unit
+        });
+      }
+    });
+
+    return {
+      basicInfo: this.getBasicInfo(results, linkParams),
+      uplinkData: [],
+      downlinkData: [],
+      carrierData: [],
+      budgetData: markedData, // 只显示标记的参数
+      linkPerformance: this.getLinkPerformance(results)
+    };
+  },
+
+  // 基本信息
+  getBasicInfo(results, linkParams) {
+    return [
+      { label: '信息速率', value: results.infoRateResult + ' kbps', unit: '' },
+      { label: '调制方式', value: results.modulationResult, unit: '' },
+      { label: 'FEC编码率', value: results.fecResult, unit: '' },
+      { label: 'RS码效率', value: results.rsCodeResult, unit: '' },
+      { label: '符号速率', value: results.symbolRateResult + ' ksps', unit: '' },
+      { label: '占用带宽', value: results.allocBandwidthResult + ' kHz', unit: '' },
+      { label: '上行频率', value: results.uplinkFrequencyResult + ' GHz', unit: '' },
+      { label: '下行频率', value: results.downlinkFrequencyResult + ' GHz', unit: '' }
+    ];
+  },
+
+  // 上行链路数据
+  getUplinkData(results) {
+    return [
+      { label: '天线直径', value: results.earthAntennaDiameterResult, unit: 'm' },
+      { label: '天线增益', value: results.txAntennaGainResult, unit: 'dB' },
+      { label: '仰角', value: results.elevationResult, unit: '°' },
+      { label: '方位角', value: results.azimuthResult, unit: '°' },
+      { label: '极化角', value: results.uplinkPolarizationAngleResult, unit: '°' },
+      { label: '星地距离', value: results.slantRangeResult, unit: 'km' },
+      { label: '自由空间损耗', value: results.uplinkFSLResult, unit: 'dB' },
+      { label: '降雨衰减', value: results.uplinkRainAttenuation, unit: 'dB' },
+      { label: '云衰减', value: results.uplinkCloudAttenuation, unit: 'dB' },
+      { label: '大气衰减', value: results.uplinkAtmosphericAttenuationResult, unit: 'dB' },
+      { label: '馈线损耗', value: results.feederLossResult, unit: 'dB' }
+    ];
+  },
+
+  // 下行链路数据
+  getDownlinkData(results) {
+    return [
+      { label: '天线直径', value: results.rxAntennaDiameterResult, unit: 'm' },
+      { label: '天线增益', value: results.rxAntennaGainResult, unit: 'dB' },
+      { label: '天线对邻星的旁瓣增益', value: results.deltagain, unit: 'dB' },
+      { label: '仰角', value: results.rxElevationResult, unit: '°' },
+      { label: '方位角', value: results.rxAzimuthResult, unit: '°' },
+      { label: '极化角', value: results.downlinkPolarizationAngleResult, unit: '°' },
+      { label: '星地距离', value: results.rxSlantRangeResult, unit: 'km' },
+      { label: '自由空间损耗', value: results.downlinkFSLResult, unit: 'dB' },
+      { label: '降雨衰减', value: results.downlinkRainAttenuationResult, unit: 'dB' },
+      { label: '云衰减', value: results.downlinkCloudAttenuation, unit: 'dB' },
+      { label: '大气衰减', value: results.downlinkAtmosphericAttenuationResult, unit: 'dB' },
+      { label: '馈线损耗', value: results.rxFeederLossResult, unit: 'dB' },
+      { label: 'G/T', value: results.gOverTeResult, unit: 'dB/K' }
+    ];
+  },
+
+  // 载波数据
+  getCarrierData(results) {
+    return [
+      { label: 'Eb/N0门限', value: results.ebnoResult, unit: 'dB' },
+      { label: 'Es/N0', value: results.esnoResult, unit: 'dB' },
+      { label: '上行C/N', value: results.uplinkCN, unit: 'dB' },
+      { label: '下行C/N', value: results.downlinkCN, unit: 'dB' },
+      { label: '总C/N', value: results.carrierTotalCN, unit: 'dB' },
+      { label: '门限C/N', value: results.thresholdCN, unit: 'dB' }
+    ];
+  },
+
+  // 链路预算数据
+  getBudgetData(results) {
+    return [
+      { label: '发射功率', value: results.selectedPowerResult, unit: 'dBW' },
+      { label: '发射功率', value: results.selectedPowerWResult, unit: 'W' },
+      { label: '地球站EIRP', value: results.stationEIRPResult, unit: 'dBW' },
+      { label: '地球站功率谱密度', value: results.stationPSDResult, unit: 'dBW/Hz' },
+      { label: '卫星功率谱密度', value: results.satellitePSDResult, unit: 'dBW/Hz' },
+      { label: '功放推荐', value: results.paRecommendationdBResult, unit: 'dBW' },
+      { label: '功放推荐', value: results.paRecommendation, unit: 'W' },
+      { label: '带宽占用率', value: results.bandwidthUsageRatio, unit: '%' },
+      { label: '功率占用率', value: results.powerUsageRatio, unit: '%' },
+      { label: '转发器容量', value: results.transponderCapacity, unit: 'dB' }
+    ];
+  },
+
+  // 链路性能指标
+  getLinkPerformance(results) {
+    const linkMargin = parseFloat(results.linkmargin);
+    const availability = parseFloat(results.systemAvailabilityResult);
+    
+    return {
+      margin: results.linkmargin,
+      availability: results.systemAvailabilityResult,
+      status: linkMargin >= 3 ? 'excellent' : (linkMargin >= 1 ? 'good' : (linkMargin >= 0 ? 'qualified' : 'poor')),
+      statusText: linkMargin >= 3 ? '优秀' : (linkMargin >= 1 ? '良好' : (linkMargin >= 0 ? '合格' : '不足'))
+    };
+  },
+
+  // 链路性能指标
+  getLinkPerformance(results) {
+    const linkMargin = parseFloat(results.linkmargin);
+    const availability = parseFloat(results.systemAvailabilityResult);
+    
+    return {
+      margin: results.linkmargin,
+      availability: results.systemAvailabilityResult,
+      status: linkMargin >= 3 ? 'excellent' : (linkMargin >= 1 ? 'good' : (linkMargin >= 0 ? 'qualified' : 'poor')),
+      statusText: linkMargin >= 3 ? '优秀' : (linkMargin >= 1 ? '良好' : (linkMargin >= 0 ? '合格' : '不足'))
+    };
+  },
+
+  // 分享报告
+  shareReport() {
+    wx.showShareMenu({
+      withShareTicket: true,
+      menus: ['shareAppMessage', 'shareTimeline']
+    });
+    
+    // 提示用户使用右上角菜单分享
+    wx.showModal({
+      title: '分享报告',
+      content: '请点击右上角菜单选择"转发"或"分享到朋友圈"',
+      showCancel: false,
+      confirmText: '知道了'
+    });
+  },
+
+  // 保存为图片
+  async saveAsImage() {
+    wx.showLoading({
+      title: '准备导出...',
+      mask: true
+    });
+    
+    try {
+      // 方案1: 使用页面截图API (推荐，需要用户授权)
+      const result = await this.captureScreen();
+      if (result) {
+        wx.hideLoading();
+        return;
+      }
+      
+      // 方案2: 使用 Canvas 绘制
+      wx.showLoading({
+        title: '生成图片中...',
+        mask: true
+      });
+      
+      const imagePath = await this.generateImageWithCanvas();
+      
+      wx.hideLoading();
+      
+      // 保存到相册
+      wx.saveImageToPhotosAlbum({
+        filePath: imagePath,
+        success: () => {
+          wx.showModal({
+            title: '保存成功',
+            content: '报告图片已保存到相册',
+            showCancel: false
+          });
+        },
+        fail: (err) => {
+          if (err.errMsg.includes('auth')) {
+            // 需要授权
+            wx.showModal({
+              title: '需要授权',
+              content: '请授权保存图片到相册',
+              success: (res) => {
+                if (res.confirm) {
+                  wx.openSetting();
+                }
+              }
+            });
+          } else {
+            throw new Error('保存失败');
+          }
+        }
+      });
+      
+    } catch (error) {
+      console.error('导出图片失败:', error);
+      wx.hideLoading();
+      
+      // 如果所有方案都失败，提示用户使用截图
+      wx.showModal({
+        title: '导出提示',
+        content: '建议使用手机截图功能保存报告\n\niOS: 同时按电源键+音量上键\nAndroid: 根据手机型号使用对应截图方式',
+        showCancel: false
+      });
+    }
+  },
+
+  // 截屏方案
+  async captureScreen() {
+    return new Promise((resolve) => {
+      // 微信小程序没有直接的截屏API，返回 false 使用备用方案
+      resolve(false);
+    });
+  },
+
+  // 使用 Canvas 2D 生成图片
+  async generateImageWithCanvas() {
+    return new Promise((resolve, reject) => {
+      const query = wx.createSelectorQuery().in(this);
+      query.select('#reportCanvas')
+        .fields({ node: true, size: true })
+        .exec((res) => {
+          if (!res || !res[0]) {
+            reject(new Error('获取 Canvas 节点失败'));
+            return;
+          }
+          
+          const canvas = res[0].node;
+          const ctx = canvas.getContext('2d');
+          
+          const dpr = wx.getSystemInfoSync().pixelRatio;
+          const pageWidth = 750;
+          const pageHeight = 2000;
+          
+          // 设置画布实际大小（考虑设备像素比）
+          canvas.width = pageWidth * dpr;
+          canvas.height = pageHeight * dpr;
+          
+          // 缩放绘图上下文以匹配设备像素比
+          ctx.scale(dpr, dpr);
+          
+          // 设置白色背景
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, pageWidth, pageHeight);
+          
+          let y = 40;
+          const leftMargin = 40;
+          const contentWidth = pageWidth - 80;
+          
+          // 绘制标题
+          ctx.fillStyle = '#000000';
+          ctx.font = '48px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('卫星链路预算分析报告', pageWidth / 2, y);
+          y += 60;
+          
+          // 绘制分隔线
+          ctx.beginPath();
+          ctx.moveTo(leftMargin, y);
+          ctx.lineTo(pageWidth - leftMargin, y);
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          y += 40;
+          
+          // 绘制基本信息
+          ctx.font = '32px sans-serif';
+          ctx.textAlign = 'left';
+          const headerInfo = [
+            `卫星: ${this.data.satelliteParams.satelliteName}`,
+            `轨位: ${this.data.satelliteParams.orbitPosition}°E`,
+            `频段: ${this.data.satelliteParams.frequencyBand}`,
+            `时间: ${this.data.reportTime}`
+          ];
+          
+          headerInfo.forEach(info => {
+            ctx.fillText(info, leftMargin, y);
+            y += 40;
+          });
+          
+          y += 20;
+          
+          // 绘制链路性能
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(leftMargin, y - 30, contentWidth, 2);
+          y += 10;
+          
+          ctx.font = '36px sans-serif';
+          ctx.fillText(`链路状态: ${this.data.linkPerformance.statusText}`, leftMargin, y);
+          y += 45;
+          ctx.fillText(`链路余量: ${this.data.linkPerformance.margin} dB`, leftMargin, y);
+          y += 45;
+          ctx.fillText(`可用度: ${this.data.linkPerformance.availability}%`, leftMargin, y);
+          y += 60;
+          
+          // 绘制各个数据区块
+          const sections = [
+            { title: '基本参数', data: this.data.basicInfo },
+            { title: '上行链路', data: this.data.uplinkData },
+            { title: '下行链路', data: this.data.downlinkData },
+            { title: '载波性能', data: this.data.carrierData },
+            { title: '链路预算', data: this.data.budgetData }
+          ];
+          
+          sections.forEach((section, sectionIndex) => {
+            // 绘制区块标题
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(leftMargin, y - 25, contentWidth, 50);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '32px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(section.title, leftMargin + 20, y + 5);
+            y += 60;
+            
+            // 绘制数据（双列布局）
+            ctx.fillStyle = '#000000';
+            ctx.font = '28px sans-serif';
+            
+            for (let i = 0; i < section.data.length; i += 2) {
+              const item1 = section.data[i];
+              const item2 = section.data[i + 1];
+              
+              // 绘制左列
+              if (item1) {
+                ctx.textAlign = 'left';
+                ctx.fillText(item1.label, leftMargin + 20, y);
+                ctx.textAlign = 'right';
+                const value1 = item1.unit ? `${item1.value} ${item1.unit}` : item1.value;
+                ctx.fillText(value1, pageWidth / 2 - 20, y);
+              }
+              
+              // 绘制右列
+              if (item2) {
+                ctx.textAlign = 'left';
+                ctx.fillText(item2.label, pageWidth / 2 + 20, y);
+                ctx.textAlign = 'right';
+                const value2 = item2.unit ? `${item2.value} ${item2.unit}` : item2.value;
+                ctx.fillText(value2, pageWidth - leftMargin - 20, y);
+              }
+              
+              y += 45;
+              
+              // 绘制分隔线
+              ctx.beginPath();
+              ctx.moveTo(leftMargin, y - 10);
+              ctx.lineTo(pageWidth - leftMargin, y - 10);
+              ctx.strokeStyle = '#cccccc';
+              ctx.lineWidth = 1;
+              ctx.stroke();
+            }
+            
+            y += 30;
+          });
+          
+          // 绘制页脚
+          ctx.fillStyle = '#999999';
+          ctx.font = '24px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(`卫星链路预算计算系统 · ${this.data.reportTime}`, pageWidth / 2, y);
+          
+          // 导出图片
+          wx.canvasToTempFilePath({
+            canvas: canvas,
+            fileType: 'png',
+            quality: 1,
+            success: (res) => {
+              resolve(res.tempFilePath);
+            },
+            fail: (err) => {
+              console.error('Canvas 转换失败:', err);
+              reject(err);
+            }
+          }, this);
+        });
+    });
+  },
+
+  // 分享给朋友
+  onShareAppMessage() {
+    return {
+      title: `卫星链路预算报告 - ${this.data.satelliteParams.satelliteName}`,
+      path: `/pages/report/report?linkNum=${this.data.linkNum}`,
+      imageUrl: ''
+    };
+  }
+});

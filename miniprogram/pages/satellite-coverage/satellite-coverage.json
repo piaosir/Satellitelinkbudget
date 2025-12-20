@@ -1,0 +1,8 @@
+{
+  "usingComponents": {},
+  "navigationStyle": "custom",
+  "navigationBarTitleText": "卫星覆盖",
+  "backgroundColor": "#ffffff",
+  "navigationBarTextStyle": "black",
+  "pageOrientation": "auto"
+}

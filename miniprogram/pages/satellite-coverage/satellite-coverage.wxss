@@ -1,0 +1,432 @@
+/* satellite-coverage.wxss */
+/* 卫星覆盖页面样式 - 与主界面一致的风格 */
+
+page {
+  background-color: #ffffff;
+}
+
+.container {
+  width: 100%;
+  height: 100vh;
+  position: relative;
+  background-color: #ffffff;
+}
+
+/* 地图样式 */
+.coverage-map {
+  width: 100%;
+  height: 100%;
+}
+
+/* 悬浮操作栏 - 与主界面一致 */
+.floating-action-bar {
+  position: fixed;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  background: transparent;
+  padding: 0;
+}
+
+/* 悬浮按钮基础样式 */
+.float-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-width: 64rpx;
+  padding: 0 20rpx;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  border-radius: 8rpx;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+}
+
+.float-btn:active {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* 悬浮按钮图标 */
+.float-icon {
+  width: 32rpx;
+  height: 32rpx;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.icon-back {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='15 18 9 12 15 6'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.icon-locate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'%3E%3C/circle%3E%3Cpath d='M12 2v4'%3E%3C/path%3E%3Cpath d='M12 18v4'%3E%3C/path%3E%3Cpath d='M2 12h4'%3E%3C/path%3E%3Cpath d='M18 12h4'%3E%3C/path%3E%3C/svg%3E");
+}
+
+/* 等仰角线图标 - 同心圆环样式 */
+.icon-contour {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='14' r='8' opacity='0.4'%3E%3C/circle%3E%3Ccircle cx='12' cy='14' r='5' opacity='0.6'%3E%3C/circle%3E%3Ccircle cx='12' cy='14' r='2'%3E%3C/circle%3E%3Cpath d='M12 2v6'%3E%3C/path%3E%3Cpath d='M10 4l2-2 2 2'%3E%3C/path%3E%3C/svg%3E");
+}
+
+/* 底部等仰角线按钮 */
+.bottom-elevation-btn {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom) + 40rpx);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 100rpx;
+  height: 64rpx;
+  padding: 0 32rpx;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  border-radius: 32rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.bottom-elevation-btn:active {
+  transform: translateX(-50%) scale(0.95);
+}
+
+.bottom-elevation-btn.active {
+  background: rgba(37, 99, 235, 0.9);
+}
+
+.bottom-elevation-text {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #ffffff;
+  letter-spacing: 2rpx;
+}
+
+/* 激活状态的按钮 */
+.float-btn-active {
+  background: rgba(37, 99, 235, 0.8) !important;
+  border-color: rgba(37, 99, 235, 0.5) !important;
+}
+
+/* 卫星选择按钮 */
+.float-btn-satellite {
+  flex: 1;
+  max-width: 280rpx;
+}
+
+.float-satellite-name {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 覆盖状态按钮 */
+.float-btn-status {
+  min-width: auto;
+  padding: 0 16rpx;
+}
+
+.float-btn-status.in-coverage {
+  background: rgba(34, 197, 94, 0.8);
+  border-color: rgba(34, 197, 94, 0.3);
+}
+
+.float-btn-status.out-coverage {
+  background: rgba(239, 68, 68, 0.8);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.float-status-text {
+  font-size: 22rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* 卫星选择弹窗 */
+.satellite-popup {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 88rpx);
+  left: 16rpx;
+  right: 16rpx;
+  max-height: 60vh;
+  background: #ffffff;
+  border-radius: 8rpx;
+  z-index: 1001;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-16rpx);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15), 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.satellite-popup.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.satellite-popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.25s ease;
+}
+
+.satellite-popup-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.satellite-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  border-bottom: 1rpx solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.satellite-popup-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.satellite-popup-close {
+  font-size: 32rpx;
+  color: #9ca3af;
+  padding: 8rpx;
+}
+
+.satellite-popup-list {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.satellite-popup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  border-bottom: 1rpx solid #f3f4f6;
+  transition: background 0.15s ease;
+}
+
+.satellite-popup-item:active {
+  background: #f3f4f6;
+}
+
+.satellite-popup-item.active {
+  background: #eff6ff;
+}
+
+.satellite-popup-item.active .satellite-popup-name {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.satellite-popup-name {
+  font-size: 28rpx;
+  color: #1f2937;
+}
+
+.satellite-popup-position {
+  font-size: 24rpx;
+  color: #6b7280;
+}
+
+/* 加载遮罩 */
+.loading-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.loading-spinner {
+  width: 60rpx;
+  height: 60rpx;
+  border: 4rpx solid #e0e0e0;
+  border-top-color: #2C3E50;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  margin-top: 20rpx;
+  font-size: 26rpx;
+  color: #666666;
+}
+
+/* 等仰角线设置弹窗 - 与可视化弹窗风格一致 */
+.elevation-popup {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 88rpx);
+  left: 16rpx;
+  right: 16rpx;
+  background: #ffffff;
+  border-radius: 8rpx;
+  z-index: 1001;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-16rpx);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15), 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+}
+
+.elevation-popup.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.elevation-popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.25s ease;
+}
+
+.elevation-popup-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.elevation-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 28rpx;
+  border-bottom: 1rpx solid #e5e7eb;
+}
+
+.elevation-popup-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.elevation-popup-close {
+  font-size: 32rpx;
+  color: #9ca3af;
+  padding: 8rpx;
+}
+
+.elevation-popup-body {
+  padding: 24rpx 28rpx;
+}
+
+.elevation-tip {
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-bottom: 20rpx;
+}
+
+/* 单个输入框样式 */
+.elevation-input-wrap {
+  margin-bottom: 28rpx;
+}
+
+.elevation-input-single {
+  width: 100%;
+  height: 80rpx;
+  padding: 0 24rpx;
+  border: 1rpx solid #e5e7eb;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  color: #1f2937;
+  background: #f9fafb;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.elevation-input-single:focus {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 3rpx rgba(37, 99, 235, 0.1);
+}
+
+.elevation-actions {
+  display: flex;
+  gap: 16rpx;
+}
+
+.elevation-btn {
+  flex: 1;
+  height: 76rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.elevation-btn-cancel {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.elevation-btn-cancel:active {
+  background: #e5e7eb;
+}
+
+.elevation-btn-clear {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.elevation-btn-clear:active {
+  background: #fee2e2;
+}
+
+.elevation-btn-confirm {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.elevation-btn-confirm:active {
+  background: #1d4ed8;
+}

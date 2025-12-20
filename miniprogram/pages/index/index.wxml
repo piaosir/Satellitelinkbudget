@@ -1,0 +1,1700 @@
+﻿<!--index.wxml-->
+<view class="container">
+  <!-- 悬浮顶部操作栏 -->
+  <view class="floating-action-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: {{navBarRight}}px;">
+    <!-- 开始计算按钮 -->
+    <view class="float-btn float-btn-primary" bindtap="calculateLink">
+      <view class="float-icon icon-play"></view>
+    </view>
+    
+    <!-- 余量/正向计算合并按钮 -->
+    <view class="float-btn float-btn-margin" bindtap="showMarginPanel">
+      <text class="float-margin-value">{{calcMode === 'forward' ? (inputPaPower || 'PA') : marginValue}}</text>
+      <text class="float-margin-unit">{{calcMode === 'forward' ? 'W' : 'dB'}}</text>
+    </view>
+    
+    <!-- 历史记录按钮 -->
+    <view class="float-btn" bindtap="toggleHistoryPanel">
+      <view class="float-icon icon-history"></view>
+    </view>
+    
+    <!-- 配置管理按钮 -->
+    <view class="float-btn" bindtap="showConfigMenu">
+      <view class="float-icon icon-settings"></view>
+    </view>
+    
+    <!-- 可视化按钮 -->
+    <view class="float-btn float-btn-ar" bindtap="showVisualPanel">
+      <view class="float-icon icon-visual"></view>
+    </view>
+  </view>
+
+  <!-- 可视化功能选择面板 -->
+  <view class="visual-popup {{showVisualPopup ? 'show' : ''}}" wx:if="{{showVisualPopup}}">
+    <view class="visual-popup-header">
+      <text class="visual-popup-title">可视化工具</text>
+      <text class="visual-popup-close" bindtap="hideVisualPanel">✕</text>
+    </view>
+    <view class="visual-popup-body">
+      <view class="visual-option" bindtap="goToARAlign">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-ar-satellite"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">AR对星</text>
+          <text class="visual-option-desc">使用增强现实辅助天线对星</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
+      <view class="visual-option" bindtap="goToCoverageMap">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-coverage"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">卫星覆盖</text>
+          <text class="visual-option-desc">查看当前卫星的覆盖范围</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 可视化面板遮罩 -->
+  <view class="visual-popup-mask {{showVisualPopup ? 'show' : ''}}" wx:if="{{showVisualPopup}}" bindtap="hideVisualPanel"></view>
+
+  <!-- 余量/正向计算弹出面板 -->
+  <view class="margin-popup {{showMarginPopup ? 'show' : ''}}" wx:if="{{showMarginPopup}}">
+    <view class="margin-popup-header">
+      <view class="margin-mode-tabs">
+        <view class="margin-mode-tab {{calcMode === 'reverse' ? 'active' : ''}}" bindtap="setCalcMode" data-mode="reverse">
+          <text>反向计算</text>
+        </view>
+        <view class="margin-mode-tab {{calcMode === 'forward' ? 'active' : ''}}" bindtap="setCalcMode" data-mode="forward">
+          <text>正向计算</text>
+        </view>
+      </view>
+      <text class="margin-popup-close" bindtap="hideMarginPanel">✕</text>
+    </view>
+    
+    <!-- 反向模式：输入余量 -->
+    <view class="margin-popup-body" wx:if="{{calcMode === 'reverse'}}">
+      <view class="margin-popup-row">
+        <text class="margin-popup-label">目标余量</text>
+        <input class="margin-popup-input" 
+               type="text"
+               placeholder="3.00" 
+               value="{{marginValue}}"
+               bindinput="onMarginInput" />
+        <text class="margin-popup-unit">dB</text>
+        <view class="margin-popup-balance" bindtap="autoBalanceMargin">
+          <text>平衡</text>
+        </view>
+      </view>
+      <view class="margin-popup-hint">
+        <text>📐 输入目标余量，计算所需功放功率</text>
+      </view>
+    </view>
+    
+    <!-- 正向模式：输入功放功率 -->
+    <view class="margin-popup-body" wx:else>
+      <view class="margin-popup-row">
+        <text class="margin-popup-label">功放功率</text>
+        <input class="margin-popup-input" 
+               type="digit"
+               placeholder="400" 
+               value="{{inputPaPower}}"
+               bindinput="onPaPowerInput" />
+        <text class="margin-popup-unit">W</text>
+        <view class="margin-popup-calc {{isForwardCalculating ? 'loading' : ''}}" bindtap="forwardCalculate">
+          <text>{{isForwardCalculating ? '...' : '反推'}}</text>
+        </view>
+      </view>
+      <view class="margin-popup-hint">
+        <text>💡 输入功放功率，反推可达余量</text>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 余量面板遮罩 -->
+  <view class="margin-popup-mask {{showMarginPopup ? 'show' : ''}}" wx:if="{{showMarginPopup}}" bindtap="hideMarginPanel"></view>
+
+  <!-- 历史记录面板 -->
+  <view class="history-panel {{showHistoryPanel ? 'show' : ''}}" style="top: {{navBarTop + navBarHeight + 8}}px; height: calc(100vh - {{navBarTop + navBarHeight + 8}}px);">
+    <view class="history-header">
+      <text class="history-title">最近计算记录</text>
+      <view class="history-actions">
+        <text class="history-clear" bindtap="clearAllHistory" wx:if="{{historyRecords.length > 0}}">清空</text>
+        <text class="history-close" bindtap="toggleHistoryPanel">✕</text>
+      </view>
+    </view>
+    <scroll-view scroll-y class="history-list" enhanced show-scrollbar="{{false}}" wx:if="{{historyRecords.length > 0}}">
+      <view class="history-item-wrapper" wx:for="{{historyRecords}}" wx:key="id">
+        <view class="history-item-content {{item.animating ? 'animating' : ''}}" 
+              style="transform: translateX({{item.offsetX || 0}}px);"
+              bindtouchstart="onHistoryTouchStart"
+              bindtouchmove="onHistoryTouchMove"
+              bindtouchend="onHistoryTouchEnd"
+              data-id="{{item.id}}">
+          <view class="history-item-main" catchtap="loadHistoryRecord" data-id="{{item.id}}">
+            <view class="history-item-header">
+              <text class="history-satellite">{{item.satelliteName}}</text>
+              <text class="history-time">{{item.time}}</text>
+            </view>
+            <view class="history-item-body">
+              <text class="history-info">{{item.txLocation}} → {{item.rxLocation}}</text>
+              <text class="history-params">{{item.infoRate}}kbps | {{item.modulation}} | 余量{{item.margin}}dB</text>
+              <text class="history-result">功放: {{item.paRecommendation}}W</text>
+            </view>
+          </view>
+        </view>
+        <view class="history-item-actions-bg">
+          <view class="history-action-save" catchtap="saveHistoryToConfig" data-id="{{item.id}}">
+            <text>收藏</text>
+          </view>
+          <view class="history-action-delete" catchtap="deleteHistoryRecord" data-id="{{item.id}}">
+            <text>删除</text>
+          </view>
+        </view>
+      </view>
+    </scroll-view>
+    <view class="history-empty" wx:else>
+      <text class="history-empty-icon">📋</text>
+      <text class="history-empty-text">暂无历史记录</text>
+      <text class="history-empty-hint">完成一次计算后将自动保存</text>
+    </view>
+  </view>
+
+  <!-- 历史面板遮罩 -->
+  <view class="history-mask {{showHistoryPanel ? 'show' : ''}}" bindtap="toggleHistoryPanel"></view>
+  
+  <!-- 内容区域增加顶部padding -->
+  <view class="content-wrapper" style="padding-top: {{navBarTop + navBarHeight - 4}}px;">
+
+  <!-- 卫星参数卡片 -->
+  <view class="card">
+    <view class="card-title">
+      卫星参数
+    </view>
+    <view class="collapse-content {{satelliteParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+      <!-- 第一行：卫星选择 + 卫星名称 + 轨道位置 -->
+      <view class="grid-3">
+        <view class="form-group">
+          <text class="form-label">选择卫星</text>
+          <picker mode="selector" 
+                  range="{{satellites}}" 
+                  range-key="name"
+                  value="{{satelliteIndex}}"
+                  data-field="satellite"
+                  bindchange="onSatellitePickerChange">
+            <view class="form-picker">
+              {{satellites[satelliteIndex].name}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">卫星名称 *</text>
+          <input class="form-input" 
+                 placeholder="请输入" 
+                 value="{{satelliteParams.satelliteName}}"
+                 data-field="satelliteName"
+                 bindinput="onSatelliteParamChange" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">轨道位置(°E) *</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="110.5" 
+                 value="{{satelliteParams.orbitPosition}}"
+                 data-field="orbitPosition"
+                 bindinput="onSatelliteParamChange" />
+        </view>
+      </view>
+
+      <!-- 第二行：频段 + SFD + 转发器带宽 + 输入回退 -->
+      <view class="grid-4">
+        <view class="form-group">
+          <text class="form-label">工作频段 *</text>
+          <picker mode="selector" 
+                  range="{{frequencyBandOptions}}" 
+                  range-key="label"
+                  value="{{frequencyBandIndex}}"
+                  data-field="frequencyBand"
+                  bindchange="onSatellitePickerChange">
+            <view class="form-picker">
+              {{frequencyBandOptions[frequencyBandIndex].label || '请选择'}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">SFD(dBW/m²)</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="-84" 
+                 value="{{satelliteParams.sfdRef}}"
+                 data-field="sfdRef"
+                 bindinput="onSatelliteParamChange" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">转发器带宽(MHz)</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="36" 
+                 value="{{satelliteParams.transponderBandwidth}}"
+                 data-field="transponderBandwidth"
+                 bindinput="onSatelliteParamChange" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">输入回退(dB)</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="6" 
+                 value="{{satelliteParams.BOi}}"
+                 data-field="BOi"
+                 bindinput="onSatelliteParamChange" />
+        </view>
+      </view>
+
+      <!-- 第三行：输出回退（部分收起时隐藏以下内容） -->
+      <view wx:if="{{satelliteParamsExpandState === 'full'}}">
+        <view class="grid-4">
+          <view class="form-group">
+            <text class="form-label">输出回退(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="3" 
+                   value="{{satelliteParams.BOo}}"
+                   data-field="BOo"
+                   bindinput="onSatelliteParamChange" />
+          </view>
+
+          <view class="form-group">
+            <text class="form-label">邻星离轴角(°)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="0" 
+                   value="{{satelliteParams.deltaTheta}}"
+                   data-field="deltaTheta"
+                   bindinput="onSatelliteParamChange" />
+          </view>
+
+          <view class="form-group">
+            <text class="form-label">邻星上行C/I(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="25" 
+                   value="{{satelliteParams.adjUplinkFactor}}"
+                   data-field="adjUplinkFactor"
+                   bindinput="onSatelliteParamChange" />
+          </view>
+
+          <view class="form-group">
+            <text class="form-label">邻星下行C/I(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="25" 
+                   value="{{satelliteParams.adjDownlinkFactor}}"
+                   data-field="adjDownlinkFactor"
+                   bindinput="onSatelliteParamChange" />
+          </view>
+        </view>
+
+        <view class="grid-4">
+          <view class="form-group">
+            <text class="form-label">极化上行C/I(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="30" 
+                   value="{{satelliteParams.xpolUplinkFactor}}"
+                   data-field="xpolUplinkFactor"
+                   bindinput="onSatelliteParamChange" />
+          </view>
+
+          <view class="form-group">
+            <text class="form-label">极化下行C/I(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="30" 
+                   value="{{satelliteParams.xpolDownlinkFactor}}"
+                   data-field="xpolDownlinkFactor"
+                   bindinput="onSatelliteParamChange" />
+          </view>
+
+          <view class="form-group">
+            <text class="form-label">三阶交调C/I(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="22" 
+                   value="{{satelliteParams.intermodFactor}}"
+                   data-field="intermodFactor"
+                   bindinput="onSatelliteParamChange" />
+          </view>
+
+          <view class="form-group">
+            <!-- 空白占位 -->
+          </view>
+        </view>
+      </view>
+      <!-- 部分收起结束 -->
+    </view>
+  </view>
+
+  <!-- 发信站/收信站双栏布局 -->
+  <view class="stations-dual-panel">
+    <!-- 发信站 -->
+    <view class="station-column">
+      <view class="station-header">
+        <view class="station-title">
+          <text>发信站</text>
+        </view>
+      </view>
+      
+      <view class="collapse-content {{uplinkParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+        <!-- 城市选择 -->
+        <view class="station-form-group city-selector-group">
+          <text class="form-label">地面站位置</text>
+          <view class="city-toggle-wrapper" bindtap="toggleCityDropdown" data-type="uplink">
+            <text class="city-toggle-text">{{linkParams.earthStationLocation || '选择城市'}}</text>
+            <text class="city-dropdown-icon">{{showUplinkCityDropdown ? '▲' : '▼'}}</text>
+          </view>
+          <view wx:if="{{showUplinkCityDropdown}}" class="city-dropdown show" catchtap="stopPropagation">
+            <view class="city-search-wrapper">
+              <view class="search-icon"></view>
+              <input class="city-search-input" 
+                     placeholder="" 
+                     value="{{linkParams.earthStationLocation}}"
+                     data-field="earthStationLocation"
+                     bindinput="onCityInput"
+                     bindconfirm="onCityConfirm"
+                     data-type="uplink" />
+            </view>
+            <view class="city-group">
+              <scroll-view scroll-y class="city-list" style="max-height: 350px;">
+                <view wx:for="{{filteredCities}}" 
+                      wx:key="name" 
+                      class="city-item"
+                      data-city="{{item}}"
+                      data-type="uplink"
+                      bindtap="onCitySelect">
+                  {{item.name}}
+                </view>
+                <view wx:if="{{filteredCities.length === 0}}" class="city-empty">无匹配</view>
+              </scroll-view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 经纬度 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">经度(°E)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="116.4" 
+                   value="{{linkParams.longitude}}"
+                   data-field="longitude"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">纬度(°N)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="39.9" 
+                   value="{{linkParams.latitude}}"
+                   data-field="latitude"
+                   bindinput="onLinkParamChange" />
+          </view>
+        </view>
+
+        <!-- 天线参数 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">天线口径(m)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="6.2" 
+                   value="{{linkParams.antennaDiameter}}"
+                   data-field="antennaDiameter"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">天线效率(%)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="65" 
+                   value="{{linkParams.antennaEfficiency}}"
+                   data-field="antennaEfficiency"
+                   bindinput="onLinkParamChange" />
+          </view>
+        </view>
+
+        <!-- 频率和极化 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">上行频率(GHz)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="14.25" 
+                   value="{{linkParams.centerFrequency}}"
+                   data-field="centerFrequency"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">极化</text>
+            <picker mode="selector" 
+                    range="{{polarizationOptions}}" 
+                    range-key="label"
+                    value="{{uplinkPolarizationIndex}}"
+                    data-field="uplinkPolarization"
+                    bindchange="onLinkPickerChange">
+              <view class="form-picker">
+                {{linkParams.uplinkPolarization || 'V'}}
+              </view>
+            </picker>
+          </view>
+        </view>
+
+        <!-- 卫星G/T和可用度 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">卫星G/T(dB/K)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="2.0" 
+                   value="{{linkParams.G_Ts}}"
+                   data-field="G_Ts"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">可用度(%)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="99.90" 
+                   value="{{linkParams.uplinkAvailability}}"
+                   data-field="uplinkAvailability"
+                   bindinput="onLinkParamChange" />
+          </view>
+        </view>
+
+        <!-- 展开更多参数 -->
+        <view wx:if="{{uplinkParamsExpandState === 'full'}}">
+          <view class="station-grid-2">
+            <view class="station-form-group">
+              <text class="form-label">海拔(m)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="0" 
+                     value="{{linkParams.altitude}}"
+                     data-field="altitude"
+                     bindinput="onLinkParamChange" />
+            </view>
+            <view class="station-form-group">
+              <text class="form-label">降雨率(mm/h)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="40" 
+                     value="{{linkParams.rainRate}}"
+                     data-field="rainRate"
+                     bindinput="onLinkParamChange" />
+            </view>
+          </view>
+
+          <view class="station-grid-2">
+            <view class="station-form-group">
+              <text class="form-label">功放回退(dB)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="5" 
+                     value="{{linkParams.paBackoff}}"
+                     data-field="paBackoff"
+                     bindinput="onLinkParamChange" />
+            </view>
+            <view class="station-form-group">
+              <text class="form-label">馈线损耗(dB)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="3.5" 
+                     value="{{linkParams.feederLoss}}"
+                     data-field="feederLoss"
+                     bindinput="onLinkParamChange" />
+            </view>
+          </view>
+
+          <view class="station-grid-2">
+            <view class="station-form-group">
+              <text class="form-label">UPC</text>
+              <picker mode="selector" 
+                      range="{{upcOptions}}" 
+                      range-key="label"
+                      value="{{upcIndex}}"
+                      data-field="uplinkPowerControl"
+                      bindchange="onLinkPickerChange">
+                <view class="form-picker">
+                  {{linkParams.uplinkPowerControl || '否'}}
+                </view>
+              </picker>
+            </view>
+            <view class="station-form-group" wx:if="{{linkParams.uplinkPowerControl === '自定义'}}">
+              <text class="form-label">UPC值(dB)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="3.0" 
+                     value="{{linkParams.upcValue}}"
+                     data-field="upcValue"
+                     bindinput="onLinkParamChange" />
+            </view>
+          </view>
+        </view>
+
+        <!-- 实时结果 -->
+        <view class="station-result">
+          <view class="station-result-item">
+            <text class="station-result-label">EIRP</text>
+            <text class="station-result-value">{{realtimeParams.stationEIRP}} dBW</text>
+          </view>
+          <view class="station-result-item">
+            <text class="station-result-label">建议功放</text>
+            <text class="station-result-value">{{realtimeParams.paRecommendation}} W</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 收信站 -->
+    <view class="station-column">
+      <view class="station-header">
+        <view class="station-title">
+          <text>收信站</text>
+        </view>
+      </view>
+      
+      <view class="collapse-content {{downlinkParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+        <!-- 城市选择 -->
+        <view class="station-form-group city-selector-group">
+          <text class="form-label">地面站位置</text>
+          <view class="city-toggle-wrapper" bindtap="toggleCityDropdown" data-type="downlink">
+            <text class="city-toggle-text">{{linkParams.rxEarthStationLocation || '选择城市'}}</text>
+            <text class="city-dropdown-icon">{{showDownlinkCityDropdown ? '▲' : '▼'}}</text>
+          </view>
+          <view wx:if="{{showDownlinkCityDropdown}}" class="city-dropdown show" catchtap="stopPropagation">
+            <view class="city-search-wrapper">
+              <view class="search-icon"></view>
+              <input class="city-search-input" 
+                     placeholder="" 
+                     value="{{linkParams.rxEarthStationLocation}}"
+                     data-field="rxEarthStationLocation"
+                     bindinput="onCityInput"
+                     bindconfirm="onCityConfirm"
+                     data-type="downlink" />
+            </view>
+            <view class="city-group">
+              <scroll-view scroll-y class="city-list" style="max-height: 350px;">
+                <view wx:for="{{filteredCitiesRx}}" 
+                      wx:key="name" 
+                      class="city-item"
+                      data-city="{{item}}"
+                      data-type="downlink"
+                      bindtap="onCitySelect">
+                  {{item.name}}
+                </view>
+                <view wx:if="{{filteredCitiesRx.length === 0}}" class="city-empty">无匹配</view>
+              </scroll-view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 经纬度 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">经度(°E)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="116.4" 
+                   value="{{linkParams.rxLongitude}}"
+                   data-field="rxLongitude"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">纬度(°N)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="39.9" 
+                   value="{{linkParams.rxLatitude}}"
+                   data-field="rxLatitude"
+                   bindinput="onLinkParamChange" />
+          </view>
+        </view>
+
+        <!-- 天线参数 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">天线口径(m)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="3.7" 
+                   value="{{linkParams.rxAntennaDiameter}}"
+                   data-field="rxAntennaDiameter"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">天线效率(%)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="65" 
+                   value="{{linkParams.rxAntennaEfficiency}}"
+                   data-field="rxAntennaEfficiency"
+                   bindinput="onLinkParamChange" />
+          </view>
+        </view>
+
+        <!-- 频率和极化 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">下行频率(GHz)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="12.5" 
+                   value="{{linkParams.rxCenterFrequency}}"
+                   data-field="rxCenterFrequency"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">极化</text>
+            <picker mode="selector" 
+                    range="{{polarizationOptions}}" 
+                    range-key="label"
+                    value="{{downlinkPolarizationIndex}}"
+                    data-field="downlinkPolarization"
+                    bindchange="onLinkPickerChange">
+              <view class="form-picker">
+                {{linkParams.downlinkPolarization || 'H'}}
+              </view>
+            </picker>
+          </view>
+        </view>
+
+        <!-- 卫星EIRP和可用度 -->
+        <view class="station-grid-2">
+          <view class="station-form-group">
+            <text class="form-label">卫星EIRP(dBW)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="46.0" 
+                   value="{{linkParams.rxEIRP}}"
+                   data-field="rxEIRP"
+                   bindinput="onLinkParamChange" />
+          </view>
+          <view class="station-form-group">
+            <text class="form-label">可用度(%)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="99.90" 
+                   value="{{linkParams.rxDownlinkAvailability}}"
+                   data-field="rxDownlinkAvailability"
+                   bindinput="onLinkParamChange" />
+          </view>
+        </view>
+
+        <!-- 展开更多参数 -->
+        <view wx:if="{{downlinkParamsExpandState === 'full'}}">
+          <view class="station-grid-2">
+            <view class="station-form-group">
+              <text class="form-label">海拔(m)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="0" 
+                     value="{{linkParams.rxAltitude}}"
+                     data-field="rxAltitude"
+                     bindinput="onLinkParamChange" />
+            </view>
+            <view class="station-form-group">
+              <text class="form-label">降雨率(mm/h)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="40" 
+                     value="{{linkParams.rxRainRate}}"
+                     data-field="rxRainRate"
+                     bindinput="onLinkParamChange" />
+            </view>
+          </view>
+
+          <view class="station-grid-2">
+            <view class="station-form-group">
+              <text class="form-label">天线噪温(K)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="35" 
+                     value="{{linkParams.rxAntennaNoiseTemp}}"
+                     data-field="rxAntennaNoiseTemp"
+                     bindinput="onLinkParamChange" />
+            </view>
+            <view class="station-form-group">
+              <text class="form-label">接收机噪温(K)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="75" 
+                     value="{{linkParams.rxReceiverNoiseTemp}}"
+                     data-field="rxReceiverNoiseTemp"
+                     bindinput="onLinkParamChange" />
+            </view>
+          </view>
+
+          <view class="station-grid-2">
+            <view class="station-form-group">
+              <text class="form-label">馈线损耗(dB)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="0.2" 
+                     value="{{linkParams.rxFeederLoss}}"
+                     data-field="rxFeederLoss"
+                     bindinput="onLinkParamChange" />
+            </view>
+            <view class="station-form-group">
+              <!-- 空白占位 -->
+            </view>
+          </view>
+        </view>
+
+        <!-- 实时结果 -->
+        <view class="station-result">
+          <view class="station-result-item">
+            <text class="station-result-label">G/T</text>
+            <text class="station-result-value">{{realtimeParams.gOverTe}} dB/K</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 基带参数卡片 -->
+  <view class="card">
+    <view class="card-title">
+      基带参数
+    </view>
+    <view class="collapse-content {{carrierParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+      <!-- 第一行：核心参数 4列 -->
+      <view class="grid-4">
+        <view class="form-group">
+          <text class="form-label">信息速率(kbps) *</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="2048" 
+                 value="{{linkParams.infoRate}}"
+                 data-field="infoRate"
+                 bindinput="onLinkParamChange" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">调制方式 *</text>
+          <picker mode="selector" 
+                  range="{{modulationOptions}}" 
+                  range-key="label"
+                  value="{{modulationIndex}}"
+                  data-field="modulation"
+                  bindchange="onLinkPickerChange">
+            <view class="form-picker">
+              {{linkParams.modulation || '请选择'}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">FEC编码率 *</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="3/4" 
+                 value="{{linkParams.fec}}"
+                 data-field="fec"
+                 bindinput="onFecInput" />
+        </view>
+
+        <view class="form-group">
+          <view class="form-label-row">
+            <text class="form-label">{{noiseRatioMode === 'ebno' ? 'Eb/N0' : 'Es/N0'}}门限(dB)</text>
+            <button class="toggle-btn-emoji" bindtap="toggleEbnoEsno">🔄</button>
+          </view>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="5.50" 
+                 value="{{linkParams.ebno}}"
+                 data-field="ebno"
+                 bindinput="onLinkParamChange" />
+        </view>
+      </view>
+
+      <!-- 第二行：扩展参数（完全展开时显示） -->
+      <view class="grid-4" wx:if="{{carrierParamsExpandState === 'full'}}">
+        <view class="form-group">
+          <text class="form-label">RS编码码率</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="1.00" 
+                 value="{{linkParams.rsCode}}"
+                 data-field="rsCode"
+                 bindinput="onLinkParamChange" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">误码率 (1×10⁻ⁿ)</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="7" 
+                 value="{{linkParams.ber}}"
+                 data-field="ber"
+                 bindinput="onLinkParamChange" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">扩频增益</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="1.00" 
+                 value="{{linkParams.m}}"
+                 data-field="m"
+                 bindinput="onLinkParamChange" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">带宽分配因子</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="1.10" 
+                 value="{{linkParams.bandwidthFactor}}"
+                 data-field="bandwidthFactor"
+                 bindinput="onLinkParamChange" />
+        </view>
+      </view>
+      
+      <!-- 实时计算结果 -->
+      <view class="station-result station-result-row">
+        <view class="station-result-item">
+          <text class="station-result-label">载波带宽</text>
+          <text class="station-result-value">{{realtimeParams.carrierBandwidth}} kHz</text>
+        </view>
+        <view class="station-result-item">
+          <text class="station-result-label">符号率</text>
+          <text class="station-result-value">{{realtimeParams.symbolRate}} ksps</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 计算结果 -->
+  <view id="result-section" class="card card-full-width" wx:if="{{hasResults}}">
+    <view class="card-title">
+      计算结果
+    </view>
+    
+    <view class="collapse-content {{resultsExpandState !== 'collapsed' ? 'show' : ''}}">
+    
+    <!-- 核心结论区 - 置顶 -->
+    <view class="core-results">
+      <view class="core-results-grid">
+        <view class="core-result-row">
+          <text class="core-result-label">功放建议</text>
+          <text class="core-result-value">{{results.paRecommendation}} W / {{results.paRecommendationdBResult}} dBW</text>
+        </view>
+        <view class="core-result-row">
+          <text class="core-result-label">链路余量</text>
+          <text class="core-result-value">{{results.linkmargin}} dB</text>
+        </view>
+        <view class="core-result-row">
+          <text class="core-result-label">带宽占比</text>
+          <text class="core-result-value">{{results.bandwidthUsageRatio}}%</text>
+        </view>
+        <view class="core-result-row">
+          <text class="core-result-label">功率占比</text>
+          <text class="core-result-value">{{results.powerUsageRatio}}%</text>
+        </view>
+        <view class="core-result-row">
+          <text class="core-result-label">载波带宽</text>
+          <text class="core-result-value">{{results.allocBandwidthResult}} kHz</text>
+        </view>
+        <view class="core-result-row">
+          <text class="core-result-label">功率带宽</text>
+          <text class="core-result-value">{{results.PowerBWResult}} kHz</text>
+        </view>
+        <view class="core-result-row">
+          <text class="core-result-label">载波总C/N</text>
+          <text class="core-result-value">{{results.carrierTotalCN}} dB</text>
+        </view>
+        <view class="core-result-row">
+          <text class="core-result-label">门限C/N</text>
+          <text class="core-result-value">{{results.thresholdCN}} dB</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 完全展开时显示所有内容 -->
+    <view wx:if="{{resultsExpandState === 'full'}}">
+    <!-- 上行站结果 -->
+    <view class="result-section">
+      <view class="result-section-title">发信站参数</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('earthAntennaDiameterResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="earthAntennaDiameterResult">
+          <text class="result-label">地球站天线口径</text>
+          <text class="result-value">{{results.earthAntennaDiameterResult}} 米</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('earthLongitudeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="earthLongitudeResult">
+          <text class="result-label">地球站经度</text>
+          <text class="result-value">{{results.earthLongitudeResult}}°E</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('earthLatitudeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="earthLatitudeResult">
+          <text class="result-label">地球站纬度</text>
+          <text class="result-value">{{results.earthLatitudeResult}}°N</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkPolarizationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkPolarizationResult">
+          <text class="result-label">极化方式</text>
+          <text class="result-value">{{results.uplinkPolarizationResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('elevationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="elevationResult">
+          <text class="result-label">对卫星仰角</text>
+          <text class="result-value">{{results.elevationResult}}°</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('azimuthResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="azimuthResult">
+          <text class="result-label">对卫星方位角</text>
+          <text class="result-value">{{results.azimuthResult}}°</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkPolarizationAngleResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkPolarizationAngleResult">
+          <text class="result-label">对卫星极化角</text>
+          <text class="result-value">{{results.uplinkPolarizationAngleResult}}{{results.uplinkPolarizationAngleResult !== '-' ? '°' : ''}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('earthAntennaEfficiencyResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="earthAntennaEfficiencyResult">
+          <text class="result-label">天线效率</text>
+          <text class="result-value">{{results.earthAntennaEfficiencyResult}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('wavelengthResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="wavelengthResult">
+          <text class="result-label">波长</text>
+          <text class="result-value">{{results.wavelengthResult}} m</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('beamWidthResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="beamWidthResult">
+          <text class="result-label">3dB波束宽度</text>
+          <text class="result-value">{{results.beamWidthResult}}°</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('stationEIRPResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="stationEIRPResult">
+          <text class="result-label">地球站EIRP</text>
+          <text class="result-value">{{results.stationEIRPResult}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('txAntennaGainResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="txAntennaGainResult">
+          <text class="result-label">发射天线增益</text>
+          <text class="result-value">{{results.txAntennaGainResult}} dBi</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('txSidelobeGainResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="txSidelobeGainResult">
+          <text class="result-label">旁瓣发射增益</text>
+          <text class="result-value">{{results.txSidelobeGainResult}} dBi</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('txSidelobeEIRPResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="txSidelobeEIRPResult">
+          <text class="result-label">旁瓣EIRP</text>
+          <text class="result-value">{{results.txSidelobeEIRPResult}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('txSidelobePSDResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="txSidelobePSDResult">
+          <text class="result-label">旁瓣功率谱密度</text>
+          <text class="result-value">{{results.txSidelobePSDResult}} dBW/Hz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('feederLossResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="feederLossResult">
+          <text class="result-label">馈线损耗</text>
+          <text class="result-value">{{results.feederLossResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('slantRangeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="slantRangeResult">
+          <text class="result-label">星地距离</text>
+          <text class="result-value">{{results.slantRangeResult}} km</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkFSLResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkFSLResult">
+          <text class="result-label">上行自由空间损耗</text>
+          <text class="result-value">{{results.uplinkFSLResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkRainAttenuation') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkRainAttenuation">
+          <text class="result-label">上行雨衰@ITU-R P.618</text>
+          <text class="result-value">{{results.uplinkRainAttenuation}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkCloudAttenuation') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkCloudAttenuation">
+          <text class="result-label">上行云衰@ITU-R P.840</text>
+          <text class="result-value">{{results.uplinkCloudAttenuation}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkAtmosphericAttenuationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkAtmosphericAttenuationResult">
+          <text class="result-label">上行大气衰减@ITU-R P.676</text>
+          <text class="result-value">{{results.uplinkAtmosphericAttenuationResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('paRecommendationdBResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="paRecommendationdBResult">
+          <text class="result-label">功放建议功率</text>
+          <text class="result-value">{{results.paRecommendationdBResult}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('paRecommendation') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="paRecommendation">
+          <text class="result-label">功放建议功率</text>
+          <text class="result-value">{{results.paRecommendation}} W</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkCN') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkCN">
+          <text class="result-label">上行C/N</text>
+          <text class="result-value">{{results.uplinkCN}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('ituPsdLimitHz') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="ituPsdLimitHz">
+          <text class="result-label">国际电联谱密度建议</text>
+          <text class="result-value">{{results.ituPsdLimitHz}} dBW/Hz</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- 接收站结果 -->
+    <view class="result-section">
+      <view class="result-section-title">收信站参数</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('rxAntennaDiameterResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxAntennaDiameterResult">
+          <text class="result-label">接收天线口径</text>
+          <text class="result-value">{{results.rxAntennaDiameterResult}} 米</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxLongitudeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxLongitudeResult">
+          <text class="result-label">接收站经度</text>
+          <text class="result-value">{{results.rxLongitudeResult}}°E</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxLatitudeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxLatitudeResult">
+          <text class="result-label">接收站纬度</text>
+          <text class="result-value">{{results.rxLatitudeResult}}°N</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkPolarizationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkPolarizationResult">
+          <text class="result-label">极化方式</text>
+          <text class="result-value">{{results.downlinkPolarizationResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxElevationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxElevationResult">
+          <text class="result-label">对卫星仰角</text>
+          <text class="result-value">{{results.rxElevationResult}}°</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxAzimuthResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxAzimuthResult">
+          <text class="result-label">对卫星方位角</text>
+          <text class="result-value">{{results.rxAzimuthResult}}°</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkPolarizationAngleResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkPolarizationAngleResult">
+          <text class="result-label">对卫星极化角</text>
+          <text class="result-value">{{results.downlinkPolarizationAngleResult}}{{results.downlinkPolarizationAngleResult !== '-' ? '°' : ''}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxAntennaEfficiencyResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxAntennaEfficiencyResult">
+          <text class="result-label">天线效率</text>
+          <text class="result-value">{{results.rxAntennaEfficiencyResult}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxAntennaGainResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxAntennaGainResult">
+          <text class="result-label">接收天线增益</text>
+          <text class="result-value">{{results.rxAntennaGainResult}} dBi</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxSidelobeGainResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxSidelobeGainResult">
+          <text class="result-label">接收旁瓣增益</text>
+          <text class="result-value">{{results.rxSidelobeGainResult}} dBi</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('satellitePFD') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="satellitePFD">
+          <text class="result-label">卫星到地面的PFD</text>
+          <text class="result-value">{{results.satellitePFD}} dBW/m²</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('ituPfdLimitPerM2') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="ituPfdLimitPerM2">
+          <text class="result-label">ITU PFD限制</text>
+          <text class="result-value">{{results.ituPfdLimitPerM2}} dBW/m²</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('theta3') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="theta3">
+          <text class="result-label">接收3dB波束宽度</text>
+          <text class="result-value">{{results.theta3}}°</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxSlantRangeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxSlantRangeResult">
+          <text class="result-label">星地距离</text>
+          <text class="result-value">{{results.rxSlantRangeResult}} km</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkFSLResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkFSLResult">
+          <text class="result-label">下行自由空间损耗</text>
+          <text class="result-value">{{results.downlinkFSLResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkRainAttenuationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkRainAttenuationResult">
+          <text class="result-label">下行雨衰@ITU-R P.618</text>
+          <text class="result-value">{{results.downlinkRainAttenuationResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkCloudAttenuation') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkCloudAttenuation">
+          <text class="result-label">下行云衰@ITU-R P.840</text>
+          <text class="result-value">{{results.downlinkCloudAttenuation}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkAtmosphericAttenuationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkAtmosphericAttenuationResult">
+          <text class="result-label">下行大气衰减@ITU-R P.676</text>
+          <text class="result-value">{{results.downlinkAtmosphericAttenuationResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkCN') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkCN">
+          <text class="result-label">下行C/N</text>
+          <text class="result-value">{{results.downlinkCN}} dB</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- 噪声温度 -->
+    <view class="result-section">
+      <view class="result-section-title">噪声温度</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('antennaNoiseTempResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="antennaNoiseTempResult">
+          <text class="result-label">天线噪声温度</text>
+          <text class="result-value">{{results.antennaNoiseTempResult}} K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('receiverNoiseTempResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="receiverNoiseTempResult">
+          <text class="result-label">接收机噪声温度</text>
+          <text class="result-value">{{results.receiverNoiseTempResult}} K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rainNoiseTempResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rainNoiseTempResult">
+          <text class="result-label">雨噪声温度</text>
+          <text class="result-value">{{results.rainNoiseTempResult}} K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('systemNoiseTempKResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="systemNoiseTempKResult">
+          <text class="result-label">系统噪声温度</text>
+          <text class="result-value">{{results.systemNoiseTempKResult}} K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('systemNoiseTempDbResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="systemNoiseTempDbResult">
+          <text class="result-label">系统噪声温度(dB)</text>
+          <text class="result-value">{{results.systemNoiseTempDbResult}} dBK</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('gOverTeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="gOverTeResult">
+          <text class="result-label">G/T</text>
+          <text class="result-value">{{results.gOverTeResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('gOverTdegradationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="gOverTdegradationResult">
+          <text class="result-label">G/T劣化</text>
+          <text class="result-value">{{results.gOverTdegradationResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rxFeederLossResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rxFeederLossResult">
+          <text class="result-label">接收馈线损耗</text>
+          <text class="result-value">{{results.rxFeederLossResult}} dB</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- 卫星参数 -->
+    <view class="result-section">
+      <view class="result-section-title">卫星参数</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('orbitPositionResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="orbitPositionResult">
+          <text class="result-label">卫星轨道位置</text>
+          <text class="result-value">{{results.orbitPositionResult}}°E</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('EIRPsResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="EIRPsResult">
+          <text class="result-label">卫星EIRP</text>
+          <text class="result-value">{{results.EIRPsResult}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('SFDsResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="SFDsResult">
+          <text class="result-label">卫星SFD</text>
+          <text class="result-value">{{results.SFDsResult}} dBW/m²</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('antennaGainResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="antennaGainResult">
+          <text class="result-label">卫星天线增益</text>
+          <text class="result-value">{{results.antennaGainResult}} dBi</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('BOiResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="BOiResult">
+          <text class="result-label">输入回退</text>
+          <text class="result-value">{{results.BOiResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('BOoResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="BOoResult">
+          <text class="result-label">输出回退</text>
+          <text class="result-value">{{results.BOoResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('transponderBandwidthResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="transponderBandwidthResult">
+          <text class="result-label">转发器带宽</text>
+          <text class="result-value">{{results.transponderBandwidthResult}} MHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('satellitePSDResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="satellitePSDResult">
+          <text class="result-label">卫星功率谱密度</text>
+          <text class="result-value">{{results.satellitePSDResult}} dBW/Hz</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- 通信参数 -->
+    <view class="result-section">
+      <view class="result-section-title">通信参数</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('uplinkFrequencyResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkFrequencyResult">
+          <text class="result-label">上行频率</text>
+          <text class="result-value">{{results.uplinkFrequencyResult}} GHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkFrequencyResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkFrequencyResult">
+          <text class="result-label">下行频率</text>
+          <text class="result-value">{{results.downlinkFrequencyResult}} GHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('allocBandwidthResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="allocBandwidthResult">
+          <text class="result-label">载波带宽</text>
+          <text class="result-value">{{results.allocBandwidthResult}} kHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkPolarizationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkPolarizationResult">
+          <text class="result-label">上行极化方式</text>
+          <text class="result-value">{{results.uplinkPolarizationResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkPolarizationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkPolarizationResult">
+          <text class="result-label">下行极化方式</text>
+          <text class="result-value">{{results.downlinkPolarizationResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('infoRateResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="infoRateResult">
+          <text class="result-label">信息速率</text>
+          <text class="result-value">{{results.infoRateResult}} kbps</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('modulationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="modulationResult">
+          <text class="result-label">调制方式</text>
+          <text class="result-value">{{results.modulationResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('modulationFactorResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="modulationFactorResult">
+          <text class="result-label">调制因子</text>
+          <text class="result-value">{{results.modulationFactorResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('berResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="berResult">
+          <text class="result-label">误码率</text>
+          <text class="result-value">{{results.berResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('ebnoResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="ebnoResult">
+          <text class="result-label">Eb/N0</text>
+          <text class="result-value">{{results.ebnoResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('esnoResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="esnoResult">
+          <text class="result-label">Es/N0</text>
+          <text class="result-value">{{results.esnoResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('rsCodeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="rsCodeResult">
+          <text class="result-label">RS编码率</text>
+          <text class="result-value">{{results.rsCodeResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('fecResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="fecResult">
+          <text class="result-label">FEC编码率</text>
+          <text class="result-value">{{results.fecResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('carrierRateResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="carrierRateResult">
+          <text class="result-label">载波速率</text>
+          <text class="result-value">{{results.carrierRateResult}} kbps</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('ChipRateResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="ChipRateResult">
+          <text class="result-label">码片速率</text>
+          <text class="result-value">{{results.ChipRateResult}} kcps</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('symbolRateResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="symbolRateResult">
+          <text class="result-label">符号速率</text>
+          <text class="result-value">{{results.symbolRateResult}} ksps</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('noiseBW') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="noiseBW">
+          <text class="result-label">载波噪声带宽</text>
+          <text class="result-value">{{results.RXnoiseBW}} dB-Hz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('marginResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="marginResult">
+          <text class="result-label">系统余量</text>
+          <text class="result-value">{{results.marginResult}} dB</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- 可用度 -->
+    <view class="result-section">
+      <view class="result-section-title">可用度</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('uplinkAvailabilityResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkAvailabilityResult">
+          <text class="result-label">上行可用度</text>
+          <text class="result-value">{{results.uplinkAvailabilityResult}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkAvailabilityResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkAvailabilityResult">
+          <text class="result-label">下行可用度</text>
+          <text class="result-value">{{results.downlinkAvailabilityResult}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('systemAvailabilityResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="systemAvailabilityResult">
+          <text class="result-label">系统可用度</text>
+          <text class="result-value">{{results.systemAvailabilityResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('transponderLimitedBy') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="transponderLimitedBy">
+          <text class="result-label">转发器资源受限于</text>
+          <text class="result-value">{{results.transponderLimitedBy}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('maxCarrierCount') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="maxCarrierCount">
+          <text class="result-label">转发器可承载最大载波数</text>
+          <text class="result-value">{{results.maxCarrierCount}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+
+    <!-- C/T和C/N -->
+    <view class="result-section">
+      <view class="result-section-title">载干比(C/T)和载噪比(C/N)</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('uplinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkCTResult">
+          <text class="result-label">上行C/T</text>
+          <text class="result-value">{{results.uplinkCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('adjUplinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="adjUplinkCTResult">
+          <text class="result-label">邻星上行C/T</text>
+          <text class="result-value">{{results.adjUplinkCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('xpolUplinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="xpolUplinkCTResult">
+          <text class="result-label">极化上行C/T</text>
+          <text class="result-value">{{results.xpolUplinkCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkCTResult">
+          <text class="result-label">下行C/T</text>
+          <text class="result-value">{{results.downlinkCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('adjDownlinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="adjDownlinkCTResult">
+          <text class="result-label">邻星下行C/T</text>
+          <text class="result-value">{{results.adjDownlinkCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('xpolDownlinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="xpolDownlinkCTResult">
+          <text class="result-label">极化下行C/T</text>
+          <text class="result-value">{{results.xpolDownlinkCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('intermodCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="intermodCTResult">
+          <text class="result-label">三阶交调C/T</text>
+          <text class="result-value">{{results.intermodCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('totalCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="totalCTResult">
+          <text class="result-label">总C/T(晴天)</text>
+          <text class="result-value">{{results.totalCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('totalCTRainResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="totalCTRainResult">
+          <text class="result-label">总C/T(雨天)</text>
+          <text class="result-value">{{results.totalCTRainResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('carrierThresholdCT') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="carrierThresholdCT">
+          <text class="result-label">载波门限C/T</text>
+          <text class="result-value">{{results.carrierThresholdCT}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('carrierTotalCT') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="carrierTotalCT">
+          <text class="result-label">载波总C/T</text>
+          <text class="result-value">{{results.carrierTotalCT}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('carrierTotalCN') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="carrierTotalCN">
+          <text class="result-label">载波总C/N</text>
+          <text class="result-value">{{results.carrierTotalCN}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('thresholdCN') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="thresholdCN">
+          <text class="result-label">门限C/N</text>
+          <text class="result-value">{{results.thresholdCN}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('linkmargin') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="linkmargin">
+          <text class="result-label">链路余量</text>
+          <text class="result-value">{{results.linkmargin}} dB</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="divider"></view>
+    <!-- 完全展开结束 -->
+
+    <!-- 链路计算结果（部分收起和完全展开时都显示） -->
+    <view class="result-section">
+      <view class="result-section-title">链路计算结果</view>
+      <view class="result-grid-2">
+        <view class="result-item {{markedParams.indexOf('bandwidthUsageRatio') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="bandwidthUsageRatio">
+          <text class="result-label">带宽占用比</text>
+          <text class="result-value">{{results.bandwidthUsageRatio}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('powerUsageRatio') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="powerUsageRatio">
+          <text class="result-label">功率占用比</text>
+          <text class="result-value">{{results.powerUsageRatio}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('allocBandwidthResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="allocBandwidthResult">
+          <text class="result-label">载波带宽</text>
+          <text class="result-value">{{results.allocBandwidthResult}} kHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('PowerBWResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="PowerBWResult">
+          <text class="result-label">功率带宽</text>
+          <text class="result-value">{{results.PowerBWResult}} kHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('selectedPowerResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="selectedPowerResult">
+          <text class="result-label">功放实际输出</text>
+          <text class="result-value">{{results.selectedPowerResult}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('selectedPowerWResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="selectedPowerWResult">
+          <text class="result-label">功放实际输出</text>
+          <text class="result-value">{{results.selectedPowerWResult}} W</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('paRecommendationdBResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="paRecommendationdBResult">
+          <text class="result-label">功放建议功率</text>
+          <text class="result-value">{{results.paRecommendationdBResult}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('paRecommendation') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="paRecommendation">
+          <text class="result-label">功放建议功率</text>
+          <text class="result-value">{{results.paRecommendation}} W</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('UPCmarginResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="UPCmarginResult">
+          <text class="result-label">UPC</text>
+          <text class="result-value">{{results.UPCmarginResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('PFDcResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="PFDcResult">
+          <text class="result-label">到达卫星的通量密度</text>
+          <text class="result-value">{{results.PFDcResult}} dBW/m²</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('stationPSDResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="stationPSDResult">
+          <text class="result-label">地球站功率谱密度</text>
+          <text class="result-value">{{results.stationPSDResult}} dBW/Hz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('eirpPerCarrier') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="eirpPerCarrier">
+          <text class="result-label">每载波占卫星EIRP(上行雨)</text>
+          <text class="result-value">{{results.eirpPerCarrier}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('uplinkPowerRatioResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkPowerRatioResult">
+          <text class="result-label">上行雨天功率占比</text>
+          <text class="result-value">{{results.uplinkPowerRatioResult}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkPowerRatioResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkPowerRatioResult">
+          <text class="result-label">下行雨天功率占比</text>
+          <text class="result-value">{{results.downlinkPowerRatioResult}}%</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkComponentResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkComponentResult">
+          <text class="result-label">下行雨卫星总C/T</text>
+          <text class="result-value">{{results.downlinkComponentResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('RXtransponderCapacityResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="RXtransponderCapacityResult">
+          <text class="result-label">转发器回退-下行雨</text>
+          <text class="result-value">{{results.RXtransponderCapacityResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('RXeirpPerCarrierResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="RXeirpPerCarrierResult">
+          <text class="result-label">每载波占卫星EIRP(下行雨)</text>
+          <text class="result-value">{{results.RXeirpPerCarrierResult}} dBW</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('transponderBackoffResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="transponderBackoffResult">
+          <text class="result-label">转发器回退-上行雨</text>
+          <text class="result-value">{{results.transponderBackoffResult}} dB</text>
+        </view>
+      </view>
+    </view>
+    </view>
+  </view>
+  </view>
+  
+  </view><!-- 关闭content-wrapper -->
+</view>
+

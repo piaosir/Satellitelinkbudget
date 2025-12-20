@@ -1,0 +1,95 @@
+<!--satellite-coverage.wxml-->
+<view class="container">
+  <!-- 地图组件 -->
+  <map 
+    id="coverageMap"
+    class="coverage-map"
+    latitude="{{latitude}}"
+    longitude="{{longitude}}"
+    scale="{{scale}}"
+    min-scale="{{1}}"
+    max-scale="{{20}}"
+    circles="{{circles}}"
+    markers="{{markers}}"
+    polyline="{{polylines}}"
+    show-location="{{hasUserLocation}}"
+    enable-zoom="{{true}}"
+    enable-scroll="{{true}}"
+    enable-rotate="{{false}}">
+  </map>
+  
+  <!-- 悬浮操作栏 - 与主界面风格一致 -->
+  <view class="floating-action-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: {{navBarRight}}px;">
+    <!-- 返回按钮 -->
+    <view class="float-btn" bindtap="goBack">
+      <view class="float-icon icon-back"></view>
+    </view>
+    
+    <!-- 卫星选择器 -->
+    <view class="float-btn float-btn-satellite" bindtap="showSatelliteSelector">
+      <text class="float-satellite-name">{{currentSatellite.name}}</text>
+    </view>
+  </view>
+  
+  <!-- 底部等仰角线按钮 -->
+  <view class="bottom-elevation-btn {{showElevationContours ? 'active' : ''}}" bindtap="showElevationPanel">
+    <text class="bottom-elevation-text">EL</text>
+  </view>
+  
+  <!-- 等仰角线设置弹窗 -->
+  <view class="elevation-popup {{showElevationPopup ? 'show' : ''}}" wx:if="{{showElevationPopup}}">
+    <view class="elevation-popup-header">
+      <text class="elevation-popup-title">等仰角线设置</text>
+      <text class="elevation-popup-close" bindtap="hideElevationPanel">✕</text>
+    </view>
+    <view class="elevation-popup-body">
+      <view class="elevation-tip">输入仰角值（0°-90°），用逗号分隔</view>
+      <view class="elevation-input-wrap">
+        <input 
+          type="text" 
+          class="elevation-input-single" 
+          placeholder="例如: 5, 10, 20, 30, 45"
+          value="{{elevationInputText}}"
+          bindinput="onElevationInputText"
+        />
+      </view>
+      <view class="elevation-actions">
+        <view class="elevation-btn elevation-btn-cancel" bindtap="hideElevationPanel">取消</view>
+        <view class="elevation-btn elevation-btn-clear" bindtap="clearElevationContours">清除</view>
+        <view class="elevation-btn elevation-btn-confirm" bindtap="applyElevationAngles">绘制</view>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 等仰角线弹窗遮罩 -->
+  <view class="elevation-popup-mask {{showElevationPopup ? 'show' : ''}}" wx:if="{{showElevationPopup}}" bindtap="hideElevationPanel"></view>
+  
+  <!-- 卫星选择弹窗 -->
+  <view class="satellite-popup {{showSatellitePopup ? 'show' : ''}}" wx:if="{{showSatellitePopup}}">
+    <view class="satellite-popup-header">
+      <text class="satellite-popup-title">选择卫星</text>
+      <text class="satellite-popup-close" bindtap="hideSatelliteSelector">✕</text>
+    </view>
+    <scroll-view scroll-y class="satellite-popup-list">
+      <view class="satellite-popup-item {{satelliteIndex === index ? 'active' : ''}}" 
+            wx:for="{{satellites}}" 
+            wx:key="index"
+            bindtap="onSatelliteChange"
+            data-index="{{index}}">
+        <text class="satellite-popup-name">{{item.name}}</text>
+        <text class="satellite-popup-position">{{item.position}}°E</text>
+      </view>
+    </scroll-view>
+  </view>
+  
+  <!-- 卫星选择遮罩 -->
+  <view class="satellite-popup-mask {{showSatellitePopup ? 'show' : ''}}" wx:if="{{showSatellitePopup}}" bindtap="hideSatelliteSelector"></view>
+  
+  <!-- 加载状态 -->
+  <view class="loading-mask" wx:if="{{loading}}">
+    <view class="loading-content">
+      <view class="loading-spinner"></view>
+      <view class="loading-text">正在加载...</view>
+    </view>
+  </view>
+</view>

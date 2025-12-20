@@ -1,0 +1,66 @@
+<!--configs.wxml-->
+<view class="container">
+  <view class="header">
+    <view class="header-title">配置管理</view>
+    <view class="header-actions">
+      <button class="btn-secondary" style="width: 200rpx; margin-right: 12rpx;" bindtap="importConfig">
+        导入配置
+      </button>
+      <button class="btn-secondary" style="width: 200rpx;" bindtap="loadConfigs">
+        刷新列表
+      </button>
+    </view>
+  </view>
+
+  <!-- 配置列表 -->
+  <view class="config-list" wx:if="{{configs.length > 0}}">
+    <view class="config-card" wx:for="{{configs}}" wx:key="_id">
+      <view class="config-header">
+        <view class="config-name">{{item.configName}}</view>
+        <view class="config-date">{{item.createTime}}</view>
+      </view>
+      
+      <view class="config-info">
+        <view class="config-info-item">
+          <text class="label">卫星:</text>
+          <text class="value">{{item.satelliteParams.satelliteName}}</text>
+        </view>
+        <view class="config-info-item">
+          <text class="label">轨道位置:</text>
+          <text class="value">{{item.satelliteParams.orbitPosition}}°E</text>
+        </view>
+        <view class="config-info-item">
+          <text class="label">工作频段:</text>
+          <text class="value">{{item.satelliteParams.frequencyBand}}</text>
+        </view>
+      </view>
+      
+      <view class="config-actions">
+        <button class="action-btn load" data-id="{{item._id}}" bindtap="loadConfig">
+          加载
+        </button>
+        <button class="action-btn report" data-id="{{item._id}}" bindtap="generateReport">
+          报告
+        </button>
+        <button class="action-btn share" data-id="{{item._id}}" bindtap="shareConfig">
+          分享
+        </button>
+        <button class="action-btn delete" data-id="{{item._id}}" bindtap="deleteConfig">
+          删除
+        </button>
+      </view>
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <view class="empty-state" wx:else>
+    <view class="empty-icon">📋</view>
+    <view class="empty-text">暂无保存的配置</view>
+    <button class="btn-primary" style="width: 400rpx; margin-top: 40rpx;" bindtap="goToCalculate">
+      去计算
+    </button>
+  </view>
+
+  <!-- 隐藏的canvas用于生成二维码 -->
+  <canvas type="2d" id="qrcode-canvas" style="position: fixed; top: -9999px; left: -9999px; width: 400px; height: 400px;"></canvas>
+</view>

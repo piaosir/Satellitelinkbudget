@@ -1,0 +1,56 @@
+<!--settings.wxml-->
+<view class="container">
+  <view class="card">
+    <view class="card-title">关于系统</view>
+    <view class="about-info">
+      <view class="about-item">
+        <text class="label">系统名称</text>
+        <text class="value">卫星链路计算系统</text>
+      </view>
+      <view class="about-item">
+        <text class="label">版本号</text>
+        <text class="value">v1.0.0</text>
+      </view>
+      <view class="about-item">
+        <text class="label">开发者</text>
+        <text class="value">ppx</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">数据管理</view>
+    <view class="action-list">
+      <view class="action-item" bindtap="clearCache">
+        <text class="action-label">清除缓存</text>
+        <text class="action-icon">→</text>
+      </view>
+      <view class="action-item" bindtap="exportData">
+        <text class="action-label">导出数据</text>
+        <text class="action-icon">→</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">帮助与反馈</view>
+    <view class="action-list">
+      <view class="action-item" bindtap="showHelp">
+        <text class="action-label">使用帮助</text>
+        <text class="action-icon">→</text>
+      </view>
+      <view class="action-item" bindtap="feedback">
+        <text class="action-label">意见反馈</text>
+        <text class="action-icon">→</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="system-info">
+      <text class="info-text">基于ITU-R标准的卫星链路预算计算工具</text>
+      <text class="info-text">适用于C/Ku/Ka等多个频段</text>
+      <text class="info-text">支持多链路同时计算与对比分析</text>
+    </view>
+  </view>
+</view>

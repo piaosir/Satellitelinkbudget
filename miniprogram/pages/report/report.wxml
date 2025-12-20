@@ -1,0 +1,171 @@
+<!--report.wxml - 学术风格报告（支持中英文切换）-->
+<view class="academic-report">
+  <!-- 语言切换按钮（左上角） -->
+  <view class="lang-switch" bindtap="toggleLanguage">{{t.btnLang}}</view>
+
+  <!-- 报告标题区 -->
+  <view class="report-masthead">
+    <view class="institution-line">LinkLab Satellite Analysis</view>
+    <view class="report-main-title">{{t.reportTitle}}</view>
+    <view class="title-underline"></view>
+    <view class="meta-line">
+      <text class="meta-item">{{satelliteParams.satelliteName}}</text>
+      <text class="meta-sep">·</text>
+      <text class="meta-item">{{satelliteParams.orbitPosition}}°E</text>
+      <text class="meta-sep">·</text>
+      <text class="meta-item">{{satelliteParams.frequencyBand}} {{t.frequencyBandSuffix}}</text>
+      <text class="meta-sep">·</text>
+      <text class="meta-item">{{reportTime}}</text>
+    </view>
+  </view>
+
+  <!-- 链路评估结论 -->
+  <view class="conclusion-box">
+    <view class="conclusion-item">
+      <text class="conclusion-label">{{t.linkStatus}}</text>
+      <text class="conclusion-value {{linkPerformance.status}}">{{linkPerformance.statusText}}</text>
+    </view>
+    <view class="conclusion-item">
+      <text class="conclusion-label">{{t.linkMargin}}</text>
+      <text class="conclusion-value">{{linkPerformance.margin}}<text class="unit-small"> dB</text></text>
+    </view>
+    <view class="conclusion-item">
+      <text class="conclusion-label">{{t.systemAvailability}}</text>
+      <text class="conclusion-value">{{linkPerformance.availability}}<text class="unit-small">%</text></text>
+    </view>
+  </view>
+
+  <!-- 主体内容 -->
+  <view class="report-body">
+    <!-- 第一行：系统配置 + 卫星参数 + 链路质量 -->
+    <view class="row-section three-col">
+      <view class="section-block flex-1">
+        <view class="section-header">{{t.sectionSystemConfig}}</view>
+        <view class="param-flow">
+          <view class="param-entry"><text class="p-label">{{t.infoRate}}</text><text class="p-value">{{results.infoRateResult}}<text class="p-unit"> kbps</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.modulation}}</text><text class="p-value">{{results.modulationResult}}</text></view>
+          <view class="param-entry"><text class="p-label">{{t.fecCode}}</text><text class="p-value">{{results.fecResult}}</text></view>
+          <view class="param-entry"><text class="p-label">{{t.symbolRate}}</text><text class="p-value">{{results.symbolRateResult}}<text class="p-unit"> ksps</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.allocBandwidth}}</text><text class="p-value">{{results.allocBandwidthResult}}<text class="p-unit"> kHz</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.uplinkFreq}}</text><text class="p-value">{{results.uplinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.downlinkFreq}}</text><text class="p-value">{{results.downlinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
+          <view class="param-entry"><text class="p-label">{{noiseRatioLabel}} {{t.threshold}}</text><text class="p-value">{{results.ebnoResult}}<text class="p-unit"> dB</text></text></view>
+        </view>
+      </view>
+
+      <view class="section-block flex-1">
+        <view class="section-header">{{t.sectionSatellite}}</view>
+        <view class="param-flow">
+          <view class="param-entry"><text class="p-label">{{t.sfdRef}}</text><text class="p-value">{{results.SFDsResult}}<text class="p-unit"> dBW/m²</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.transponderBW}}</text><text class="p-value">{{satelliteParams.transponderBandwidth}}<text class="p-unit"> MHz</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.inputBackoff}}</text><text class="p-value">{{satelliteParams.BOi}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.outputBackoff}}</text><text class="p-value">{{satelliteParams.BOo}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.satelliteEIRP}}</text><text class="p-value">{{results.EIRPsResult}}<text class="p-unit"> dBW</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.satelliteSFD}}</text><text class="p-value">{{results.PFDcResult}}<text class="p-unit"> dBW/m²</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.satellitePSD}}</text><text class="p-value">{{results.satellitePSDResult}}<text class="p-unit"> dBW/Hz</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.groundPFD}}</text><text class="p-value">{{results.satellitePFD}}<text class="p-unit"> dBW/m²</text></text></view>
+        </view>
+      </view>
+
+      <view class="section-block flex-1">
+        <view class="section-header">{{t.sectionLinkQuality}}</view>
+        <view class="param-flow">
+          <view class="param-entry"><text class="p-label">{{t.totalCN}}</text><text class="p-value">{{results.carrierTotalCN}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.thresholdCN}}</text><text class="p-value">{{results.thresholdCN}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry highlight"><text class="p-label">{{t.linkMargin}}</text><text class="p-value">{{results.linkmargin}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">Es/N₀</text><text class="p-value">{{results.esnoResult}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.availability}}</text><text class="p-value">{{results.systemAvailabilityResult}}<text class="p-unit">%</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.ber}}</text><text class="p-value">{{results.berResult}}</text></view>
+          <view class="param-entry"><text class="p-label">{{t.bwUsage}}</text><text class="p-value">{{results.bandwidthUsageRatio}}<text class="p-unit">%</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.pwrUsage}}</text><text class="p-value">{{results.powerUsageRatio}}<text class="p-unit">%</text></text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 第二行：上下行链路对比 -->
+    <view class="section-block link-compare">
+      <view class="dual-header">
+        <view class="section-header flex-1">{{t.sectionUplink}}<text class="location-tag">{{linkParams.earthStationLocation}}</text></view>
+        <view class="section-header flex-1">{{t.sectionDownlink}}<text class="location-tag">{{linkParams.rxEarthStationLocation}}</text></view>
+      </view>
+      <view class="dual-param-flow">
+        <!-- 天线口径 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.antennaDiameter}}</text><text class="p-value">{{results.earthAntennaDiameterResult}}<text class="p-unit"> m</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.antennaDiameter}}</text><text class="p-value">{{results.rxAntennaDiameterResult}}<text class="p-unit"> m</text></text></view>
+        </view>
+        <!-- 天线增益 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.antennaGain}}</text><text class="p-value">{{results.txAntennaGainResult}}<text class="p-unit"> dB</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.antennaGain}}</text><text class="p-value">{{results.rxAntennaGainResult}}<text class="p-unit"> dB</text></text></view>
+        </view>
+        <!-- 功率/G/T -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.txPower}}</text><text class="p-value">{{results.selectedPowerWResult}}<text class="p-unit"> W</text><text class="p-alt"> ({{results.selectedPowerResult}}dBW)</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.gtValue}}</text><text class="p-value">{{results.gOverTeResult}}<text class="p-unit"> dB/K</text></text></view>
+        </view>
+        <!-- EIRP -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.stationEIRP}}</text><text class="p-value">{{results.stationEIRPResult}}<text class="p-unit"> dBW</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.eirpOutput}}</text><text class="p-value">{{results.RXeirpPerCarrierResult}}<text class="p-unit"> dBW</text></text></view>
+        </view>
+        <!-- 极化方式 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.polarization}}</text><text class="p-value">{{results.uplinkPolarizationResult}}</text></view>
+          <view class="dual-cell"><text class="p-label">{{t.polarization}}</text><text class="p-value">{{results.downlinkPolarizationResult}}</text></view>
+        </view>
+        <!-- 仰角 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.elevation}}</text><text class="p-value">{{results.elevationResult}}<text class="p-unit">°</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.elevation}}</text><text class="p-value">{{results.rxElevationResult}}<text class="p-unit">°</text></text></view>
+        </view>
+        <!-- 极化角 -->
+        <view class="dual-row" wx:if="{{results.uplinkPolarizationAngleResult !== '-' || results.downlinkPolarizationAngleResult !== '-'}}">
+          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.uplinkPolarizationAngleResult}}<text class="p-unit" wx:if="{{results.uplinkPolarizationAngleResult !== '-'}}">°</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.downlinkPolarizationAngleResult}}<text class="p-unit" wx:if="{{results.downlinkPolarizationAngleResult !== '-'}}">°</text></text></view>
+        </view>
+        <!-- 自由空间损耗 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.fsl}}</text><text class="p-value">{{results.uplinkFSLResult}}<text class="p-unit"> dB</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.fsl}}</text><text class="p-value">{{results.downlinkFSLResult}}<text class="p-unit"> dB</text></text></view>
+        </view>
+        <!-- 降雨衰减 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.rainAtten}}</text><text class="p-value">{{results.uplinkRainAttenuation}}<text class="p-unit"> dB</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.rainAtten}}</text><text class="p-value">{{results.downlinkRainAttenuationResult}}<text class="p-unit"> dB</text></text></view>
+        </view>
+        <!-- 馈线损耗 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.feederLoss}}</text><text class="p-value">{{results.feederLossResult}}<text class="p-unit"> dB</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.feederLoss}}</text><text class="p-value">{{results.rxFeederLossResult}}<text class="p-unit"> dB</text></text></view>
+        </view>
+        <!-- C/N -->
+        <view class="dual-row highlight">
+          <view class="dual-cell"><text class="p-label">{{t.uplinkCN}}</text><text class="p-value">{{results.uplinkCN}}<text class="p-unit"> dB</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.downlinkCN}}</text><text class="p-value">{{results.downlinkCN}}<text class="p-unit"> dB</text></text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 第三行：功放推荐 -->
+    <view class="section-block pa-section">
+      <view class="section-header">{{t.sectionPA}}</view>
+      <view class="pa-flow">
+        <view class="pa-item"><text class="p-label">{{t.recommendedPower}}</text><text class="p-value">{{results.paRecommendation}}<text class="p-unit"> W</text><text class="p-alt"> ({{results.paRecommendationdBResult}} dBW)</text></text></view>
+        <view class="pa-item"><text class="p-label">{{t.carrierBW}}</text><text class="p-value">{{results.allocBandwidthResult}}<text class="p-unit"> kHz</text></text></view>
+        <view class="pa-item"><text class="p-label">{{t.powerBW}}</text><text class="p-value">{{results.PowerBWResult}}<text class="p-unit"> kHz</text></text></view>
+      </view>
+    </view>
+
+    <!-- 页脚 -->
+    <view class="report-footer">
+      <text class="footer-text">{{t.footerText}} · {{reportTime}}</text>
+    </view>
+  </view>
+
+  <!-- 操作按钮 -->
+  <view class="action-bar">
+    <button class="action-btn" bindtap="shareReport">{{t.btnShare}}</button>
+    <button class="action-btn primary" bindtap="copyReportText">{{t.btnCopy}}</button>
+  </view>
+</view>

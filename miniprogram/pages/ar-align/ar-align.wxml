@@ -1,0 +1,124 @@
+<!--ar-align.wxml-->
+<view class="container">
+  <!-- 输入卫星轨位阶段 -->
+  <view class="input-stage" wx:if="{{stage === 'input'}}">
+    <view class="input-card">
+      <view class="input-title">选择卫星对星</view>
+      
+      <view class="orbit-input-group">
+        <view class="form-group">
+          <text class="form-label">选择卫星</text>
+          <picker mode="selector" 
+                  range="{{satellites}}" 
+                  range-key="name"
+                  value="{{satelliteIndex}}"
+                  bindchange="onSatelliteChange">
+            <view class="form-picker">
+              {{satellites[satelliteIndex].name}}
+            </view>
+          </picker>
+        </view>
+      </view>
+      
+      <button class="btn-start-integrated" bindtap="startAR">
+        <view class="btn-orbit-display">
+          <text class="btn-orbit-label">目标轨位</text>
+          <text class="btn-orbit-value">{{orbitDisplay}}</text>
+        </view>
+        <view class="btn-start-text">开始对星 ▶</view>
+      </button>
+    </view>
+  </view>
+  
+  <!-- AR相机阶段 -->
+  <view class="ar-stage" wx:if="{{stage === 'ar'}}">
+    <!-- 相机视图 - 启用高帧率和原生层级 -->
+    <camera 
+      device-position="back" 
+      flash="off"
+      frame-size="medium"
+      class="camera-view"
+      binderror="onCameraError"
+      bindinitialdone="onCameraReady">
+      
+      <!-- 提示层 -->
+      <cover-view class="tip-overlay" wx:if="{{showTip}}">
+        <cover-view class="tip-card">
+          <cover-view class="tip-icon">📱</cover-view>
+          <cover-view class="tip-text">请垂直放置手机</cover-view>
+          <cover-view class="tip-subtext">保持手机屏幕朝向天空</cover-view>
+        </cover-view>
+      </cover-view>
+      
+      <!-- AR覆盖层 -->
+      <cover-view class="ar-overlay">
+        <!-- 中心瞄准圈 -->
+        <cover-view class="aim-circle {{isAligned ? 'aligned' : ''}}">
+          <cover-view class="aim-dot"></cover-view>
+        </cover-view>
+        
+        <!-- 卫星图标 - 使用satellite.png图片 -->
+        <cover-view 
+          wx:if="{{satelliteVisible}}"
+          class="satellite-icon {{isAtEdge ? 'at-edge' : ''}}" 
+          style="left: {{satelliteX}}px; top: {{satelliteY}}px;">
+          <cover-image 
+            class="satellite-image" 
+            src="/images/satellite.png"
+            mode="aspectFit">
+          </cover-image>
+          <cover-view wx:if="{{isAtEdge}}" class="edge-indicator">
+            <cover-view class="edge-arrow">→</cover-view>
+          </cover-view>
+        </cover-view>
+        
+        <!-- 顶部信息栏 -->
+        <cover-view class="info-bar">
+          <cover-view class="info-section">
+            <cover-view class="info-section-title">📱 当前指向</cover-view>
+            <cover-view class="info-row">
+              <cover-view class="info-item">
+                <cover-view class="info-label">方位角</cover-view>
+                <cover-view class="info-value">{{currentAzimuth}}°</cover-view>
+              </cover-view>
+              <cover-view class="info-item">
+                <cover-view class="info-label">俯仰角</cover-view>
+                <cover-view class="info-value">{{currentElevation}}°</cover-view>
+              </cover-view>
+            </cover-view>
+          </cover-view>
+          <cover-view class="info-divider"></cover-view>
+          <cover-view class="info-section">
+            <cover-view class="info-section-title">🛰️ 目标位置</cover-view>
+            <cover-view class="info-row">
+              <cover-view class="info-item">
+                <cover-view class="info-label">方位角</cover-view>
+                <cover-view class="info-value">{{azimuth}}°</cover-view>
+              </cover-view>
+              <cover-view class="info-item">
+                <cover-view class="info-label">俯仰角</cover-view>
+                <cover-view class="info-value">{{elevation}}°</cover-view>
+              </cover-view>
+            </cover-view>
+          </cover-view>
+        </cover-view>
+        
+        <!-- 底部状态栏 -->
+        <cover-view class="status-bar">
+          <cover-view class="status-text {{isAligned ? 'success' : ''}}">
+            {{isAligned ? '✓ 已对准卫星' : '移动手机对准卫星图标'}}
+          </cover-view>
+          <cover-view class="distance-info" wx:if="{{!isAligned}}">
+            偏差: {{offsetDistance}}°
+          </cover-view>
+        </cover-view>
+      </cover-view>
+    </camera>
+  </view>
+  
+  <!-- 加载状态 -->
+  <view class="loading-mask" wx:if="{{loading}}">
+    <view class="loading-spinner"></view>
+    <view class="loading-text">{{loadingText}}</view>
+  </view>
+</view>
