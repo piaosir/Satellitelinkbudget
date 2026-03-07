@@ -1009,13 +1009,23 @@
           <text class="core-result-label">链路余量</text>
           <text class="core-result-value">{{results.linkmargin}} dB</text>
         </view>
-        <view class="core-result-row">
-          <text class="core-result-label">带宽占比</text>
-          <text class="core-result-value">{{results.bandwidthUsageRatio}}%</text>
+        <view class="core-result-row-with-bar">
+          <view class="core-result-row">
+            <text class="core-result-label">带宽占比</text>
+            <text class="core-result-value {{results.bandwidthUsageRatio > 100 ? 'value-danger' : ''}}">{{results.bandwidthUsageRatio}}%</text>
+          </view>
+          <view class="core-ratio-bar">
+            <view class="core-ratio-bar-fill {{results.bandwidthUsageRatio > 100 ? 'bar-danger' : results.bandwidthUsageRatio > 80 ? 'bar-warn' : 'bar-normal'}}" style="width: {{results.bandwidthUsageRatio > 100 ? 100 : results.bandwidthUsageRatio}}%"></view>
+          </view>
         </view>
-        <view class="core-result-row">
-          <text class="core-result-label">功率占比</text>
-          <text class="core-result-value">{{results.powerUsageRatio}}%</text>
+        <view class="core-result-row-with-bar">
+          <view class="core-result-row">
+            <text class="core-result-label">功率占比</text>
+            <text class="core-result-value {{results.powerUsageRatio > 100 ? 'value-danger' : ''}}">{{results.powerUsageRatio}}%</text>
+          </view>
+          <view class="core-ratio-bar">
+            <view class="core-ratio-bar-fill {{results.powerUsageRatio > 100 ? 'bar-danger' : results.powerUsageRatio > 80 ? 'bar-warn' : 'bar-normal'}}" style="width: {{results.powerUsageRatio > 100 ? 100 : results.powerUsageRatio}}%"></view>
+          </view>
         </view>
         <view class="core-result-row">
           <text class="core-result-label">载波带宽</text>

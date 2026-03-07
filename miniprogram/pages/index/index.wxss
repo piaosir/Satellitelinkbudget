@@ -622,6 +622,49 @@ page {
   text-overflow: ellipsis;
 }
 
+/* 带进度条的占比行 */
+.core-result-row-with-bar {
+  display: flex;
+  flex-direction: column;
+}
+
+.core-result-row-with-bar .core-result-row {
+  padding-bottom: 4rpx;
+}
+
+.core-ratio-bar {
+  width: 100%;
+  height: 6rpx;
+  background: #e2e8f0;
+  border-radius: 3rpx;
+  overflow: hidden;
+  margin-bottom: 2rpx;
+  box-sizing: border-box;
+}
+
+.core-ratio-bar-fill {
+  height: 100%;
+  border-radius: 3rpx;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 2rpx;
+}
+
+.core-ratio-bar-fill.bar-normal {
+  background: linear-gradient(90deg, #1e293b, #334155);
+}
+
+.core-ratio-bar-fill.bar-warn {
+  background: linear-gradient(90deg, #d97706, #f59e0b);
+}
+
+.core-ratio-bar-fill.bar-danger {
+  background: linear-gradient(90deg, #dc2626, #ef4444);
+}
+
+.core-result-value.value-danger {
+  color: #ef4444;
+}
+
 /* 收发站对比区样式 */
 .station-compare-panel {
   display: grid;
