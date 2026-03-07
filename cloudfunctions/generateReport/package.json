@@ -1,0 +1,14 @@
+{
+  "name": "generate-report",
+  "version": "1.0.0",
+  "description": "生成卫星链路预算报告（Excel/PDF/Word）",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3",
+    "exceljs": "^4.4.0",
+    "pdfkit": "^0.14.0",
+    "docx": "^8.5.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

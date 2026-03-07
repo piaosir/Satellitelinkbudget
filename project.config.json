@@ -3,8 +3,8 @@
   "cloudfunctionRoot": "cloudfunctions/",
   "setting": {
     "urlCheck": true,
-    "es6": true,
-    "enhance": false,
+    "es6": false,
+    "enhance": true,
     "postcss": true,
     "preloadBackgroundData": false,
     "minified": true,
@@ -74,7 +74,32 @@
   "compileType": "miniprogram",
   "srcMiniprogramRoot": "miniprogram/",
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      {
+        "value": "pages/satellite-coverage/CoverageDATA/CoverageForWechat/**/*.gxt",
+        "type": "glob"
+      },
+      {
+        "value": "pages/satellite-coverage/convertGxtToJson.js",
+        "type": "glob"
+      },
+      {
+        "value": "CoverageCloudData",
+        "type": "folder"
+      },
+      {
+        "value": "CoverageDATA_backup",
+        "type": "folder"
+      },
+      {
+        "value": "CoverageForWechat_backup",
+        "type": "folder"
+      },
+      {
+        "value": "scripts",
+        "type": "folder"
+      }
+    ],
     "include": []
   },
   "editorSetting": {

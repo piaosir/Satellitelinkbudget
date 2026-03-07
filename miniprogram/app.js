@@ -1,6 +1,20 @@
 // app.js
 App({
-  onLaunch: function () {
+  onLaunch: function (options) {
+    // 保存启动参数（用于分享码跳转）
+    if (options && options.query) {
+      if (options.query.shareCode) {
+        this.globalData = this.globalData || {};
+        this.globalData.launchShareCode = options.query.shareCode;
+        console.log('检测到启动参数 shareCode:', options.query.shareCode);
+      }
+      if (options.query.scene) {
+        this.globalData = this.globalData || {};
+        this.globalData.launchScene = options.query.scene;
+        console.log('检测到启动参数 scene:', options.query.scene);
+      }
+    }
+
     // 初始化云开发环境
     if (!wx.cloud) {
       console.error('请使用 2.2.3 或以上的基础库以使用云能力');
@@ -30,7 +44,16 @@ App({
       // 标记的结果行（用于报告生成）
       highlightedRows: [],
       // 噪声比模式：'ebno' 或 'esno'
-      noiseRatioMode: 'ebno'
+      noiseRatioMode: 'ebno',
+      // 当前正在编辑的配置ID（用于编辑后保存）
+      currentEditingConfigId: null,
+      // 当前正在编辑的配置是否为本地配置
+      currentEditingConfigIsLocal: false,
+      // 当前正在编辑的配置名称
+      currentEditingConfigName: null,
+      // 启动时的分享码参数（用于从扫码进入时跳转）
+      launchShareCode: this.globalData ? this.globalData.launchShareCode : null,
+      launchScene: this.globalData ? this.globalData.launchScene : null
     };
 
     // 初始化8条链路的默认参数
@@ -54,9 +77,9 @@ App({
       deltaTheta: 2.5,
       adjUplinkFactor: 25,
       adjDownlinkFactor: 25,
-      xpolUplinkFactor: 30,
-      xpolDownlinkFactor: 30,
-      intermodFactor: 22
+      xpolUplinkFactor: 26,
+      xpolDownlinkFactor: 26,
+      intermodFactor: 21
     };
   },
 
@@ -98,8 +121,8 @@ App({
       // 载波参数
       infoRate: 2048,
       modulation: 'QPSK',
-      fec: 0.75,
-      rsCode: 1.00,
+      fec: '3/4',
+      rsCode: '188/204',
       m: 1.00,
       bandwidthFactor: 1.20,
       ber: 7,

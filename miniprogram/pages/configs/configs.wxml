@@ -1,66 +1,285 @@
 <!--configs.wxml-->
+<wxs module="utils">
+  function includes(arr, val) {
+    if (!arr || !arr.length) return false;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] === val) return true;
+    }
+    return false;
+  }
+  module.exports = { includes: includes };
+</wxs>
 <view class="container">
-  <view class="header">
-    <view class="header-title">配置管理</view>
-    <view class="header-actions">
-      <button class="btn-secondary" style="width: 200rpx; margin-right: 12rpx;" bindtap="importConfig">
-        导入配置
-      </button>
-      <button class="btn-secondary" style="width: 200rpx;" bindtap="loadConfigs">
-        刷新列表
+  <!-- 悬浮顶部操作栏 - 左对齐 -->
+  <view class="floating-action-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: 8px;">
+    <!-- 返回按钮 -->
+    <view class="float-btn" bindtap="goBack">
+      <view class="float-icon icon-back"></view>
+    </view>
+    
+    <!-- 导入配置按钮 -->
+    <view class="float-btn float-btn-with-text" bindtap="importConfig" wx:if="{{!selectMode}}">
+      <view class="float-icon icon-import"></view>
+      <text class="float-btn-text">导入</text>
+    </view>
+    
+    <!-- 刷新按钮 -->
+    <view class="float-btn float-btn-with-text" bindtap="loadConfigs" wx:if="{{!selectMode}}">
+      <view class="float-icon icon-refresh"></view>
+      <text class="float-btn-text">刷新</text>
+    </view>
+    
+    <!-- 多选按钮 -->
+    <view class="float-btn float-btn-with-text {{selectMode ? 'active' : ''}}" bindtap="toggleSelectMode">
+      <view class="float-icon icon-select"></view>
+      <text class="float-btn-text">{{selectMode ? '取消' : '多选'}}</text>
+    </view>
+    
+    <!-- 多选模式下的操作按钮 -->
+    <block wx:if="{{selectMode}}">
+      <view class="export-btn float-btn float-btn-with-text" bindtap="showExportOptions">
+        <view class="float-icon icon-export"></view>
+        <text class="float-btn-text">导出({{selectedConfigs.length}})</text>
+      </view>
+      <view class="float-btn float-btn-with-text qrcode-btn" bindtap="batchShareConfigs">
+        <view class="float-icon icon-qrcode"></view>
+        <text class="float-btn-text">分享({{selectedConfigs.length}})</text>
+      </view>
+    </block>
+  </view>
+
+  <!-- 内容区域 -->
+  <view class="content-wrapper" style="padding-top: {{contentPaddingTop}}px;">
+    <!-- 配置列表 -->
+    <view class="config-list" wx:if="{{configs.length > 0}}">
+      <view class="config-card-wrapper {{utils.includes(selectedConfigs, item._id) ? 'selected' : ''}}" wx:for="{{configs}}" wx:key="_id"
+        bindtouchstart="{{selectMode ? '' : 'onConfigTouchStart'}}"
+        bindtouchmove="{{selectMode ? '' : 'onConfigTouchMove'}}"
+        bindtouchend="{{selectMode ? '' : 'onConfigTouchEnd'}}"
+        bindtap="{{selectMode ? 'toggleConfigSelection' : ''}}"
+        data-id="{{item._id}}">
+        <!-- 滑动显示的删除按钮背景 -->
+        <view class="config-delete-bg" wx:if="{{!selectMode}}">
+          <view class="config-action-delete" data-id="{{item._id}}" data-local="{{item.isLocal}}" bindtap="deleteConfig">删除</view>
+        </view>
+        <!-- 多选模式下的选择指示器 -->
+        <view class="select-indicator {{utils.includes(selectedConfigs, item._id) ? 'checked' : ''}}" wx:if="{{selectMode}}">
+          <view class="select-checkbox"></view>
+        </view>
+        <!-- 配置卡片内容 -->
+        <view class="config-card-content {{item.animating ? 'animating' : ''}} {{selectMode ? 'select-mode' : ''}}" style="transform: translateX({{selectMode ? 0 : (item.offsetX || 0)}}px);">
+          <view class="config-row">
+            <view class="config-main">
+              <view class="config-name">{{item.configName}}</view>
+              <view class="config-meta">
+                <text class="config-satellite">{{item.satelliteParams.satelliteName}}</text>
+                <text class="config-sep">·</text>
+                <text class="config-band">{{item.satelliteParams.frequencyBand}}</text>
+                <text class="config-sep">·</text>
+                <text class="config-date">{{item.createTimeFormatted}}</text>
+              </view>
+            </view>
+            <view class="config-actions" wx:if="{{!selectMode}}">
+              <view class="action-btn load" data-id="{{item._id}}" data-local="{{item.isLocal}}" bindtap="loadConfig">加载</view>
+              <view class="action-btn edit" data-id="{{item._id}}" data-name="{{item.configName}}" data-local="{{item.isLocal}}" bindtap="editConfig">编辑</view>
+              <view class="action-btn report" data-id="{{item._id}}" data-local="{{item.isLocal}}" bindtap="generateReport">报告</view>
+              <view class="action-btn share" data-id="{{item._id}}" data-local="{{item.isLocal}}" bindtap="shareConfig">分享</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view class="empty-state" wx:else>
+      <view class="empty-icon">
+        <view class="empty-icon-svg"></view>
+      </view>
+      <view class="empty-text">暂无保存的配置</view>
+      <view class="empty-hint">返回主界面保存配置后可在此查看</view>
+      <button class="btn-action" bindtap="goToCalculate">
+        返回主界面
       </button>
     </view>
   </view>
 
-  <!-- 配置列表 -->
-  <view class="config-list" wx:if="{{configs.length > 0}}">
-    <view class="config-card" wx:for="{{configs}}" wx:key="_id">
-      <view class="config-header">
-        <view class="config-name">{{item.configName}}</view>
-        <view class="config-date">{{item.createTime}}</view>
-      </view>
-      
-      <view class="config-info">
-        <view class="config-info-item">
-          <text class="label">卫星:</text>
-          <text class="value">{{item.satelliteParams.satelliteName}}</text>
-        </view>
-        <view class="config-info-item">
-          <text class="label">轨道位置:</text>
-          <text class="value">{{item.satelliteParams.orbitPosition}}°E</text>
-        </view>
-        <view class="config-info-item">
-          <text class="label">工作频段:</text>
-          <text class="value">{{item.satelliteParams.frequencyBand}}</text>
+  <!-- 导出面板 -->
+  <view class="export-panel-mask {{showExportPanel ? 'show' : ''}}" bindtap="hideExportPanel"></view>
+  <view class="export-panel {{showExportPanel ? 'show' : ''}}">
+    <view class="export-panel-header">
+      <text class="export-panel-title">导出报告</text>
+      <view class="export-panel-close" bindtap="hideExportPanel">×</view>
+    </view>
+    <view class="export-panel-content">
+      <view class="export-option-group">
+        <text class="export-option-label">选择语言 / Language</text>
+        <view class="export-lang-options">
+          <view class="export-lang-btn {{exportLang === 'zh' ? 'active' : ''}}" bindtap="selectExportLang" data-lang="zh">中文</view>
+          <view class="export-lang-btn {{exportLang === 'en' ? 'active' : ''}}" bindtap="selectExportLang" data-lang="en">English</view>
         </view>
       </view>
-      
-      <view class="config-actions">
-        <button class="action-btn load" data-id="{{item._id}}" bindtap="loadConfig">
-          加载
-        </button>
-        <button class="action-btn report" data-id="{{item._id}}" bindtap="generateReport">
-          报告
-        </button>
-        <button class="action-btn share" data-id="{{item._id}}" bindtap="shareConfig">
-          分享
-        </button>
-        <button class="action-btn delete" data-id="{{item._id}}" bindtap="deleteConfig">
-          删除
-        </button>
+      <view class="export-option-group">
+        <text class="export-option-label">导出格式</text>
+        <view class="export-format-options">
+          <view class="export-format-btn" bindtap="exportExcel">
+            <view class="export-format-icon icon-excel"></view>
+            <text class="export-format-text">Excel表格</text>
+            <text class="export-format-desc">(.xlsx格式，云端生成)</text>
+          </view>
+          <view class="export-format-btn" bindtap="exportPDF">
+            <view class="export-format-icon icon-pdf"></view>
+            <text class="export-format-text">PDF报告</text>
+            <text class="export-format-desc">(.pdf格式，云端生成)</text>
+          </view>
+          <view class="export-format-btn" bindtap="exportWord">
+            <view class="export-format-icon icon-word"></view>
+            <text class="export-format-text">Word文档</text>
+            <text class="export-format-desc">(.docx格式，云端生成)</text>
+          </view>
+        </view>
+      </view>
+      <view class="export-selected-info">
+        已选择 {{selectedConfigs.length}} 个配置
       </view>
     </view>
-  </view>
-
-  <!-- 空状态 -->
-  <view class="empty-state" wx:else>
-    <view class="empty-icon">📋</view>
-    <view class="empty-text">暂无保存的配置</view>
-    <button class="btn-primary" style="width: 400rpx; margin-top: 40rpx;" bindtap="goToCalculate">
-      去计算
-    </button>
   </view>
 
   <!-- 隐藏的canvas用于生成二维码 -->
   <canvas type="2d" id="qrcode-canvas" style="position: fixed; top: -9999px; left: -9999px; width: 400px; height: 400px;"></canvas>
+
+  <!-- 分享面板 -->
+  <view class="share-panel-mask {{showSharePanel ? 'show' : ''}}" bindtap="hideSharePanel"></view>
+  <view class="share-panel {{showSharePanel ? 'show' : ''}}">
+    <view class="share-panel-header">
+      <text class="share-panel-title">{{currentShareConfig.configName}}</text>
+      <view class="share-panel-close" bindtap="hideSharePanel">×</view>
+    </view>
+    <view class="share-panel-content">
+      <view class="share-option-group">
+        <!-- URL Link 分享选项 -->
+        <view class="share-option-btn" bindtap="copyShareLink" wx:if="{{currentShareConfig.urlLink}}">
+          <view class="share-option-icon icon-link"></view>
+          <view class="share-option-info">
+            <text class="share-option-text">复制分享链接</text>
+            <text class="share-option-desc">好友点击链接即可打开</text>
+          </view>
+        </view>
+        
+        <!-- 分享码选项 -->
+        <view class="share-option-btn" bindtap="copyShareCode">
+          <view class="share-option-icon icon-code"></view>
+          <view class="share-option-info">
+            <text class="share-option-text">复制分享码</text>
+            <text class="share-option-desc">{{currentShareConfig.shareCode}}</text>
+          </view>
+        </view>
+        
+        <!-- 分享小程序卡片 - 使用 button 的 open-type="share" -->
+        <button class="share-option-btn share-btn-native" open-type="share">
+          <view class="share-option-icon icon-wechat"></view>
+          <view class="share-option-info">
+            <text class="share-option-text">发送给好友</text>
+            <text class="share-option-desc">分享小程序卡片</text>
+          </view>
+        </button>
+        
+        <!-- Word文档 -->
+        <view class="share-option-btn" bindtap="shareWord">
+          <view class="share-option-icon icon-word"></view>
+          <view class="share-option-info">
+            <text class="share-option-text">Word文档</text>
+            <text class="share-option-desc">生成Word文件，可转发或保存</text>
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <!-- 批量分享二维码面板（类似名片效果） -->
+  <view class="batch-qr-panel-mask {{showBatchQRPanel ? 'show' : ''}}" bindtap="hideBatchQRPanel"></view>
+  <view class="batch-qr-panel {{showBatchQRPanel ? 'show' : ''}}">
+    <view class="batch-qr-card">
+      <!-- 关闭按钮 -->
+      <view class="batch-qr-close-btn" bindtap="hideBatchQRPanel">×</view>
+      
+      <!-- 二维码区域 -->
+      <view class="batch-qr-body">
+        <view class="batch-qr-loading" wx:if="{{batchQRLoading}}">
+          <view class="loading-spinner"></view>
+          <text class="loading-text">生成中...</text>
+        </view>
+        
+        <block wx:elif="{{batchShareData}}">
+          <!-- 小程序码图片 -->
+          <view class="batch-qr-image-container">
+            <image 
+              class="batch-qr-image" 
+              src="{{batchShareData.qrCodeUrl}}" 
+              mode="aspectFit"
+              show-menu-by-longpress="{{true}}"
+              wx:if="{{batchShareData.qrCodeUrl}}"
+            ></image>
+            <!-- 没有图片时显示批次码 -->
+            <view class="batch-qr-code-fallback" wx:else>
+              <text class="batch-code-text">{{batchShareData.batchCode}}</text>
+              <text class="batch-code-hint">输入此码导入</text>
+            </view>
+          </view>
+          
+          <!-- 配置信息 -->
+          <view class="batch-qr-info">
+            <view class="batch-qr-count">
+              <text class="count-number">{{batchShareData.configCount}}</text>
+              <text class="count-label">个配置</text>
+            </view>
+            <view class="batch-qr-names">
+              <text class="config-name-item" wx:for="{{batchShareData.configNames}}" wx:key="index" wx:if="{{index < 5}}">{{item}}</text>
+              <text class="config-name-more" wx:if="{{batchShareData.configNames.length > 5}}">...等{{batchShareData.configNames.length}}个</text>
+            </view>
+          </view>
+          
+          <!-- 批次码 -->
+          <view class="batch-code-row">
+            <text class="batch-code-label">分享码：</text>
+            <text class="batch-code-value">{{batchShareData.batchCode}}</text>
+            <view class="batch-code-copy" bindtap="copyBatchCode">复制</view>
+          </view>
+          
+          <!-- 提示 -->
+          <view class="batch-qr-tips">
+            <text class="tip-text">长按二维码可保存或分享给好友</text>
+            <text class="tip-text">好友扫码后可批量导入所有配置</text>
+          </view>
+        </block>
+      </view>
+    </view>
+  </view>
+
+  <!-- 批量导入确认面板 -->
+  <view class="batch-import-panel-mask {{showBatchImportPanel ? 'show' : ''}}" bindtap="hideBatchImportPanel"></view>
+  <view class="batch-import-panel {{showBatchImportPanel ? 'show' : ''}}">
+    <view class="batch-import-header">
+      <text class="batch-import-title">批量导入配置</text>
+      <view class="batch-import-close" bindtap="hideBatchImportPanel">×</view>
+    </view>
+    <view class="batch-import-content">
+      <view class="batch-import-info">
+        <text class="import-count">发现 {{batchImportData.configCount}} 个配置</text>
+      </view>
+      <scroll-view class="batch-import-list" scroll-y>
+        <view class="import-config-item" wx:for="{{batchImportData.configs}}" wx:key="index">
+          <view class="import-config-name">{{item.configName}}</view>
+          <view class="import-config-meta">
+            <text>{{item.satelliteParams.satelliteName}}</text>
+            <text class="sep">·</text>
+            <text>{{item.satelliteParams.frequencyBand}}</text>
+          </view>
+        </view>
+      </scroll-view>
+      <view class="batch-import-actions">
+        <view class="batch-import-btn cancel" bindtap="hideBatchImportPanel">取消</view>
+        <view class="batch-import-btn confirm" bindtap="confirmBatchImport">全部导入</view>
+      </view>
+    </view>
+  </view>
 </view>

@@ -512,8 +512,8 @@ Page({
     }
     
     // 计算视场角 (典型手机相机视场角)
-    const fovH = 67; // 水平视场角
-    const fovV = 41; // 垂直视场角
+    const fovH = 68; // 水平视场角
+    const fovV = 51; // 垂直视场角
     
     // 使用新的方法计算当前俯仰角（-90到90度）
     const currentElevation = this.calculateDeviceElevation(deviceBeta, deviceGamma);

@@ -3,6 +3,68 @@
 
 const validator = require('./validator.js');
 
+/**
+ * 解析FEC编码率字符串，支持任意形式的分数和小数
+ * @param {string|number} fecInput - FEC编码率输入（如 "3/4", "11/55", "0.75"）
+ * @param {number} defaultValue - 默认值
+ * @returns {number} 解析后的数值
+ */
+function parseFecForCalculation(fecInput, defaultValue = 0.75) {
+  if (fecInput === '' || fecInput === null || fecInput === undefined) {
+    return defaultValue;
+  }
+  
+  const fecStr = String(fecInput).trim();
+  
+  // 如果包含/，说明是分数格式
+  if (fecStr.includes('/')) {
+    const parts = fecStr.split('/');
+    if (parts.length === 2) {
+      const numerator = parseFloat(parts[0].trim());
+      const denominator = parseFloat(parts[1].trim());
+      if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+        return numerator / denominator;
+      }
+    }
+    return defaultValue;
+  }
+  
+  // 小数格式
+  const value = parseFloat(fecStr);
+  return isNaN(value) ? defaultValue : value;
+}
+
+/**
+ * 解析RS编码码率字符串，支持任意形式的分数和小数
+ * @param {string|number} rsCodeInput - RS编码码率输入（如 "188/204", "0.92"）
+ * @param {number} defaultValue - 默认值 (188/204 ≈ 0.9216)
+ * @returns {number} 解析后的数值
+ */
+function parseRsCodeForCalculation(rsCodeInput, defaultValue = 188/204) {
+  if (rsCodeInput === '' || rsCodeInput === null || rsCodeInput === undefined) {
+    return defaultValue;
+  }
+  
+  const rsCodeStr = String(rsCodeInput).trim();
+  
+  // 如果包含/，说明是分数格式
+  if (rsCodeStr.includes('/')) {
+    const parts = rsCodeStr.split('/');
+    if (parts.length === 2) {
+      const numerator = parseFloat(parts[0].trim());
+      const denominator = parseFloat(parts[1].trim());
+      if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+        return numerator / denominator;
+      }
+    }
+    return defaultValue;
+  }
+  
+  // 小数格式
+  const value = parseFloat(rsCodeStr);
+  return isNaN(value) ? defaultValue : value;
+}
+
 // 物理常量
 const CONSTANTS = {
   LIGHT_SPEED: 299792.458, // 光速 km/s
@@ -205,18 +267,26 @@ function performCalculations(satParams, inputs) {
   const uplinkPolarizationDisplay = inputs.uplinkPolarization || satParams.uplinkPolarization || 'V';
   const uplinkPolarization = (uplinkPolarizationDisplay === 'LHCP' || uplinkPolarizationDisplay === 'RHCP') ? 'C' : uplinkPolarizationDisplay;
   const transponderBandwidth = parseFloat(satParams.transponderBandwidth) || 36; // MHz
-  const orbitPosition = parseFloat(satParams.orbitPosition || satParams.position) || 110.5;
+  const _orbitPosRaw = satParams.orbitPosition !== undefined && satParams.orbitPosition !== '' && satParams.orbitPosition !== null
+    ? satParams.orbitPosition : (satParams.position !== undefined && satParams.position !== '' && satParams.position !== null ? satParams.position : null);
+  const orbitPosition = _orbitPosRaw !== null ? parseFloat(_orbitPosRaw) : 110.5;
   const EIRPs = parseFloat(inputs.rxEIRP) || 46; // dBW - 卫星下行EIRP
   const G_Ts = parseFloat(inputs.G_Ts) || 2; // dB/K - 卫星G/T
-  const SFDref = parseFloat(satParams.sfdRef) || -82; // dBW/m² - SFD参考值
+  const SFDref = (satParams.sfdRef !== '' && satParams.sfdRef !== null && satParams.sfdRef !== undefined)
+    ? parseFloat(satParams.sfdRef) : -82; // dBW/m² - SFD参考值
   
   // ============ 通信参数 ============
   const infoRate = parseFloat(inputs.infoRate) || 2048; // kbps - 信息速率
   const modulation = inputs.modulation || "QPSK";
-  const fec = parseFloat(inputs.fec) || 0.75; // FEC编码率
-  const rsCode = parseFloat(inputs.rsCode) || 1.0; // RS码效率
+  // FEC编码率：支持分数和小数格式，保留原始输入用于显示
+  const fecOriginal = String(inputs.fec || '0.75').trim();
+  const fec = parseFecForCalculation(fecOriginal, 0.75); // FEC编码率（数值）
+  // RS编码码率：支持分数和小数格式，保留原始输入用于显示
+  const rsCodeOriginal = String(inputs.rsCode || '188/204').trim();
+  const rsCode = parseRsCodeForCalculation(rsCodeOriginal, 188/204); // RS码效率（数值）
   const bandwidthFactor = parseFloat(inputs.bandwidthFactor) || 1.4; // 带宽系数
-  const berExponent = (parseFloat(inputs.ber) || 7) * -1; // 误码率指数
+  const berExponent = ((inputs.ber !== '' && inputs.ber !== null && inputs.ber !== undefined)
+    ? parseFloat(inputs.ber) : 7) * -1; // 误码率指数
   
   // 噪声比模式：支持 'ebno' 或 'esno'
   const noiseRatioMode = inputs.noiseRatioMode || 'ebno';
@@ -229,27 +299,33 @@ function performCalculations(satParams, inputs) {
   const m = parseFloat(inputs.m) || 1.0; // 扩频增益
   
   // ============ 上行站参数 ============
-  const earthLon = parseFloat(inputs.longitude) || 116.4074;
-  const earthLat = parseFloat(inputs.latitude) || 39.9042;
+  const earthLon = (inputs.longitude !== '' && inputs.longitude !== null && inputs.longitude !== undefined)
+    ? parseFloat(inputs.longitude) : 116.4074;
+  const earthLat = (inputs.latitude !== '' && inputs.latitude !== null && inputs.latitude !== undefined)
+    ? parseFloat(inputs.latitude) : 39.9042;
   const antennaDiameter = parseFloat(inputs.antennaDiameter) || 7.3; // meters
   const antennaEfficiency = (parseFloat(inputs.antennaEfficiency) || 65) / 100;
   const feederLoss = inputs.feederLoss !== undefined && inputs.feederLoss !== '' && inputs.feederLoss !== null
     ? parseFloat(inputs.feederLoss) 
     : 0.2; // dB (支持输入0)
-  const uplinkAvailability = parseFloat(inputs.uplinkAvailability) || 99.90; // %
+  const uplinkAvailability = (inputs.uplinkAvailability !== '' && inputs.uplinkAvailability !== null && inputs.uplinkAvailability !== undefined)
+    ? parseFloat(inputs.uplinkAvailability) : 99.90; // %
   const rainRate = parseFloat(inputs.rainRate) || 0; // mm/h
   const altitude = (parseFloat(inputs.altitude) || 0) / 1000; // km
   const earthStationLocation = inputs.earthStationLocation || "上行站";
   
   // ============ 接收站参数 ============
-  const rxLongitude = parseFloat(inputs.rxLongitude) || 116.4074;
-  const rxLatitude = parseFloat(inputs.rxLatitude) || 39.9042;
+  const rxLongitude = (inputs.rxLongitude !== '' && inputs.rxLongitude !== null && inputs.rxLongitude !== undefined)
+    ? parseFloat(inputs.rxLongitude) : 116.4074;
+  const rxLatitude = (inputs.rxLatitude !== '' && inputs.rxLatitude !== null && inputs.rxLatitude !== undefined)
+    ? parseFloat(inputs.rxLatitude) : 39.9042;
   const rxAntennaDiameter = parseFloat(inputs.rxAntennaDiameter) || 1.2; // meters
   const rxAntennaEfficiency = (parseFloat(inputs.rxAntennaEfficiency) || 65) / 100;
   const rxFeederLoss = inputs.rxFeederLoss !== undefined && inputs.rxFeederLoss !== '' && inputs.rxFeederLoss !== null
     ? parseFloat(inputs.rxFeederLoss) 
     : 0.2; // dB (支持输入0)
-  const rxDownlinkAvailability = (parseFloat(inputs.rxDownlinkAvailability) || 99.90) / 100;
+  const rxDownlinkAvailability = ((inputs.rxDownlinkAvailability !== '' && inputs.rxDownlinkAvailability !== null && inputs.rxDownlinkAvailability !== undefined)
+    ? parseFloat(inputs.rxDownlinkAvailability) : 99.90) / 100;
   const rxRainRate = parseFloat(inputs.rxRainRate) || 0; // mm/h
   const rxAltitude = (parseFloat(inputs.rxAltitude) || 0) / 1000; // km
   
@@ -307,12 +383,14 @@ function performCalculations(satParams, inputs) {
     : 0.1; // 默认0.1 dB
   
   // ============ 频率参数 ============
-  const uplinkFrequency = parseFloat(inputs.centerFrequency) || 14.25; // GHz
-  const downlinkFrequency = parseFloat(inputs.rxCenterFrequency) || 12.5; // GHz
+  const uplinkFrequency = (inputs.centerFrequency !== '' && inputs.centerFrequency !== null && inputs.centerFrequency !== undefined)
+    ? parseFloat(inputs.centerFrequency) : 14.25; // GHz
+  const downlinkFrequency = (inputs.rxCenterFrequency !== '' && inputs.rxCenterFrequency !== null && inputs.rxCenterFrequency !== undefined)
+    ? parseFloat(inputs.rxCenterFrequency) : 12.5; // GHz
   
   // ============ 计算波长和天线增益 ============
-  const wavelength = 0.3 / uplinkFrequency; // 上行波长 (米)
-  const rxWavelength = 0.3 / downlinkFrequency; // 下行波长 (米)
+  const wavelength = 0.299792458 / uplinkFrequency; // 上行波长 (米)
+  const rxWavelength = 0.299792458 / downlinkFrequency; // 下行波长 (米)
   
   // 卫星天线每平方米增益
   const antennaGain = 10 * Math.log10(4 * CONSTANTS.PI / (wavelength ** 2));
@@ -410,7 +488,7 @@ function performCalculations(satParams, inputs) {
   
   // 上行自由空间损耗
   const uplinkFSL = 20 * (Math.log10(uplinkFrequency) + Math.log10(slantRange * 1000)) + 
-                    20 * Math.log10((4 * CONSTANTS.PI) / 0.3);
+                    20 * Math.log10((4 * CONSTANTS.PI) / 0.299792458);
   
   // ============ 接收站几何计算 ============
   const rxDeltaLonRad = (orbitPosition - rxLongitude) * CONSTANTS.PI / 180;
@@ -450,7 +528,7 @@ function performCalculations(satParams, inputs) {
   
   // 下行自由空间损耗
   const downlinkFSL = 20 * (Math.log10(downlinkFrequency) + Math.log10(rxSlantRange * 1000)) + 
-                      20 * Math.log10((4 * CONSTANTS.PI) / 0.3);
+                      20 * Math.log10((4 * CONSTANTS.PI) / 0.299792458);
   
   // 接收天线增益
   const rxAntennaGain = 20 * Math.log10((CONSTANTS.PI * rxAntennaDiameter) / rxWavelength) + 
@@ -541,6 +619,12 @@ function performCalculations(satParams, inputs) {
   const txOffAxisGain = calculateITU465OffAxisGain(antennaDiameter, wavelength, antennaEfficiency, deltaTheta);
   const txSidelobeGain = txOffAxisGain; // 发信站旁瓣发射增益
   
+  // ============ 综合损耗计算（简化模型，基于频率）============
+  // 综合损耗包含：指向损耗、极化损耗、天线罩损耗、接头损耗、闪烁衰减等
+  // 使用基于频率的简化模型，避免复杂计算导致的NaN问题
+  const uplinkMiscLoss = calculateMiscLossByFrequency(uplinkFrequency);
+  const downlinkMiscLoss = calculateMiscLossByFrequency(downlinkFrequency);
+  
   // 各项C/T值计算
   const uplinkCT = SFDs - antennaGain - BOi + G_Ts;
   const adjUplinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
@@ -548,7 +632,7 @@ function performCalculations(satParams, inputs) {
   const xpolUplinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                        CONSTANTS.BOLTZMANN + xpolUplinkFactor;
   const downlinkCT = EIRPs - BOo - downlinkFSL - downlinkCloudAttenuation - 
-                     downlinkAtmosphericAttenuation + gOverTe;
+                     downlinkAtmosphericAttenuation + gOverTe - downlinkMiscLoss;
   const adjDownlinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                         CONSTANTS.BOLTZMANN + adjDownlinkFactor;
   const xpolDownlinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
@@ -569,15 +653,15 @@ function performCalculations(satParams, inputs) {
   const downlinkTotalCTLinear = 1 / (
     Math.pow(10, -downlinkCT / 10) +
     Math.pow(10, -adjDownlinkCT / 10) +
-    Math.pow(10, -xpolDownlinkCT / 10) +
-    Math.pow(10, -intermodCT / 10)
+    Math.pow(10, -xpolDownlinkCT / 10) 
   );
   const downlinkTotalCT = 10 * Math.log10(downlinkTotalCTLinear);
   
   // 最后合并上下行得到总C/T
   const totalCTLinear = 1 / (
     Math.pow(10, -uplinkTotalCT / 10) +
-    Math.pow(10, -downlinkTotalCT / 10)
+    Math.pow(10, -downlinkTotalCT / 10) +
+    Math.pow(10, -intermodCT / 10)
   );
   const totalCT = 10 * Math.log10(totalCTLinear);
   
@@ -602,12 +686,10 @@ function performCalculations(satParams, inputs) {
   
   // ============ C/N计算 ============
   // 上行C/N (dB) - 基于实际上行C/T计算
-  const actualUplinkCT = uplinkTotalCT - totalCT + carrierTotalCT - residualRainLoss + extraUPCGain;
+  const actualUplinkCT = uplinkTotalCT - totalCT + carrierTotalCT;
   const uplinkCN = actualUplinkCT - CONSTANTS.BOLTZMANN - RXnoiseBW;
   
-  // 下行C/N (dB) - 基于实际下行C/T计算
-  const actualDownlinkCT = downlinkTotalCT - totalCT + carrierTotalCT;
-  const downlinkCN = actualDownlinkCT - CONSTANTS.BOLTZMANN - RXnoiseBW;
+
   
   // ============ 链路余量计算 ============
   const linkmargin = carrierTotalCN - thresholdCN;
@@ -635,15 +717,15 @@ function performCalculations(satParams, inputs) {
   const rainDownlinkTotalCTLinear = 1 / (
     Math.pow(10, -(downlinkCT - downlinkRainAttenuation - gOverTdegradation) / 10) +
     Math.pow(10, -adjDownlinkCT / 10) +
-    Math.pow(10, -xpolDownlinkCT / 10) +
-    Math.pow(10, -intermodCT / 10)
+    Math.pow(10, -xpolDownlinkCT / 10) 
   );
   const rainDownlinkTotalCT = 10 * Math.log10(rainDownlinkTotalCTLinear);
   
   // 最后合并上下行得到下行雨卫星总C/T
   const totalInterferenceLinear = 1 / (
     Math.pow(10, -rainUplinkTotalCT / 10) +
-    Math.pow(10, -rainDownlinkTotalCT / 10)
+    Math.pow(10, -rainDownlinkTotalCT / 10) +
+    Math.pow(10, -intermodCT / 10)
   );
   
   // 下行雨卫星总C/T
@@ -653,7 +735,9 @@ function performCalculations(satParams, inputs) {
   
   // 转发器容量 - 下行降雨
   const RXtransponderCapacity = downlinkComponent - carrierTotalCT;
-  
+    // 下行C/N (dB) - 基于实际下行C/T计算
+  const actualDownlinkCT = downlinkTotalCT - RXtransponderCapacity;
+  const downlinkCN = actualDownlinkCT - CONSTANTS.BOLTZMANN - RXnoiseBW;
   // 下行降雨 - 载波占有卫星有效全向辐射功率
   const RXeirpPerCarrier = EIRPs - BOo - RXtransponderCapacity;
   
@@ -672,22 +756,7 @@ function performCalculations(satParams, inputs) {
   const basePaBackoff = paBackoff;
   const totalPaBackoff = basePaBackoff + extraUPCGain;
   
-  // ============ 精细化损耗计算 ============
-  // 天线指向损耗（基于指向误差和波束宽度）
-  const txPointingLoss = calculatePointingLoss(pointingError, beamWidth);
-  
-  // 大气闪烁衰减（ITU-R P.618）
-  const uplinkScintillation = calculateScintillationFading(
-    uplinkFrequency, elevation, antennaDiameter, uplinkAvailability
-  );
-  const downlinkScintillation = calculateScintillationFading(
-    downlinkFrequency, rxElevation, rxAntennaDiameter, rxdownlinkAvailability
-  );
-  
-  // 综合损耗 = 指向损耗 + 极化损耗 + 天线罩损耗 + 接头损耗 + 闪烁衰减
-  // 替代原来固定的 0.6 dB
-  const uplinkMiscLoss = txPointingLoss + polarizationLoss + radomeLoss + connectorLoss + uplinkScintillation;
-  const downlinkMiscLoss = txPointingLoss + polarizationLoss + radomeLoss + connectorLoss;
+
   
   // 上行功率计算（使用精细化损耗替代0.6dB）
   const UPPOWER = (SFDs - BOi + uplinkFSL - antennaGain - transponderCapacity + 
@@ -706,8 +775,8 @@ function performCalculations(satParams, inputs) {
   
   // 下行功率计算（使用精细化损耗替代0.6dB）
   const DOWNPOWER = (SFDs - BOi + uplinkFSL - antennaGain - interferenceTerm + 
-                    carrierTotalCT + downlinkMiscLoss + downlinkCloudAttenuation) - 
-                    txAntennaGain + feederLoss + uplinkRainAttenuation + uplinkAtmosphericAttenuation;
+                    carrierTotalCT) - 
+                    txAntennaGain + feederLoss + uplinkRainAttenuation + uplinkAtmosphericAttenuation  + uplinkMiscLoss + uplinkCloudAttenuation;
   
   // 选择功率类型 - 使用高精度计算
   const selectedPower = (uplinkPowerRatio > downlinkPowerRatio) ? UPPOWER : DOWNPOWER;
@@ -720,7 +789,9 @@ function performCalculations(satParams, inputs) {
   
   // ============ EIRP和通量密度 ============
   const stationEIRP = selectedPower + txAntennaGain - feederLoss;
-  const PFDc = SFDs - BOi + 10 * Math.log10(allocBandwidth / (transponderBandwidth * 1000));
+  // 根据上下行功率占比选择实际转发器回退
+  const actualTransponderCapacity = (uplinkPowerRatio > downlinkPowerRatio) ? transponderCapacity : RXtransponderCapacity;
+  const PFDc = SFDs - BOi - actualTransponderCapacity;
   
   // 地球站功率谱密度：EIRP - 10*log10(带宽Hz)
   const stationPSD = stationEIRP - 10 * Math.log10(allocBandwidth * 1000);
@@ -1218,10 +1289,10 @@ function performCalculations(satParams, inputs) {
   
   // 极化方式显示映射
   const polarizationDisplayMap = {
-    'V': '垂直极化(V)',
-    'H': '水平极化(H)',
-    'LHCP': '左旋圆极化(LHCP)',
-    'RHCP': '右旋圆极化(RHCP)'
+    'V': 'V',
+    'H': 'H',
+    'LHCP': 'LHCP',
+    'RHCP': 'RHCP'
   };
   
   // 上行站结果
@@ -1250,15 +1321,13 @@ function performCalculations(satParams, inputs) {
   results.uplinkCloudAttenuation = uplinkCloudAttenuation.toFixed(2);
   results.uplinkAtmosphericAttenuationResult = uplinkAtmosphericAttenuation.toFixed(2);
   results.uplinkCN = uplinkCN.toFixed(2);
+  results.actualUplinkCT = actualUplinkCT.toFixed(2); // 载波上行C/T
   
   // 精细化损耗参数
   results.pointingErrorResult = pointingError.toFixed(3); // 指向误差(度)
-  results.txPointingLossResult = txPointingLoss.toFixed(3); // 天线指向损耗(dB)
   results.polarizationLossResult = polarizationLoss.toFixed(2); // 极化失配损耗(dB)
   results.radomeLossResult = radomeLoss.toFixed(2); // 天线罩损耗(dB)
   results.connectorLossResult = connectorLoss.toFixed(2); // 接头损耗(dB)
-  results.uplinkScintillationResult = uplinkScintillation.toFixed(3); // 上行闪烁衰减(dB)
-  results.downlinkScintillationResult = downlinkScintillation.toFixed(3); // 下行闪烁衰减(dB)
   results.uplinkMiscLossResult = uplinkMiscLoss.toFixed(3); // 上行综合杂散损耗(dB)
   results.downlinkMiscLossResult = downlinkMiscLoss.toFixed(3); // 下行综合杂散损耗(dB)
   
@@ -1273,6 +1342,7 @@ function performCalculations(satParams, inputs) {
   // 圆极化时极化角显示为'-'
   results.downlinkPolarizationAngleResult = (downlinkPolarizationDisplay === 'LHCP' || downlinkPolarizationDisplay === 'RHCP') ? '-' : downlinkPolarizationAngle.toFixed(2);
   results.rxAntennaEfficiencyResult = (rxAntennaEfficiency * 100).toFixed(0);
+  results.rxWavelengthResult = rxWavelength.toFixed(4); // 下行波长
   results.rxAntennaGainResult = rxAntennaGain.toFixed(2);
   results.theta3 = theta3.toFixed(2);
   results.rxSlantRangeResult = rxSlantRange.toFixed(2);
@@ -1281,6 +1351,7 @@ function performCalculations(satParams, inputs) {
   results.downlinkCloudAttenuation = downlinkCloudAttenuation.toFixed(2);
   results.downlinkAtmosphericAttenuationResult = downlinkAtmosphericAttenuation.toFixed(2);
   results.downlinkCN = downlinkCN.toFixed(2);
+  results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
   results.satellitePFD = satellitePFD.toFixed(2);
   results.ituPfdLimit4kHz = ituPfdLimit4kHz.toFixed(2); // ITU PFD限制(dBW/m²/4kHz)
   results.ituPfdLimitPerM2 = ituPfdLimitPerM2.toFixed(2); // ITU PFD限制(转换到载波带宽)
@@ -1309,16 +1380,17 @@ function performCalculations(satParams, inputs) {
   // 通信参数
   results.uplinkFrequencyResult = uplinkFrequency.toFixed(2);
   results.downlinkFrequencyResult = downlinkFrequency.toFixed(2);
-  results.uplinkPolarizationResult = uplinkPolarization;
-  results.downlinkPolarizationResult = downlinkPolarization;
+  // 极化方式显示值已在上方设置（使用 polarizationDisplayMap），此处不再重复赋值
   results.infoRateResult = infoRate;
   results.modulationResult = modulation;
   results.modulationFactorResult = modulationFactor;
   results.berResult = `1×10${superscriptExp}`;
   results.ebnoResult = ebno.toFixed(2);
   results.esnoResult = esno.toFixed(2);
-  results.rsCodeResult = rsCode.toFixed(2);
-  results.fecResult = fec.toFixed(2);
+  // RS编码率显示：保持原始输入格式（分数或小数）
+  results.rsCodeResult = rsCodeOriginal;
+  // FEC编码率显示：保持原始输入格式（分数或小数）
+  results.fecResult = fecOriginal;
   results.carrierRateResult = carrierRate.toFixed(2);
   results.ChipRateResult = ChipRate.toFixed(2);
   results.symbolRateResult = symbolRate.toFixed(2);
@@ -1374,6 +1446,7 @@ function performCalculations(satParams, inputs) {
   results.downlinkComponentResult = downlinkComponent.toFixed(3);
   results.RXtransponderCapacityResult = RXtransponderCapacity.toFixed(3);
   results.RXeirpPerCarrierResult = RXeirpPerCarrier.toFixed(3);
+  results.actualTransponderCapacityResult = actualTransponderCapacity.toFixed(3);
   
   // 转发器回退 (Transponder Backoff) = 卫星的EIRP - 载波占有的EIRP
   // 使用上行雨情况下的载波占有EIRP
@@ -1418,6 +1491,57 @@ function calculatePointingLoss(pointingError, beamWidth) {
 }
 
 /**
+ * 根据频率计算综合损耗（简化模型）
+ * 综合损耗包含：指向损耗、极化损耗、天线罩损耗、接头损耗、闪烁衰减等
+ * 使用线性插值，频率越高损耗越大
+ * @param {number} frequencyGHz - 频率 (GHz)
+ * @returns {number} 综合损耗 (dB)
+ */
+function calculateMiscLossByFrequency(frequencyGHz) {
+  const MIN_LOSS = 0.05; // 最小综合损耗 dB
+  const MAX_LOSS = 1.8;  // 最大综合损耗 dB
+  
+  // 频率-损耗对照表（线性插值节点）
+  const freqLossTable = [
+    { freq: 0,  loss: 0.05 },
+    { freq: 4,  loss: 0.4 },
+    { freq: 6,  loss: 0.5 },
+    { freq: 12, loss: 0.8 },
+    { freq: 14, loss: 0.9 },
+    { freq: 18, loss: 1.0 },
+    { freq: 20, loss: 1.1 },
+    { freq: 30, loss: 1.5 },
+    { freq: 40, loss: 1.6 },
+    { freq: 54, loss: 1.7 },
+    { freq: 100, loss: 1.8 } // 54GHz以上均为1.8dB
+  ];
+  
+  // 边界检查
+  if (frequencyGHz <= 0) {
+    return MIN_LOSS;
+  }
+  if (frequencyGHz >= 54) {
+    return MAX_LOSS;
+  }
+  
+  // 线性插值
+  for (let i = 0; i < freqLossTable.length - 1; i++) {
+    const lower = freqLossTable[i];
+    const upper = freqLossTable[i + 1];
+    
+    if (frequencyGHz >= lower.freq && frequencyGHz <= upper.freq) {
+      // 线性插值公式
+      const ratio = (frequencyGHz - lower.freq) / (upper.freq - lower.freq);
+      const loss = lower.loss + ratio * (upper.loss - lower.loss);
+      return Math.max(MIN_LOSS, Math.min(MAX_LOSS, loss));
+    }
+  }
+  
+  // 默认返回最大值
+  return MAX_LOSS;
+}
+
+/**
  * 计算大气闪烁衰减 - 根据 ITU-R P.618-14
  * 适用于仰角 > 5° 的情况
  * @param {number} frequencyGHz - 频率 (GHz)
@@ -1444,7 +1568,7 @@ function calculateScintillationFading(frequencyGHz, elevationDeg, antennaDiamete
   
   // 步骤3: 计算天线平均因子 g(x)
   // x = sqrt(k*D^2/L), k = 2*pi*f/c
-  const wavelengthM = 0.3 / frequencyGHz; // 波长 (m)
+  const wavelengthM = 0.299792458 / frequencyGHz; // 波长 (m)
   const k = 2 * CONSTANTS.PI / wavelengthM;
   const Deff = antennaDiameter * Math.sqrt(0.65); // 有效天线直径（考虑效率）
   const x = Math.sqrt(k * Deff * Deff / L);

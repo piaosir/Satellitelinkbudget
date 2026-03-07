@@ -126,8 +126,8 @@ const RESULT_LABELS = {
       { key: 'azimuthAngle', label: '对卫星方位角', unit: '度' },
       { key: 'polarizationAngle', label: '对卫星极化角', unit: '度' },
       { key: 'antennaEfficiency', label: '天线效率', unit: '%' },
-      { key: 'uplinkFrequency', label: '上行频率', unit: 'GHz' },
-      { key: 'downlinkFrequency', label: '下行频率', unit: 'GHz' },
+      { key: 'uplinkFrequency', label: '上行中心频率', unit: 'GHz' },
+      { key: 'downlinkFrequency', label: '下行中心频率', unit: 'GHz' },
       { key: 'uplinkAvailability', label: '上行可用度', unit: '%' },
       { key: 'downlinkAvailability', label: '下行可用度', unit: '%' },
       { key: 'systemAvailability', label: '系统可用度', unit: '%' }

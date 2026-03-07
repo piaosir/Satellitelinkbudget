@@ -1,134 +1,1132 @@
 /* configs.wxss */
+/* 配置管理页面样式 - 与主界面一致的通透风格 */
 
-.header {
+page {
+  background-color: #f5f5f5;
+}
+
+.container {
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+  background-color: #f5f5f5;
+}
+
+/* 悬浮操作栏 - 与主界面一致 */
+.floating-action-bar {
+  position: fixed;
+  z-index: 999;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 24rpx 32rpx;
-  background: #ffffff;
-  margin-bottom: 0;
-  border-bottom: 2px solid #d0d0d0;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-}
-
-.header-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #1a1a1a;
-  font-family: 'Courier New', 'Consolas', monospace;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.config-list {
+  gap: 12rpx;
+  background: transparent;
   padding: 0;
 }
 
+/* 悬浮按钮基础样式 */
+.float-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-width: 64rpx;
+  padding: 0 16rpx;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  border-radius: 4rpx;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+}
+
+.float-btn:active {
+  background: rgba(0, 0, 0, 0.75);
+}
+
+/* 带文字的按钮 */
+.float-btn-with-text {
+  gap: 8rpx;
+  padding: 0 20rpx;
+}
+
+.float-btn-text {
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* 悬浮按钮图标 */
+.float-icon {
+  width: 28rpx;
+  height: 28rpx;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.icon-back {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='15 18 9 12 15 6'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.icon-import {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='7 10 12 15 17 10'%3E%3C/polyline%3E%3Cline x1='12' y1='15' x2='12' y2='3'%3E%3C/line%3E%3C/svg%3E");
+}
+
+.icon-refresh {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='23 4 23 10 17 10'%3E%3C/polyline%3E%3Cpolyline points='1 20 1 14 7 14'%3E%3C/polyline%3E%3Cpath d='M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15'%3E%3C/path%3E%3C/svg%3E");
+}
+
+/* 内容区域 */
+.content-wrapper {
+  padding: 0;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 32rpx);
+}
+
+.config-list {
+  padding: 8rpx 0;
+}
+
+/* 配置卡片 - 紧凑直角风格 */
 .config-card {
   background: #ffffff;
   border-radius: 0;
-  padding: 24rpx 32rpx;
-  margin-bottom: 1px;
-  box-shadow: none;
-  border: 1px solid #d0d0d0;
-  border-top: none;
+  padding: 20rpx 24rpx;
+  margin-bottom: 2rpx;
+  border: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.config-header {
+.config-card:first-child {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* 配置卡片滑动容器 */
+.config-card-wrapper {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 2rpx;
+}
+
+.config-card-content {
+  background: #ffffff;
+  border-radius: 0;
+  padding: 20rpx 24rpx;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  position: relative;
+  z-index: 2;
+}
+
+.config-card-content.animating {
+  transition: transform 0.15s ease-out;
+}
+
+/* 滑动显示的删除按钮背景 */
+.config-delete-bg {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 160rpx;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
-  padding-bottom: 16rpx;
-  border-bottom: 1px solid #d0d0d0;
+  justify-content: flex-end;
+  z-index: 1;
+}
+
+.config-action-delete {
+  width: 160rpx;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e53935;
+  color: #ffffff;
+  font-size: 26rpx;
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* 配置行 - 紧凑布局 */
+.config-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.config-main {
+  flex: 1;
+  width: 100%;
 }
 
 .config-name {
-  font-size: 26rpx;
+  font-size: 28rpx;
   font-weight: 600;
   color: #1a1a1a;
-  flex: 1;
-  font-family: 'Courier New', 'Consolas', monospace;
-  letter-spacing: 0.5px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  word-break: break-all;
+  line-height: 1.4;
+  margin-bottom: 6rpx;
+}
+
+.config-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 22rpx;
+  color: rgba(0, 0, 0, 0.45);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.config-satellite,
+.config-band,
+.config-date {
+  white-space: nowrap;
+}
+
+.config-satellite,
+.config-band {
+  font-weight: bold;
 }
 
 .config-date {
-  font-size: 22rpx;
-  color: #6a6a6a;
-  font-family: 'Courier New', 'Consolas', monospace;
+  font-weight: bold;
+  color: #1890ff;
 }
 
-.config-info {
-  margin-bottom: 16rpx;
-}
-
-.config-info-item {
-  display: flex;
-  padding: 8rpx 0;
-  font-size: 24rpx;
-}
-
-.config-info-item .label {
-  color: #4a4a4a;
-  width: 140rpx;
-  font-family: 'Courier New', 'Consolas', monospace;
-}
-
-.config-info-item .value {
-  color: #1a1a1a;
-  font-weight: 500;
-  flex: 1;
-  font-family: 'Courier New', 'Consolas', monospace;
+.config-sep {
+  margin: 0 8rpx;
+  color: rgba(0, 0, 0, 0.25);
 }
 
 .config-actions {
   display: flex;
-  gap: 12rpx;
-  margin-top: 16rpx;
+  gap: 8rpx;
+  width: 100%;
 }
 
 .action-btn {
-  flex: 1;
-  height: 64rpx;
-  line-height: 64rpx;
+  height: 52rpx;
+  line-height: 52rpx;
+  padding: 0 16rpx;
   text-align: center;
-  border-radius: 0;
-  font-size: 24rpx;
+  border-radius: 4rpx;
+  font-size: 22rpx;
   font-weight: 500;
   border: none;
-  font-family: 'Courier New', 'Consolas', monospace;
-  letter-spacing: 0.5px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: all 0.15s ease;
 }
 
 .action-btn.load {
-  background: #2a2a2a;
+  background: rgba(0, 0, 0, 0.75);
   color: #ffffff;
-  border: 1px solid #2a2a2a;
 }
 
-.action-btn.report {
-  background: #ffffff;
-  color: #52c41a;
-  border: 1px solid #52c41a;
+.action-btn.load:active {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.action-btn.edit {
+  background: rgba(0, 0, 0, 0.08);
+  color: #333333;
 }
 
 .action-btn.share {
-  background: #ffffff;
-  color: #1890ff;
-  border: 1px solid #1890ff;
+  background: rgba(82, 140, 96, 0.12);
+  color: #4a7c59;
+}
+
+.action-btn.report {
+  background: rgba(70, 130, 180, 0.12);
+  color: #4682b4;
 }
 
 .action-btn.delete {
-  background: #ffffff;
-  color: #c41e3a;
-  border: 1px solid #c41e3a;
+  background: rgba(229, 57, 53, 0.15);
+  color: #e53935;
+}
+
+.action-btn:active {
+  opacity: 0.7;
+}
+
+/* 空状态样式 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 48rpx;
+  min-height: 60vh;
 }
 
 .empty-icon {
-  font-size: 160rpx;
-  opacity: 0.3;
+  width: 160rpx;
+  height: 160rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32rpx;
+}
+
+.empty-icon-svg {
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 24 24' fill='none' stroke='%23999999' stroke-width='1' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'%3E%3C/path%3E%3Cpolyline points='14 2 14 8 20 8'%3E%3C/polyline%3E%3Cline x1='16' y1='13' x2='8' y2='13'%3E%3C/line%3E%3Cline x1='16' y1='17' x2='8' y2='17'%3E%3C/line%3E%3Cpolyline points='10 9 9 9 8 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.4;
+}
+
+.empty-text {
+  font-size: 30rpx;
+  color: rgba(0, 0, 0, 0.45);
+  font-weight: 500;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  margin-bottom: 12rpx;
+}
+
+.empty-hint {
+  font-size: 24rpx;
+  color: rgba(0, 0, 0, 0.35);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  margin-bottom: 48rpx;
+}
+
+.btn-action {
+  min-width: 280rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.75);
+  color: #ffffff;
+  font-size: 28rpx;
+  font-weight: 500;
+  border-radius: 4rpx;
+  border: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: all 0.15s ease;
+}
+
+.btn-action:active {
+  background: rgba(0, 0, 0, 0.9);
+}
+
+/* 云端/本地配置样式 */
+.config-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex: 1;
+}
+
+.config-badge {
+  font-size: 20rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  font-weight: 500;
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.badge-cloud {
+  background: rgba(0, 0, 0, 0.08);
+  color: #333333;
+  border: none;
+}
+
+.badge-local {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666666;
+  border: none;
+}
+
+.cloud-config {
+  border-left: 3px solid rgba(0, 0, 0, 0.3);
+}
+
+.local-config {
+  border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+/* ========== 多选模式样式 ========== */
+
+/* 多选按钮激活状态 */
+.float-btn.active {
+  background: rgba(70, 130, 180, 0.9);
+}
+
+/* 导出按钮 */
+.float-btn.export-btn {
+  background: rgba(76, 175, 80, 0.85);
+}
+
+.float-btn.export-btn:active {
+  background: rgba(56, 142, 60, 0.95);
+}
+
+/* 多选图标 */
+.icon-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='3' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cpolyline points='9 11 12 14 22 4'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.icon-export {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'%3E%3C/path%3E%3Cpolyline points='17 8 12 3 7 8'%3E%3C/polyline%3E%3Cline x1='12' y1='3' x2='12' y2='15'%3E%3C/line%3E%3C/svg%3E");
+}
+
+/* 选择指示器 */
+.select-indicator {
+  position: absolute;
+  left: 16rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.select-checkbox {
+  width: 40rpx;
+  height: 40rpx;
+  border: 2px solid rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  background: #fff;
+  transition: all 0.15s ease;
+}
+
+.select-indicator.checked .select-checkbox {
+  background: #4a7c59;
+  border-color: #4a7c59;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+  background-size: 24rpx;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+/* 多选模式下卡片内容左移 */
+.config-card-content.select-mode {
+  padding-left: 72rpx;
+}
+
+/* 选中状态的卡片 */
+.config-card-wrapper.selected .config-card-content {
+  background: rgba(74, 124, 89, 0.08);
+  border-left: 3px solid #4a7c59;
+}
+
+/* ========== 导出面板样式 ========== */
+
+.export-panel-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.25s ease;
+}
+
+.export-panel-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.export-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #fff;
+  border-radius: 24rpx 24rpx 0 0;
+  z-index: 1001;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.export-panel.show {
+  transform: translateY(0);
+}
+
+.export-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 32rpx;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.export-panel-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.export-panel-close {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  color: #999;
+  font-weight: 300;
+}
+
+.export-panel-content {
+  padding: 24rpx 32rpx 40rpx;
+}
+
+.export-option-group {
+  margin-bottom: 32rpx;
+}
+
+.export-option-label {
+  font-size: 26rpx;
+  color: #666;
+  margin-bottom: 16rpx;
+  display: block;
+}
+
+.export-lang-options {
+  display: flex;
+  gap: 16rpx;
+}
+
+.export-lang-btn {
+  flex: 1;
+  height: 80rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  color: #333;
+  border: 2px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.export-lang-btn.active {
+  background: rgba(74, 124, 89, 0.1);
+  border-color: #4a7c59;
+  color: #4a7c59;
+  font-weight: 500;
+}
+
+.export-format-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.export-format-btn {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 12rpx;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: all 0.15s ease;
+}
+
+.export-format-btn:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.export-format-icon {
+  width: 56rpx;
+  height: 56rpx;
+  margin-right: 20rpx;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+.icon-excel {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='4' y='8' width='40' height='32' rx='2' fill='%23217346'/%3E%3Cpath d='M20 16L28 32M28 16L20 32' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+.icon-pdf {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='8' y='4' width='32' height='40' rx='2' fill='%23e53935'/%3E%3Ctext x='24' y='30' text-anchor='middle' fill='white' font-size='12' font-weight='bold' font-family='sans-serif'%3EPDF%3C/text%3E%3C/svg%3E");
+}
+
+.icon-word {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='4' y='8' width='40' height='32' rx='2' fill='%232b579a'/%3E%3Ctext x='24' y='30' text-anchor='middle' fill='white' font-size='14' font-weight='bold' font-family='sans-serif'%3EW%3C/text%3E%3C/svg%3E");
+}
+
+.export-format-text {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #333;
+  margin-right: 12rpx;
+}
+
+.export-format-desc {
+  font-size: 22rpx;
+  color: #999;
+}
+
+.export-selected-info {
+  text-align: center;
+  font-size: 24rpx;
+  color: #999;
+  padding-top: 16rpx;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* 分享面板样式 */
+.share-panel-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.share-panel-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.share-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  border-radius: 24rpx 24rpx 0 0;
+  z-index: 1001;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24rpx);
+}
+
+.share-panel.show {
+  transform: translateY(0);
+}
+
+.share-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32rpx 32rpx 16rpx;
+}
+
+.share-panel-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #333;
+}
+
+.share-panel-close {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  color: #999;
+}
+
+.share-panel-content {
+  padding: 24rpx 32rpx;
+}
+
+.share-config-name {
+  font-size: 28rpx;
+  color: #666;
+  text-align: center;
+  margin-bottom: 24rpx;
+  padding: 16rpx;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8rpx;
+}
+
+.share-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.share-option-btn {
+  display: flex;
+  align-items: center;
+  padding: 24rpx;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 12rpx;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: all 0.15s ease;
+}
+
+.share-option-btn:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* 重置 button 默认样式 */
+.share-btn-native {
+  margin: 0 !important;
+  padding: 24rpx !important;
+  line-height: normal;
+  font-size: inherit;
+  text-align: left;
+  width: 100% !important;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 12rpx;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  min-height: 0;
+}
+
+.share-btn-native::after {
+  border: none;
+}
+
+.share-option-icon {
+  width: 56rpx;
+  height: 56rpx;
+  margin-right: 20rpx;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  flex-shrink: 0;
+}
+
+.icon-link {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%234682b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'%3E%3C/path%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'%3E%3C/path%3E%3C/svg%3E");
+}
+
+.icon-code {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%23666666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='16 18 22 12 16 6'%3E%3C/polyline%3E%3Cpolyline points='8 6 2 12 8 18'%3E%3C/polyline%3E%3C/svg%3E");
+}
+
+.icon-wechat {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24'%3E%3Cpath fill='%2307c160' d='M8.691 2.188C3.891 2.188 0 5.476 0 9.53c0 2.212 1.17 4.203 3.002 5.55a.59.59 0 0 1 .213.665l-.39 1.48c-.019.07-.048.141-.048.213 0 .163.13.295.29.295a.326.326 0 0 0 .167-.054l1.903-1.114a.864.864 0 0 1 .717-.098 10.16 10.16 0 0 0 2.837.403c.276 0 .543-.027.811-.05-.857-2.578.157-4.972 1.932-6.446 1.703-1.415 3.882-1.98 5.853-1.838-.576-3.583-4.196-6.348-8.596-6.348zM5.785 5.991c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178A1.17 1.17 0 0 1 4.623 7.17c0-.651.52-1.18 1.162-1.18zm5.813 0c.642 0 1.162.529 1.162 1.18a1.17 1.17 0 0 1-1.162 1.178 1.17 1.17 0 0 1-1.162-1.178c0-.651.52-1.18 1.162-1.18zm5.34 2.867c-1.797-.052-3.746.512-5.28 1.786-1.72 1.428-2.687 3.72-1.78 6.22.942 2.453 3.666 4.229 6.884 4.229.826 0 1.622-.12 2.361-.336a.722.722 0 0 1 .598.082l1.584.926a.272.272 0 0 0 .14.047c.134 0 .24-.111.24-.247 0-.06-.023-.12-.038-.177l-.327-1.233a.582.582 0 0 1-.023-.156.49.49 0 0 1 .201-.398C23.024 18.48 24 16.82 24 14.98c0-3.21-2.931-5.837-6.656-6.088V8.89c-.135-.01-.269-.027-.407-.032zm-2.53 3.274c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.97-.982zm4.844 0c.535 0 .969.44.969.982a.976.976 0 0 1-.969.983.976.976 0 0 1-.969-.983c0-.542.434-.982.969-.982z'/%3E%3C/svg%3E");
+}
+
+.share-option-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+}
+
+.share-option-text {
+  font-size: 30rpx;
+  font-weight: 500;
+  color: #333;
+}
+
+.share-option-desc {
+  font-size: 22rpx;
+  color: #999;
+}
+
+/* 二维码图标 - 经典二维码样式 */
+.icon-qrcode {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='%23ffffff'%3E%3Crect x='2' y='2' width='8' height='8' rx='1' fill='none' stroke='%23ffffff' stroke-width='2'/%3E%3Crect x='4' y='4' width='4' height='4' rx='0.5'/%3E%3Crect x='14' y='2' width='8' height='8' rx='1' fill='none' stroke='%23ffffff' stroke-width='2'/%3E%3Crect x='16' y='4' width='4' height='4' rx='0.5'/%3E%3Crect x='2' y='14' width='8' height='8' rx='1' fill='none' stroke='%23ffffff' stroke-width='2'/%3E%3Crect x='4' y='16' width='4' height='4' rx='0.5'/%3E%3Crect x='14' y='14' width='3' height='3'/%3E%3Crect x='19' y='14' width='3' height='3'/%3E%3Crect x='14' y='19' width='3' height='3'/%3E%3Crect x='19' y='19' width='3' height='3'/%3E%3C/svg%3E");
+}
+
+.qrcode-btn {
+  background: linear-gradient(135deg, #1a7f37 0%, #0d5524 100%) !important;
+}
+
+/* 批量分享二维码面板 */
+.batch-qr-panel-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.batch-qr-panel-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.batch-qr-panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.8);
+  z-index: 1001;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.batch-qr-panel.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.batch-qr-card {
+  width: 580rpx;
+  background: #ffffff;
+  border-radius: 24rpx;
+  overflow: hidden;
+  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);
+  position: relative;
+}
+
+/* 关闭按钮 */
+.batch-qr-close-btn {
+  position: absolute;
+  top: 16rpx;
+  right: 16rpx;
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 44rpx;
+  color: #999999;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 50%;
+}
+
+.batch-qr-close-btn:active {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.batch-qr-body {
+  padding: 32rpx;
+  padding-top: 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 加载状态 */
+.batch-qr-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400rpx;
+  background: transparent;
+}
+
+.loading-spinner {
+  width: 64rpx;
+  height: 64rpx;
+  border: 4rpx solid rgba(74, 124, 89, 0.3);
+  border-top-color: #4a7c59;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  margin-top: 20rpx;
+  font-size: 28rpx;
+  color: #666666;
+}
+
+/* 二维码图片区域 */
+.batch-qr-image-container {
+  width: 400rpx;
+  height: 400rpx;
+  background: #ffffff;
+  border-radius: 16rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.batch-qr-image {
+  width: 380rpx;
+  height: 380rpx;
+}
+
+/* 没有图片时的备用显示 */
+.batch-qr-code-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.batch-code-text {
+  font-size: 48rpx;
+  font-weight: bold;
+  color: #4a7c59;
+  letter-spacing: 4rpx;
+}
+
+.batch-code-hint {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #999;
+}
+
+/* 配置信息 */
+.batch-qr-info {
+  margin-top: 24rpx;
+  text-align: center;
+}
+
+.batch-qr-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8rpx;
+}
+
+.count-number {
+  font-size: 56rpx;
+  font-weight: bold;
+  color: #4a7c59;
+}
+
+.count-label {
+  font-size: 28rpx;
+  color: #666666;
+}
+
+.batch-qr-names {
+  margin-top: 12rpx;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8rpx;
+  max-width: 500rpx;
+}
+
+.config-name-item {
+  font-size: 22rpx;
+  color: #666666;
+  background: rgba(74, 124, 89, 0.1);
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  max-width: 200rpx;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-name-more {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+/* 批次码行 */
+.batch-code-row {
+  margin-top: 24rpx;
+  display: flex;
+  align-items: center;
+  background: rgba(74, 124, 89, 0.08);
+  padding: 16rpx 20rpx;
+  border-radius: 12rpx;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.batch-code-label {
+  font-size: 26rpx;
+  color: #666666;
+}
+
+.batch-code-value {
+  flex: 1;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #4a7c59;
+  letter-spacing: 2rpx;
+}
+
+.batch-code-copy {
+  font-size: 24rpx;
+  color: #ffffff;
+  background: #4a7c59;
+  padding: 8rpx 20rpx;
+  border-radius: 6rpx;
+}
+
+.batch-code-copy:active {
+  background: #3d6b4a;
+}
+
+/* 提示文字 */
+.batch-qr-tips {
+  margin-top: 24rpx;
+  text-align: center;
+}
+
+.tip-text {
+  display: block;
+  font-size: 22rpx;
+  color: #999999;
+  line-height: 1.6;
+}
+
+/* 批量导入面板 */
+.batch-import-panel-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.batch-import-panel-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.batch-import-panel {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  border-radius: 24rpx 24rpx 0 0;
+  z-index: 1001;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(env(safe-area-inset-bottom) + 24rpx);
+}
+
+.batch-import-panel.show {
+  transform: translateY(0);
+}
+
+.batch-import-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 28rpx 32rpx;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.batch-import-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.batch-import-close {
+  width: 48rpx;
+  height: 48rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40rpx;
+  color: #999;
+}
+
+.batch-import-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.batch-import-info {
+  padding: 20rpx 32rpx;
+  background: rgba(74, 124, 89, 0.1);
+  flex-shrink: 0;
+}
+
+.import-count {
+  font-size: 28rpx;
+  color: #4a7c59;
+  font-weight: 500;
+}
+
+.batch-import-list {
+  flex: 1;
+  padding: 16rpx 32rpx;
+  max-height: 400rpx;
+}
+
+.import-config-item {
+  padding: 20rpx 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.import-config-item:last-child {
+  border-bottom: none;
+}
+
+.import-config-name {
+  font-size: 30rpx;
+  color: #333;
+  font-weight: 500;
+  margin-bottom: 8rpx;
+}
+
+.import-config-meta {
+  font-size: 24rpx;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.import-config-meta .sep {
+  color: #ccc;
+}
+
+.batch-import-actions {
+  display: flex;
+  gap: 20rpx;
+  padding: 24rpx 32rpx;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  flex-shrink: 0;
+}
+
+.batch-import-btn {
+  flex: 1;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 500;
+  border-radius: 12rpx;
+}
+
+.batch-import-btn.cancel {
+  background: rgba(0, 0, 0, 0.05);
+  color: #666;
+}
+
+.batch-import-btn.confirm {
+  background: linear-gradient(135deg, #4a7c59 0%, #3d6b4a 100%);
+  color: #ffffff;
 }

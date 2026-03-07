@@ -7,6 +7,40 @@ const { calculateLinkBudget } = require('../../utils/linkCalculator');
 const { getAllCities, searchCities, getCityByName } = require('../../utils/cities');
 const { estimateRainRate, getNearestCityInfo } = require('../../utils/rainRate');
 
+// 解析分数或小数字符串的辅助函数
+function parseFractionOrDecimal(input, defaultValue) {
+  if (input === '' || input === null || input === undefined) {
+    return defaultValue;
+  }
+  const str = String(input).trim();
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length === 2) {
+      const numerator = parseFloat(parts[0].trim());
+      const denominator = parseFloat(parts[1].trim());
+      if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+        return numerator / denominator;
+      }
+    }
+    return defaultValue;
+  }
+  const value = parseFloat(str);
+  return isNaN(value) ? defaultValue : value;
+}
+
+// 调制因子（用于符号率反推信息速率）
+const MODULATION_FACTORS = {
+  'BPSK': 1,
+  'QPSK': 2,
+  '8PSK': 3,
+  '8QAM': 3,
+  '16QAM': 4,
+  '16APSK': 4,
+  '32APSK': 5,
+  '64APSK': 6,
+  '128APSK': 7
+};
+
 Page({
   data: {
     // 链路编号
@@ -17,6 +51,7 @@ Page({
     navBarTop: 0,
     navBarHeight: 32,
     navBarRight: 0,
+    contentScrollTop: 0,
     
     // 卫星列表
     satellites: [
@@ -82,6 +117,8 @@ Page({
     // 历史记录
     historyRecords: [], // 最近10次计算记录
     showHistoryPanel: false, // 是否显示历史记录面板
+    historySelectMode: false, // 历史记录多选模式
+    selectedHistoryIds: [], // 已选择的历史记录ID列表
     
     // 可视化面板
     showVisualPopup: false, // 是否显示可视化功能选择面板
@@ -117,6 +154,9 @@ Page({
     calculating: false,
     hasResults: false,
     
+    // 速率计算模式: 'infoRate' 以信息速率为准, 'symbolRate' 以符号率为准
+    rateCalcMode: 'infoRate',
+    
     // 计算结果
     results: {},
     
@@ -144,7 +184,17 @@ Page({
       gOverTe: '--',
       carrierBandwidth: '--',
       symbolRate: '--'
-    }
+    },
+    
+    // 输入框全选控制
+    inputSelectAll: false,
+    
+    // 键盘高度（用于底部占位）
+    keyboardHeight: 0,
+    
+    // 当前编辑状态
+    isEditingConfig: false,
+    editingConfigName: ''
   },
 
   onLoad() {
@@ -167,6 +217,9 @@ Page({
         navBarRight: 10
       });
     }
+
+    // 检查是否有分享码需要跳转到配置页面
+    this.checkAndRedirectToConfigs();
 
     // 初始化参数
     this.initParams();
@@ -205,11 +258,97 @@ Page({
     
     // 恢复历史记录
     this.loadHistoryRecords();
+
+    // ===== 键盘管理：初始化 =====
+    this._keyboardHeight = 0;
+    this._currentScrollTop = 0;
+    this._lastTouchY = 0;
+    this._focusingInput = false;
+    this._scrollCounter = 0; // 用于确保scroll-top每次值不同以触发滚动
+    try {
+      const sysInfo = wx.getSystemInfoSync();
+      this._windowHeight = sysInfo.windowHeight;
+    } catch (e) {
+      this._windowHeight = 667;
+    }
+    // 监听键盘高度变化
+    this._kbCallback = (res) => {
+      const prevHeight = this._keyboardHeight;
+      this._keyboardHeight = res.height;
+      if (res.height > 0 && this._focusingInput) {
+        // 键盘刚弹出，执行平滑滚动
+        this._adjustScrollForKeyboard();
+      }
+      if (res.height === 0 && prevHeight > 0) {
+        // 键盘收起
+        this.setData({ keyboardHeight: 0 });
+      } else if (res.height > 0) {
+        this.setData({ keyboardHeight: res.height });
+      }
+    };
+    wx.onKeyboardHeightChange(this._kbCallback);
+  },
+
+  onUnload() {
+    // 清理键盘监听
+    if (this._kbCallback) {
+      wx.offKeyboardHeightChange(this._kbCallback);
+    }
+  },
+
+  // scroll-view滚动事件：记录滚动位置（替代onPageScroll）
+  onContentScroll(e) {
+    this._currentScrollTop = e.detail.scrollTop;
+  },
+
+  // 检查是否有分享码需要跳转到配置页面
+  checkAndRedirectToConfigs() {
+    const launchShareCode = app.globalData.launchShareCode;
+    const launchScene = app.globalData.launchScene;
+    
+    if (launchShareCode || launchScene) {
+      console.log('检测到分享码参数，准备跳转到配置页面');
+      
+      // 清除标记，避免重复跳转
+      app.globalData.launchShareCode = null;
+      app.globalData.launchScene = null;
+      
+      // 构建跳转URL
+      let url = '/pages/configs/configs';
+      if (launchShareCode) {
+        url += `?shareCode=${launchShareCode}`;
+      } else if (launchScene) {
+        url += `?scene=${encodeURIComponent(launchScene)}`;
+      }
+      
+      // 延迟跳转，确保页面已完成初始化
+      setTimeout(() => {
+        wx.navigateTo({
+          url: url,
+          fail: (err) => {
+            console.error('跳转到配置页面失败:', err);
+          }
+        });
+      }, 100);
+    }
   },
   
   onShow() {
     // 每次显示页面时，检查是否有更新的配置需要加载
     try {
+      // 检查是否正在编辑配置
+      if (app.globalData.currentEditingConfigId) {
+        this.setData({
+          isEditingConfig: true,
+          editingConfigName: app.globalData.currentEditingConfigName || '未命名配置'
+        });
+      } else {
+        this.setData({
+          isEditingConfig: false,
+          editingConfigName: ''
+        });
+      }
+      
       // 从全局数据恢复噪声比模式
       if (app.globalData.noiseRatioMode) {
         this.setData({
@@ -222,11 +361,108 @@ Page({
         this.setData({
           satelliteParams: app.globalData.satelliteParams
         });
+        
+        // 同步更新卫星选择器索引
+        const satelliteName = app.globalData.satelliteParams.satelliteName;
+        if (satelliteName) {
+          const satIndex = this.data.satellites.findIndex(sat => sat.name === satelliteName);
+          if (satIndex !== -1) {
+            this.setData({ satelliteIndex: satIndex });
+          }
+        }
+        
+        // 同步更新频段选择器索引
+        const frequencyBand = app.globalData.satelliteParams.frequencyBand;
+        if (frequencyBand) {
+          const bandIndex = FREQUENCY_BAND_OPTIONS.findIndex(opt => opt.value === frequencyBand);
+          if (bandIndex !== -1) {
+            this.setData({ frequencyBandIndex: bandIndex });
+          }
+        }
       }
       
       if (app.globalData.linkParams && app.globalData.linkParams[this.data.currentLinkNum]) {
+        const linkParams = app.globalData.linkParams[this.data.currentLinkNum];
         this.setData({
-          linkParams: app.globalData.linkParams[this.data.currentLinkNum]
+          linkParams: linkParams
+        });
+        
+        // 同步更新调制方式选择器索引
+        if (linkParams.modulation) {
+          const modIndex = MODULATION_OPTIONS.findIndex(opt => opt.value === linkParams.modulation);
+          if (modIndex !== -1) {
+            this.setData({ modulationIndex: modIndex });
+          }
+        }
+        
+        // 同步更新上行功控选择器索引
+        if (linkParams.uplinkPowerControl) {
+          const upcIdx = this.data.upcOptions.findIndex(opt => opt.value === linkParams.uplinkPowerControl);
+          if (upcIdx !== -1) {
+            this.setData({ upcIndex: upcIdx });
+          }
+        }
+        
+        // 同步更新上行极化选择器索引
+        if (linkParams.uplinkPolarization) {
+          const upPolIdx = this.data.polarizationOptions.findIndex(opt => opt.value === linkParams.uplinkPolarization);
+          if (upPolIdx !== -1) {
+            this.setData({ uplinkPolarizationIndex: upPolIdx });
+          }
+        }
+        
+        // 同步更新下行极化选择器索引
+        if (linkParams.downlinkPolarization) {
+          const downPolIdx = this.data.polarizationOptions.findIndex(opt => opt.value === linkParams.downlinkPolarization);
+          if (downPolIdx !== -1) {
+            this.setData({ downlinkPolarizationIndex: downPolIdx });
+          }
+        }
+        
+        // 同步更新余量值
+        if (linkParams.margin !== undefined && linkParams.margin !== null && linkParams.margin !== '') {
+          this.setData({
+            marginValue: String(parseFloat(linkParams.margin).toFixed(2))
+          });
+        }
+        
+        // 同步更新计算模式和功放功率
+        if (linkParams.calcMode) {
+          this.setData({ calcMode: linkParams.calcMode });
+        }
+        if (linkParams.inputPaPower !== undefined && linkParams.inputPaPower !== '') {
+          this.setData({ inputPaPower: linkParams.inputPaPower });
+        }
+        
+        // 同步恢复速率计算模式和符号率
+        if (linkParams.rateCalcMode) {
+          this.setData({ rateCalcMode: linkParams.rateCalcMode });
+        }
+        if (linkParams.symbolRate !== undefined && linkParams.symbolRate !== '' && linkParams.symbolRate !== '--') {
+          this.setData({ 'realtimeParams.symbolRate': linkParams.symbolRate });
+        }
+      }
+      
+      // 从全局数据恢复计算结果
+      if (app.globalData.calculationResults && app.globalData.calculationResults[this.data.currentLinkNum]) {
+        const results = app.globalData.calculationResults[this.data.currentLinkNum];
+        this.setData({
+          hasResults: true,
+          results: results
+        });
+      }
+      
+      // 从全局数据恢复标记的参数
+      if (app.globalData.markedParams && app.globalData.markedParams.length > 0) {
+        this.setData({
+          markedParams: app.globalData.markedParams
+        });
+      }
+      
+      // 从全局数据恢复高亮行
+      if (app.globalData.highlightedRows) {
+        this.setData({
+          highlightedRows: app.globalData.highlightedRows
         });
       }
       
@@ -268,7 +504,16 @@ Page({
 
   // 保存当前链路参数
   saveLinkParams() {
-    app.globalData.linkParams[this.data.currentLinkNum] = this.data.linkParams;
+    // 将余量、计算模式、功放功率、速率模式、符号率合并到 linkParams 中保存
+    const linkParamsToSave = {
+      ...this.data.linkParams,
+      margin: this.data.marginValue,
+      calcMode: this.data.calcMode,
+      inputPaPower: this.data.inputPaPower,
+      rateCalcMode: this.data.rateCalcMode,
+      symbolRate: this.data.realtimeParams.symbolRate
+    };
+    app.globalData.linkParams[this.data.currentLinkNum] = linkParamsToSave;
     // 同时保存噪声比模式
     app.globalData.noiseRatioMode = this.data.noiseRatioMode;
   },
@@ -370,11 +615,17 @@ Page({
       });
     } else if (field === 'satellite') {
       const satellite = this.data.satellites[index];
-      this.setData({
+      const updateData = {
         satelliteIndex: index,
         'satelliteParams.satelliteName': satellite.name,
         'satelliteParams.orbitPosition': satellite.position
-      });
+      };
+      // 中星26 特殊默认参数
+      if (satellite.name === 'CHINASAT 26') {
+        updateData['satelliteParams.transponderBandwidth'] = 880;
+        updateData['satelliteParams.sfdRef'] = -68;
+      }
+      this.setData(updateData);
     }
     
     // 更新实时参数
@@ -384,19 +635,147 @@ Page({
     app.globalData.satelliteParams = this.data.satelliteParams;
   },
 
+  // 内容区域触摸事件：记录触摸位置用于键盘弹出时的滚动计算
+  onContentTouchStart(e) {
+    if (e.touches && e.touches.length > 0) {
+      this._lastTouchY = e.touches[0].clientY;
+    }
+  },
+
+  // 输入框聚焦时全选内容 + 键盘滚动管理
+  onInputFocus(e) {
+    this.setData({ inputSelectAll: true });
+    this._focusingInput = true;
+
+    // 如果键盘已经弹出（切换输入框），直接调整滚动
+    if (this._keyboardHeight > 0) {
+      // 延迟一帧让触摸位置更新
+      setTimeout(() => {
+        this._adjustScrollForKeyboard();
+        this._focusingInput = false;
+      }, 50);
+    }
+    // 否则等待 onKeyboardHeightChange 回调触发滚动
+  },
+
+  // 余量面板输入框聚焦 - 只全选，不滚动页面
+  onMarginInputFocus(e) {
+    this.setData({ inputSelectAll: true });
+  },
+
+  // 阻止触摸移动事件，防止滚动穿透
+  preventTouchMove() {
+    return false;
+  },
+
+  // 平滑滚动：仅当输入框被键盘遮挡时才滚动
+  _adjustScrollForKeyboard() {
+    const keyboardHeight = this._keyboardHeight;
+    if (!keyboardHeight) return;
+
+    const touchY = this._lastTouchY;
+    if (touchY <= 0) return;
+
+    const windowHeight = this._windowHeight;
+    const keyboardTop = windowHeight - keyboardHeight;
+
+    // 只有输入框被键盘完全遮挡时才滚动
+    if (touchY > keyboardTop) {
+      const visibleHeight = keyboardTop;
+      const targetY = visibleHeight * 0.4;
+      const scrollDelta = touchY - targetY;
+      this._scrollTo(Math.max(0, this._currentScrollTop + scrollDelta));
+    }
+  },
+
+  // 通过scroll-view的scroll-top属性实现编程式滚动
+  // 每次设置不同的值以确保scroll-view响应（相同值不会触发滚动）
+  _scrollTo(scrollTop) {
+    this._scrollCounter++;
+    this.setData({
+      contentScrollTop: scrollTop + this._scrollCounter * 0.001
+    });
+  },
+
+  // 输入框失焦时重置全选状态
+  onInputBlur(e) {
+    this.setData({ inputSelectAll: false });
+  },
+
   // 链路参数输入变化
   onLinkParamChange(e) {
     const field = e.currentTarget.dataset.field;
     const value = e.detail.value;
     
+    // 如果修改的是信息速率，切换为信息速率优先模式
+    if (field === 'infoRate') {
+      this.setData({
+        [`linkParams.${field}`]: value,
+        rateCalcMode: 'infoRate'
+      });
+    } else {
+      this.setData({
+        [`linkParams.${field}`]: value
+      });
+    }
+    
+    // 更新实时参数
+    this.updateRealtimeParams();
+  },
+
+  // 符号率输入变化 - 实时更新显示值
+  onSymbolRateInput(e) {
+    const value = e.detail.value;
     this.setData({
-      [`linkParams.${field}`]: value
+      'realtimeParams.symbolRate': value
+    });
+  },
+
+  // 符号率输入完成 - 反推信息速率
+  onSymbolRateBlur(e) {
+    const symbolRate = parseFloat(e.detail.value);
+    
+    if (isNaN(symbolRate) || symbolRate <= 0) {
+      // 无效值，恢复计算
+      this.updateRealtimeParams();
+      return;
+    }
+    
+    // 获取当前参数
+    const modulation = this.data.linkParams.modulation || 'QPSK';
+    const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+    const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
+    const m = parseFloat(this.data.linkParams.m) || 1; // 扩频增益
+    
+    // 获取调制因子
+    const modulationFactor = MODULATION_FACTORS[modulation] || 2;
+    
+    // 反推信息速率: infoRate = symbolRate * modulationFactor * rsCode * fec / m
+    // 推导: symbolRate = ChipRate / modulationFactor
+    //       ChipRate = carrierRate * m
+    //       carrierRate = infoRate / rsCode / fec
+    // 所以: symbolRate = (infoRate / rsCode / fec) * m / modulationFactor
+    //       infoRate = symbolRate * modulationFactor / m * rsCode * fec
+    const infoRate = symbolRate * modulationFactor / m * rsCode * fec;
+    
+    // 更新信息速率（保留3位小数，去除末尾多余的零）
+    const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+    
+    // 设置为符号率优先模式，后续修改调制/FEC等时保持符号率不变
+    this.setData({
+      'linkParams.infoRate': infoRateFormatted,
+      rateCalcMode: 'symbolRate'
     });
     
     // 更新实时参数
     this.updateRealtimeParams();
+  },
+
+  // 经纬度输入框失去焦点时检查降雨率
+  onCoordinateBlur(e) {
+    const field = e.currentTarget.dataset.field;
     
-    // 如果是经纬度变化，提示是否自动估算降雨率
+    // 根据字段判断是上行还是下行
     if (field === 'longitude' || field === 'latitude') {
       this.checkRainRateEstimation('uplink');
     } else if (field === 'rxLongitude' || field === 'rxLatitude') {
@@ -404,31 +783,25 @@ Page({
     }
   },
 
-  // 检查是否需要估算降雨率
+  // 检查是否需要估算降雨率（在输入完成后调用）
   checkRainRateEstimation(type) {
-    // 清除之前的定时器
-    if (this.rainRateTimer) {
-      clearTimeout(this.rainRateTimer);
-    }
-    
-    // 延迟执行，避免频繁弹窗
-    this.rainRateTimer = setTimeout(() => {
-      if (type === 'uplink') {
-        const lon = parseFloat(this.data.linkParams.longitude);
-        const lat = parseFloat(this.data.linkParams.latitude);
-        
-        if (!isNaN(lon) && !isNaN(lat)) {
-          this.promptRainRateEstimation(lon, lat, 'uplink');
-        }
-      } else if (type === 'downlink') {
-        const lon = parseFloat(this.data.linkParams.rxLongitude);
-        const lat = parseFloat(this.data.linkParams.rxLatitude);
-        
-        if (!isNaN(lon) && !isNaN(lat)) {
-          this.promptRainRateEstimation(lon, lat, 'downlink');
-        }
+    if (type === 'uplink') {
+      const lon = parseFloat(this.data.linkParams.longitude);
+      const lat = parseFloat(this.data.linkParams.latitude);
+      
+      // 只有经纬度都有效时才提示
+      if (!isNaN(lon) && !isNaN(lat)) {
+        this.promptRainRateEstimation(lon, lat, 'uplink');
       }
-    }, 1000); // 1秒后提示
+    } else if (type === 'downlink') {
+      const lon = parseFloat(this.data.linkParams.rxLongitude);
+      const lat = parseFloat(this.data.linkParams.rxLatitude);
+      
+      // 只有经纬度都有效时才提示
+      if (!isNaN(lon) && !isNaN(lat)) {
+        this.promptRainRateEstimation(lon, lat, 'downlink');
+      }
+    }
   },
 
   // 提示降雨率估算
@@ -499,26 +872,28 @@ Page({
     this.updateRealtimeParams();
   },
 
-  // FEC编码率输入处理（支持分数和小数）
+  // FEC编码率输入处理（支持分数和小数，保持原始输入格式）
   onFecInput(e) {
     let value = e.detail.value.trim();
     
-    // 如果输入包含/，说明是分数格式，转换为小数
-    if (value.includes('/')) {
-      const parts = value.split('/');
-      if (parts.length === 2) {
-        const numerator = parseFloat(parts[0]);
-        const denominator = parseFloat(parts[1]);
-        if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
-          value = (numerator / denominator).toFixed(5);
-          // 移除末尾多余的0
-          value = parseFloat(value).toString();
-        }
-      }
-    }
-    
+    // 保持原始输入值（分数或小数），不进行转换
+    // 计算时再在后台进行转换
     this.setData({
       'linkParams.fec': value
+    });
+    
+    // 更新实时参数
+    this.updateRealtimeParams();
+  },
+
+  // RS编码码率输入处理（支持分数和小数，保持原始输入格式）
+  onRsCodeInput(e) {
+    let value = e.detail.value.trim();
+    
+    // 保持原始输入值（分数或小数），不进行转换
+    // 计算时再在后台进行转换
+    this.setData({
+      'linkParams.rsCode': value
     });
     
     // 更新实时参数
@@ -551,9 +926,9 @@ Page({
       
       const modulationFactor = MODULATION_FACTORS[modulation] || 2;
       
-      // 获取FEC编码率、RS码效率、扩频增益
-      const fec = parseFloat(this.data.linkParams.fec) || 0.75;
-      const rsCode = parseFloat(this.data.linkParams.rsCode) || 1.0;
+      // 获取FEC编码率、RS码效率、扩频增益（支持分数格式）
+      const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+      const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
       const m = parseFloat(this.data.linkParams.m) || 1.0;
       
       // 计算组合效率 k = (fec * rsCode * modulationFactor) / m
@@ -884,6 +1259,55 @@ Page({
     }
   },
 
+  // 后台执行计算（不显示加载提示，用于保存配置和生成报告）
+  performBackgroundCalculation() {
+    try {
+      // 将工具栏的余量值合并到链路参数中
+      const linkParamsWithMargin = {
+        ...this.data.linkParams,
+        margin: this.data.marginValue
+      };
+      
+      // 参数验证
+      const validation = validateAllParams(
+        this.data.satelliteParams,
+        linkParamsWithMargin
+      );
+      
+      if (!validation.valid) {
+        console.error('后台计算参数验证失败:', validation.errors);
+        return null;
+      }
+      
+      // 本地计算 - 传递噪声比模式
+      const linkParamsWithMode = {
+        ...linkParamsWithMargin,
+        noiseRatioMode: this.data.noiseRatioMode
+      };
+      
+      const response = calculateLinkBudget(
+        this.data.satelliteParams,
+        linkParamsWithMode
+      );
+      
+      // 检查计算是否成功
+      if (!response.success) {
+        console.error('后台计算失败:', response.message || response.error);
+        return null;
+      }
+      
+      const results = response.data;
+      
+      // 更新页面显示结果
+      this.displayResults(results);
+      
+      return results;
+    } catch (error) {
+      console.error('后台计算异常:', error);
+      return null;
+    }
+  },
+
   // 显示计算结果
   displayResults(results) {
     // 直接使用完整的结果对象
@@ -936,13 +1360,13 @@ Page({
   // 显示配置管理菜单
   showConfigMenu() {
     wx.showActionSheet({
-      itemList: ['保存配置', '加载配置', '地球站参数互换', '生成报告'],
+      itemList: ['保存配置', '管理配置', '地球站参数互换', '生成报告'],
       success: (res) => {
         if (res.tapIndex === 0) {
           // 保存配置
           this.saveConfig();
         } else if (res.tapIndex === 1) {
-          // 加载配置
+          // 管理配置
           this.loadConfig();
         } else if (res.tapIndex === 2) {
           // 地球站参数互换
@@ -959,9 +1383,224 @@ Page({
   saveConfig() {
     this.saveLinkParams();
     
-    wx.navigateTo({
-      url: '/pages/configs/configs?action=save'
+    // 保存卫星参数到全局
+    app.globalData.satelliteParams = this.data.satelliteParams;
+    
+    // 在后台执行一次计算，确保保存最新的计算结果
+    const results = this.performBackgroundCalculation();
+    if (results) {
+      app.globalData.calculationResults = app.globalData.calculationResults || {};
+      app.globalData.calculationResults[this.data.currentLinkNum] = results;
+    }
+    
+    // 保存标记的参数
+    app.globalData.markedParams = this.data.markedParams || [];
+    
+    // 保存高亮行
+    app.globalData.highlightedRows = this.data.highlightedRows || [];
+    
+    // 检查是否正在编辑现有配置
+    const editingConfigId = app.globalData.currentEditingConfigId;
+    // 使用页面上的配置名（用户可能已修改）
+    const editingConfigName = this.data.editingConfigName || app.globalData.currentEditingConfigName;
+    // 同步到全局
+    if (editingConfigName) {
+      app.globalData.currentEditingConfigName = editingConfigName;
+    }
+    
+    if (editingConfigId) {
+      // 如果正在编辑现有配置，询问用户是更新还是另存为
+      wx.showActionSheet({
+        itemList: [`更新"${editingConfigName}"`, '另存为新配置', '放弃更改'],
+        success: (res) => {
+          if (res.tapIndex === 0) {
+            // 更新原配置
+            this.updateExistingConfig();
+          } else if (res.tapIndex === 1) {
+            // 另存为新配置 - 只清除配置ID，保留配置名供用户使用
+            app.globalData.currentEditingConfigId = null;
+            app.globalData.currentEditingConfigIsLocal = false;
+            // 不清除 currentEditingConfigName，让用户可以使用修改后的配置名
+            this.setData({
+              isEditingConfig: false
+            });
+            wx.navigateTo({
+              url: '/pages/configs/configs?action=save'
+            });
+          }
+          // tapIndex === 2 时不做任何操作
+        }
+      });
+    } else {
+      wx.navigateTo({
+        url: '/pages/configs/configs?action=save'
+      });
+    }
+  },
+
+  // 更新现有配置
+  async updateExistingConfig() {
+    const configId = app.globalData.currentEditingConfigId;
+    const isLocal = app.globalData.currentEditingConfigIsLocal;
+    // 使用页面上的配置名（用户可能已修改）
+    const configName = this.data.editingConfigName || app.globalData.currentEditingConfigName;
+    
+    console.log('updateExistingConfig - 页面配置名:', this.data.editingConfigName, 
+                '全局配置名:', app.globalData.currentEditingConfigName,
+                '最终使用:', configName,
+                'isLocal:', isLocal);
+    
+    // 同步到全局
+    app.globalData.currentEditingConfigName = configName;
+    
+    wx.showLoading({
+      title: '保存中...',
+      mask: true
     });
+    
+    try {
+      if (isLocal) {
+        // 更新本地配置
+        const configs = wx.getStorageSync('savedConfigs') || [];
+        const index = configs.findIndex(item => item._id === configId);
+        
+        if (index !== -1) {
+          configs[index] = {
+            ...configs[index],
+            configName: configName,
+            satelliteParams: app.globalData.satelliteParams,
+            linkParams: app.globalData.linkParams,
+            calculationResults: app.globalData.calculationResults || {},
+            noiseRatioMode: app.globalData.noiseRatioMode || 'ebno',
+            markedParams: app.globalData.markedParams || [],
+            highlightedRows: app.globalData.highlightedRows || [],
+            updateTime: new Date()
+          };
+          
+          wx.setStorageSync('savedConfigs', configs);
+          
+          wx.showToast({
+            title: '配置已更新',
+            icon: 'success'
+          });
+          
+          // 清除编辑状态
+          this.clearEditingState();
+          
+          // 跳转到配置管理页面
+          wx.navigateTo({
+            url: '/pages/configs/configs'
+          });
+        } else {
+          throw new Error('配置不存在');
+        }
+      } else {
+        // 更新云端配置
+        console.log('更新云端配置，配置名:', configName);
+        const res = await wx.cloud.callFunction({
+          name: 'configManager',
+          data: {
+            action: 'update',
+            data: {
+              configId: configId,
+              configName: configName,
+              satelliteParams: app.globalData.satelliteParams,
+              linkParams: app.globalData.linkParams,
+              calculationResults: app.globalData.calculationResults || {},
+              noiseRatioMode: app.globalData.noiseRatioMode || 'ebno',
+              markedParams: app.globalData.markedParams || [],
+              highlightedRows: app.globalData.highlightedRows || []
+            }
+          }
+        });
+        
+        console.log('云函数返回结果:', res.result);
+        
+        if (res.result && res.result.success) {
+          console.log('配置更新成功，返回的配置名:', res.result.configName);
+          wx.showToast({
+            title: '配置已更新',
+            icon: 'success'
+          });
+          
+          // 清除编辑状态
+          this.clearEditingState();
+          
+          // 跳转到配置管理页面
+          wx.navigateTo({
+            url: '/pages/configs/configs'
+          });
+        } else {
+          throw new Error(res.result?.error || '更新失败');
+        }
+      }
+    } catch (error) {
+      console.error('更新配置失败:', error);
+      wx.showModal({
+        title: '更新失败',
+        content: error.message || '无法更新配置',
+        showCancel: false
+      });
+    } finally {
+      wx.hideLoading();
+    }
+  },
+
+  // 清除编辑状态
+  clearEditingState() {
+    app.globalData.currentEditingConfigId = null;
+    app.globalData.currentEditingConfigIsLocal = false;
+    app.globalData.currentEditingConfigName = null;
+    this.setData({
+      isEditingConfig: false,
+      editingConfigName: ''
+    });
+  },
+
+  // 取消编辑配置
+  cancelEditingConfig() {
+    wx.showModal({
+      title: '取消编辑',
+      content: '确定要取消编辑吗？所做的更改将不会保存。',
+      confirmText: '取消编辑',
+      confirmColor: '#ff4d4f',
+      success: (res) => {
+        if (res.confirm) {
+          this.clearEditingState();
+          wx.showToast({
+            title: '已退出编辑',
+            icon: 'none'
+          });
+        }
+      }
+    });
+  },
+
+  // 处理配置名称输入变化
+  onEditingConfigNameChange(e) {
+    const newName = e.detail.value;
+    this.setData({
+      editingConfigName: newName
+    });
+    // 实时同步到全局，确保保存时能获取到最新值
+    app.globalData.currentEditingConfigName = newName;
+  },
+
+  // 配置名称输入框失焦时同步到全局
+  onEditingConfigNameBlur(e) {
+    const newName = e.detail.value.trim();
+    if (newName) {
+      app.globalData.currentEditingConfigName = newName;
+      this.setData({
+        editingConfigName: newName
+      });
+    } else {
+      // 如果为空，恢复原名称
+      const originalName = app.globalData.currentEditingConfigName || '未命名配置';
+      this.setData({
+        editingConfigName: originalName
+      });
+    }
   },
 
   // 加载配置
@@ -1000,21 +1639,23 @@ Page({
 
   // 生成报告
   generateReport() {
-    // 检查是否已经计算过
-    if (!this.data.hasResults) {
+    // 保存当前数据到全局
+    this.saveLinkParams();
+    app.globalData.satelliteParams = this.data.satelliteParams;
+    
+    // 在后台执行一次计算，确保生成报告时使用最新的计算结果
+    const results = this.performBackgroundCalculation();
+    if (!results) {
       wx.showModal({
         title: '提示',
-        content: '请先进行链路计算',
+        content: '计算失败，无法生成报告',
         showCancel: false
       });
       return;
     }
-
-    // 保存当前数据到全局
-    this.saveLinkParams();
-    app.globalData.satelliteParams = this.data.satelliteParams;
+    
     app.globalData.calculationResults = app.globalData.calculationResults || {};
-    app.globalData.calculationResults[this.data.currentLinkNum] = this.data.results;
+    app.globalData.calculationResults[this.data.currentLinkNum] = results;
     app.globalData.markedParams = this.data.markedParams;
 
     // 跳转到报告页面
@@ -1300,6 +1941,34 @@ Page({
   // 实时计算参数
   updateRealtimeParams() {
     try {
+      // 如果是符号率优先模式，先根据当前符号率反推信息速率和载波带宽
+      if (this.data.rateCalcMode === 'symbolRate') {
+        const currentSymbolRate = parseFloat(this.data.realtimeParams.symbolRate);
+        
+        // 只有当符号率是有效数值时才反推
+        if (!isNaN(currentSymbolRate) && currentSymbolRate > 0) {
+          const modulation = this.data.linkParams.modulation || 'QPSK';
+          const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+          const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
+          const m = parseFloat(this.data.linkParams.m) || 1;
+          const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.2;
+          const modulationFactor = MODULATION_FACTORS[modulation] || 2;
+          
+          // 反推信息速率: infoRate = symbolRate * modulationFactor / m * rsCode * fec
+          const infoRate = currentSymbolRate * modulationFactor / m * rsCode * fec;
+          const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+          
+          // 直接基于符号率计算载波带宽
+          const carrierBandwidth = Math.round(bandwidthFactor * currentSymbolRate * 1000) / 1000;
+          
+          // 更新信息速率和载波带宽
+          this.setData({
+            'linkParams.infoRate': infoRateFormatted,
+            'realtimeParams.carrierBandwidth': carrierBandwidth
+          });
+        }
+      }
+      
       // 准备参数，包含当前的余量值
       const linkParamsWithMargin = {
         ...this.data.linkParams,
@@ -1311,13 +1980,24 @@ Page({
       const results = calculateLinkBudget(this.data.satelliteParams, linkParamsWithMargin);
       
       if (results.success) {
-        this.setData({
-          'realtimeParams.stationEIRP': results.data.stationEIRPResult,
-          'realtimeParams.paRecommendation': results.data.paRecommendation,
-          'realtimeParams.gOverTe': results.data.gOverTeResult,
-          'realtimeParams.carrierBandwidth': results.data.allocBandwidthResult,
-          'realtimeParams.symbolRate': results.data.symbolRateResult
-        });
+        // 根据模式决定是否更新符号率和载波带宽
+        if (this.data.rateCalcMode === 'symbolRate') {
+          // 符号率优先模式：保持符号率和载波带宽不变，只更新其他参数
+          this.setData({
+            'realtimeParams.stationEIRP': results.data.stationEIRPResult,
+            'realtimeParams.paRecommendation': results.data.paRecommendation,
+            'realtimeParams.gOverTe': results.data.gOverTeResult
+          });
+        } else {
+          // 信息速率优先模式：正常更新所有参数包括符号率
+          this.setData({
+            'realtimeParams.stationEIRP': results.data.stationEIRPResult,
+            'realtimeParams.paRecommendation': results.data.paRecommendation,
+            'realtimeParams.gOverTe': results.data.gOverTeResult,
+            'realtimeParams.carrierBandwidth': results.data.allocBandwidthResult,
+            'realtimeParams.symbolRate': results.data.symbolRateResult
+          });
+        }
       }
     } catch (e) {
       // 实时计算出错不阻断用户操作，仅在控制台记录
@@ -1492,8 +2172,10 @@ Page({
           return { paPower: 0, paPowerdB: -Infinity, error: true };
         }
         
-        const paPower = parseFloat(results.data.paRecommendation) || 0;
-        const paPowerdB = parseFloat(results.data.paRecommendationdBResult) || -Infinity;
+        const paPowerParsed = parseFloat(results.data.paRecommendation);
+        const paPowerdBParsed = parseFloat(results.data.paRecommendationdBResult);
+        const paPower = isNaN(paPowerParsed) ? 0 : paPowerParsed;
+        const paPowerdB = isNaN(paPowerdBParsed) ? -Infinity : paPowerdBParsed;
         return { paPower, paPowerdB, error: false };
       } catch (error) {
         return { paPower: 0, paPowerdB: -Infinity, error: true };
@@ -1503,10 +2185,6 @@ Page({
     // 步骤1: 用当前余量做基准计算，获取常量K（保持完整精度）
     const currentMargin = parseFloat(this.data.marginValue) || 3;
     const baseResult = doCalculation(currentMargin);
-    
-    if (baseResult.error || baseResult.paPower <= 0) {
-      return { success: false, message: '基准计算失败' };
-    }
     
     // 利用公式: P_dBW = margin + K，推导 K = P_dBW - margin（完整精度）
     const K = baseResult.paPowerdB - currentMargin;
@@ -1630,8 +2308,11 @@ Page({
         }
         
         // 获取功放建议功率（瓦特）和dBW值
-        const paPower = parseFloat(results.data.paRecommendation) || 0;
-        const paPowerdB = parseFloat(results.data.paRecommendationdBResult) || -Infinity;
+        // 修复：使用 isNaN 检查代替 || 运算符，避免 0 dBW (1W) 被误判为 falsy
+        const paPowerParsed = parseFloat(results.data.paRecommendation);
+        const paPowerdBParsed = parseFloat(results.data.paRecommendationdBResult);
+        const paPower = isNaN(paPowerParsed) ? 0 : paPowerParsed;
+        const paPowerdB = isNaN(paPowerdBParsed) ? -Infinity : paPowerdBParsed;
         
         return { paPower, paPowerdB, error: false };
       } catch (error) {
@@ -1644,10 +2325,6 @@ Page({
     // 原理: 功放功率(dBW) = margin + K，其中K是由其他参数决定的常量
     const currentMargin = parseFloat(this.data.marginValue) || 3;
     const baseResult = doCalculation(currentMargin);
-    
-    if (baseResult.error || baseResult.paPower <= 0) {
-      return { success: false, message: '基准计算失败' };
-    }
     
     // 计算常量K: K = P_dBW - margin（完整精度）
     const K = baseResult.paPowerdB - currentMargin;
@@ -1724,6 +2401,7 @@ Page({
         // 保存完整参数用于加载
         satelliteParams: JSON.parse(JSON.stringify(this.data.satelliteParams)),
         linkParams: JSON.parse(JSON.stringify(this.data.linkParams)),
+        calculationResults: JSON.parse(JSON.stringify(results)),
         marginValue: this.data.marginValue,
         noiseRatioMode: this.data.noiseRatioMode
       };
@@ -1763,8 +2441,127 @@ Page({
       this.resetHistoryItemsPosition();
     }
     this.setData({
-      showHistoryPanel: !this.data.showHistoryPanel
+      showHistoryPanel: !this.data.showHistoryPanel,
+      historySelectMode: false,
+      selectedHistoryIds: []
     });
+  },
+
+  // 切换历史记录多选模式
+  toggleHistorySelectMode() {
+    wx.vibrateShort({ type: 'light' });
+    const newMode = !this.data.historySelectMode;
+    this.setData({
+      historySelectMode: newMode,
+      selectedHistoryIds: []
+    });
+    // 进入多选时重置滑动位置
+    if (newMode) {
+      this.resetHistoryItemsPosition();
+    }
+  },
+
+  // 切换历史记录选择状态
+  toggleHistorySelection(e) {
+    const recordId = e.currentTarget.dataset.id;
+    let selected = [...this.data.selectedHistoryIds];
+    const idx = selected.indexOf(recordId);
+    if (idx >= 0) {
+      selected.splice(idx, 1);
+    } else {
+      selected.push(recordId);
+    }
+    this.setData({ selectedHistoryIds: selected });
+  },
+
+  // 导出选中的历史记录为Excel（含对比高亮）
+  async exportHistoryExcel() {
+    const { selectedHistoryIds, historyRecords } = this.data;
+    if (selectedHistoryIds.length === 0) {
+      wx.showToast({ title: '请先选择记录', icon: 'none' });
+      return;
+    }
+
+    // 按选择顺序获取记录
+    const selectedRecords = selectedHistoryIds.map(id => historyRecords.find(r => r.id === id)).filter(Boolean);
+
+    // 检查是否有计算结果
+    const recordsWithResults = selectedRecords.filter(r => r.calculationResults);
+    if (recordsWithResults.length === 0) {
+      wx.showModal({
+        title: '无法导出',
+        content: '选中的历史记录没有计算结果数据（旧版记录不支持导出，请重新计算后再试）',
+        showCancel: false
+      });
+      return;
+    }
+
+    wx.showLoading({ title: '生成Excel中...', mask: true });
+
+    try {
+      // 将历史记录转为配置格式以复用云函数
+      const configs = recordsWithResults.map(record => ({
+        configName: `${record.satelliteName}_${record.time}`,
+        satelliteParams: record.satelliteParams,
+        linkParams: { 1: record.linkParams },
+        calculationResults: { 1: record.calculationResults },
+        noiseRatioMode: record.noiseRatioMode || 'ebno'
+      }));
+
+      const lastExcelFileID = wx.getStorageSync('lastHistoryExcelFileID') || null;
+
+      const res = await wx.cloud.callFunction({
+        name: 'generateReport',
+        data: {
+          configs: configs,
+          format: 'excel',
+          lang: 'zh',
+          compareMode: true,
+          oldFileID: lastExcelFileID
+        }
+      });
+
+      if (!res.result || !res.result.success) {
+        throw new Error(res.result?.error || '云函数返回错误');
+      }
+
+      wx.setStorageSync('lastHistoryExcelFileID', res.result.fileID);
+
+      const downloadRes = await wx.cloud.downloadFile({
+        fileID: res.result.fileID
+      });
+
+      if (!downloadRes.tempFilePath) {
+        throw new Error('文件下载失败');
+      }
+
+      wx.hideLoading();
+
+      wx.openDocument({
+        filePath: downloadRes.tempFilePath,
+        showMenu: true,
+        fileType: 'xlsx',
+        success: () => {
+          wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 });
+        },
+        fail: (err) => {
+          console.error('打开文档失败:', err);
+          wx.showModal({
+            title: '导出成功',
+            content: `Excel文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
+            showCancel: false
+          });
+        }
+      });
+    } catch (error) {
+      console.error('导出历史Excel失败:', error);
+      wx.hideLoading();
+      wx.showModal({
+        title: '导出失败',
+        content: error.message || '无法导出Excel，请稍后重试',
+        showCancel: false
+      });
+    }
   },
 
   // 重置所有历史记录项的滑动位置

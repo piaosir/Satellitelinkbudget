@@ -1,4 +1,5 @@
 <!--satellite-coverage.wxml-->
+<wxs src="./utils.wxs" module="utils" />
 <view class="container">
   <!-- 地图组件 -->
   <map 
@@ -7,15 +8,22 @@
     latitude="{{latitude}}"
     longitude="{{longitude}}"
     scale="{{scale}}"
-    min-scale="{{1}}"
+    min-scale="{{3}}"
     max-scale="{{20}}"
     circles="{{circles}}"
     markers="{{markers}}"
     polyline="{{polylines}}"
-    show-location="{{hasUserLocation}}"
+    show-location="{{false}}"
     enable-zoom="{{true}}"
     enable-scroll="{{true}}"
-    enable-rotate="{{false}}">
+    enable-rotate="{{true}}"
+    enable-poi="{{false}}"
+    enable-satellite="{{enableSatellite}}"
+    setting="{{mapSetting}}"
+    bindmarkertap="onMarkerTap"
+    bindtouchstart="onMapTouchStart"
+    bindtouchend="onMapTouchEnd"
+    bindtouchmove="onMapTouchMove">
   </map>
   
   <!-- 悬浮操作栏 - 与主界面风格一致 -->
@@ -29,11 +37,42 @@
     <view class="float-btn float-btn-satellite" bindtap="showSatelliteSelector">
       <text class="float-satellite-name">{{currentSatellite.name}}</text>
     </view>
+    
+    <!-- 卫星地图切换按钮 -->
+    <view class="float-btn {{enableSatellite ? 'active' : ''}}" bindtap="toggleSatelliteMap">
+      <view class="float-icon icon-satellite-map"></view>
+    </view>
+    
+    <!-- 搜索位置按钮 -->
+    <view class="float-btn" bindtap="showSearchPanel">
+      <view class="float-icon icon-search"></view>
+    </view>
   </view>
   
-  <!-- 底部等仰角线按钮 -->
-  <view class="bottom-elevation-btn {{showElevationContours ? 'active' : ''}}" bindtap="showElevationPanel">
-    <text class="bottom-elevation-text">EL</text>
+  <!-- 底部功能按钮区 -->
+  <view class="bottom-btn-container">
+    <!-- 功能按钮组 -->
+    <view class="bottom-btn-group {{bottomBtnsCollapsed ? 'collapsed' : ''}}">
+      <!-- 等仰角线按钮 -->
+      <view class="bottom-btn {{showElevationContours ? 'active' : ''}}" bindtap="showElevationPanel">
+        <text class="bottom-btn-text">仰角线</text>
+      </view>
+      
+      <!-- 覆盖图按钮 -->
+      <view class="bottom-btn {{showCoverageContours ? 'active' : ''}} {{!hasCoverageData ? 'disabled' : ''}} {{isSwitchingSatellite ? 'disabled' : ''}}" bindtap="showCoveragePanel">
+        <text class="bottom-btn-text">覆盖</text>
+      </view>
+      
+      <!-- 自定义覆盖值按钮 (仅在有覆盖数据时显示) -->
+      <view class="bottom-btn {{showCoverageContours ? '' : 'disabled'}} {{isLoadingCoverageData || isSwitchingSatellite ? 'loading' : ''}}" bindtap="showCustomValuePanel" wx:if="{{showCoverageContours}}">
+        <text class="bottom-btn-text">{{isLoadingCoverageData ? '加载中' : '自定义'}}</text>
+      </view>
+    </view>
+    
+    <!-- 收起/展开小三角按钮 -->
+    <view class="bottom-btn-toggle {{bottomBtnsCollapsed ? 'collapsed' : ''}}" bindtap="toggleBottomBtns">
+      <view class="toggle-arrow"></view>
+    </view>
   </view>
   
   <!-- 等仰角线设置弹窗 -->
@@ -63,6 +102,306 @@
   
   <!-- 等仰角线弹窗遮罩 -->
   <view class="elevation-popup-mask {{showElevationPopup ? 'show' : ''}}" wx:if="{{showElevationPopup}}" bindtap="hideElevationPanel"></view>
+  
+  <!-- 覆盖图设置弹窗 -->
+  <view class="coverage-popup {{showCoveragePopup ? 'show' : ''}}" wx:if="{{showCoveragePopup}}">
+    <view class="coverage-popup-header">
+      <text class="coverage-popup-title">覆盖图设置</text>
+      <text class="coverage-popup-close" bindtap="hideCoveragePanel">✕</text>
+    </view>
+    <view class="coverage-popup-body">
+      <!-- 频段选择 -->
+      <view class="coverage-section">
+        <text class="coverage-section-title">频段</text>
+        <view class="coverage-tag-group">
+          <view class="coverage-tag {{selectedBand === item ? 'active' : ''}}" 
+                wx:for="{{availableBands}}" 
+                wx:key="*this"
+                data-band="{{item}}"
+                bindtap="onBandChange">
+            {{item}}
+          </view>
+        </view>
+      </view>
+      
+      <!-- 波束选择（多选） -->
+      <view class="coverage-section">
+        <view class="coverage-section-header">
+          <text class="coverage-section-title">波束（可多选）</text>
+          <text class="coverage-section-toggle" bindtap="toggleAllBeams">
+            {{selectedBeams.length === availableBeams.length ? '取消全选' : '全选'}}
+          </text>
+        </view>
+        <scroll-view scroll-y class="coverage-beam-scroll">
+          <view class="coverage-tag-group">
+            <view class="coverage-tag {{utils.includes(selectedBeams, item) ? 'active' : ''}}" 
+                  wx:for="{{availableBeams}}" 
+                  wx:key="*this"
+                  data-beam="{{item}}"
+                  bindtap="onBeamChange">
+              {{item || '默认'}}
+            </view>
+          </view>
+        </scroll-view>
+        <view class="coverage-section-hint" wx:if="{{selectedBeams.length > 0}}">
+          已选择 {{selectedBeams.length}} 个波束
+        </view>
+      </view>
+      
+      <!-- 类型选择 -->
+      <view class="coverage-section">
+        <text class="coverage-section-title">类型</text>
+        <view class="coverage-tag-group">
+          <view class="coverage-tag {{selectedType === 'EIRP' ? 'active' : ''}} {{!hasEIRP ? 'disabled' : ''}}" 
+                data-type="EIRP"
+                bindtap="onTypeChange">
+            EIRP
+          </view>
+          <view class="coverage-tag {{selectedType === 'GT' ? 'active' : ''}} {{!hasGT ? 'disabled' : ''}}" 
+                data-type="GT"
+                bindtap="onTypeChange">
+            G/T
+          </view>
+        </view>
+      </view>
+      
+      <!-- 操作按钮 -->
+      <view class="coverage-actions">
+        <view class="coverage-btn coverage-btn-cancel" bindtap="hideCoveragePanel">取消</view>
+        <view class="coverage-btn coverage-btn-clear" bindtap="resetMap">清除内容</view>
+        <view class="coverage-btn coverage-btn-confirm" bindtap="loadAndDrawCoverage">绘制</view>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 覆盖图弹窗遮罩 -->
+  <view class="coverage-popup-mask {{showCoveragePopup ? 'show' : ''}}" wx:if="{{showCoveragePopup}}" bindtap="hideCoveragePanel"></view>
+  
+  <!-- 自定义覆盖值弹窗 -->
+  <view class="custom-value-popup {{showCustomValuePopup ? 'show' : ''}}" wx:if="{{showCustomValuePopup}}">
+    <view class="custom-value-popup-header">
+      <text class="custom-value-popup-title">选择覆盖值</text>
+      <text class="custom-value-popup-close" bindtap="hideCustomValuePanel">✕</text>
+    </view>
+    <view class="custom-value-popup-body">
+      <!-- 可用值列表 -->
+      <view class="value-list-section">
+        <view class="value-list-header">
+          <text class="value-list-title">可用值 ({{selectedType === 'GT' ? 'dB/K' : 'dBW'}})</text>
+          <text class="value-list-toggle" bindtap="toggleAllGainValues">
+            {{selectedGainValues.length === availableGainValues.length ? '取消全选' : '全选'}}
+          </text>
+        </view>
+        <scroll-view scroll-y class="value-list-scroll">
+          <view class="value-tag-group">
+            <view class="value-tag {{item.selected ? 'selected' : ''}}" 
+                  wx:for="{{gainValueItems}}" 
+                  wx:key="value"
+                  data-value="{{item.value}}"
+                  bindtap="toggleGainValue">
+              {{item.value}}
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+      
+      <!-- 自定义输入 -->
+      <view class="custom-input-section">
+        <text class="custom-input-label">或输入特定值（逗号分隔）</text>
+        <input 
+          type="text" 
+          class="custom-input" 
+          placeholder="例如: 40, 42, 45"
+          value="{{customValueInput}}"
+          bindinput="onCustomValueInput"
+        />
+      </view>
+      
+      <!-- 显示波束名开关 -->
+      <view class="beam-label-section">
+        <text class="beam-label-text">显示波束名</text>
+        <view class="beam-label-switch {{showBeamLabels ? 'active' : ''}}" bindtap="toggleBeamLabels">
+          <view class="beam-label-switch-track">
+            <view class="beam-label-switch-thumb"></view>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 操作按钮 -->
+      <view class="custom-value-actions">
+        <view class="custom-value-btn custom-value-btn-cancel" bindtap="hideCustomValuePanel">取消</view>
+        <view class="custom-value-btn custom-value-btn-confirm" bindtap="applyCoverageSelection">应用</view>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 自定义覆盖值弹窗遮罩 -->
+  <view class="custom-value-popup-mask {{showCustomValuePopup ? 'show' : ''}}" wx:if="{{showCustomValuePopup}}" bindtap="hideCustomValuePanel"></view>
+  
+  <!-- 自定义覆盖值弹窗 -->
+  <view class="custom-value-popup {{showCustomValuePopup ? 'show' : ''}}" wx:if="{{showCustomValuePopup}}">
+    <view class="custom-value-popup-header">
+      <text class="custom-value-popup-title">选择覆盖值</text>
+      <text class="custom-value-popup-close" bindtap="hideCustomValuePanel">✕</text>
+    </view>
+    <view class="custom-value-popup-body">
+      <!-- 可用值列表 -->
+      <view class="value-list-section">
+        <view class="value-list-header">
+          <text class="value-list-title">可用值 ({{selectedType === 'GT' ? 'dB/K' : 'dBW'}})</text>
+          <text class="value-list-toggle" bindtap="toggleAllGainValues">
+            {{selectedGainValues.length === availableGainValues.length ? '取消全选' : '全选'}}
+          </text>
+        </view>
+        <scroll-view scroll-y class="value-list-scroll">
+          <view class="value-tag-group">
+            <view class="value-tag {{item.selected ? 'selected' : ''}}" 
+                  wx:for="{{gainValueItems}}" 
+                  wx:key="value"
+                  data-value="{{item.value}}"
+                  bindtap="toggleGainValue">
+              {{item.value}}
+            </view>
+          </view>
+        </scroll-view>
+      </view>
+      
+      <!-- 自定义输入 -->
+      <view class="custom-input-section">
+        <text class="custom-input-label">或输入特定值（逗号分隔）</text>
+        <input 
+          type="text" 
+          class="custom-input" 
+          placeholder="例如: 40, 42, 45"
+          value="{{customValueInput}}"
+          bindinput="onCustomValueInput"
+        />
+      </view>
+      
+      <!-- 显示波束名开关 -->
+      <view class="beam-label-section">
+        <text class="beam-label-text">显示波束名</text>
+        <view class="beam-label-switch {{showBeamLabels ? 'active' : ''}}" bindtap="toggleBeamLabels">
+          <view class="beam-label-switch-track">
+            <view class="beam-label-switch-thumb"></view>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 操作按钮 -->
+      <view class="custom-value-actions">
+        <view class="custom-value-btn custom-value-btn-cancel" bindtap="hideCustomValuePanel">取消</view>
+        <view class="custom-value-btn custom-value-btn-confirm" bindtap="applyCoverageSelection">应用</view>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 自定义覆盖值弹窗遮罩 -->
+  <view class="custom-value-popup-mask {{showCustomValuePopup ? 'show' : ''}}" wx:if="{{showCustomValuePopup}}" bindtap="hideCustomValuePanel"></view>
+  
+  <!-- 位置搜索弹窗 -->
+  <view class="search-popup {{showSearchPopup ? 'show' : ''}}" wx:if="{{showSearchPopup}}">
+    <view class="search-popup-header">
+      <text class="search-popup-title">搜索位置</text>
+      <text class="search-popup-close" bindtap="hideSearchPanel">✕</text>
+    </view>
+    <view class="search-popup-body">
+      <!-- 搜索方式切换 -->
+      <view class="search-mode-tabs">
+        <view class="search-mode-tab {{searchMode === 'location' ? 'active' : ''}}" bindtap="switchSearchMode" data-mode="location">
+          <text>地点搜索</text>
+        </view>
+        <view class="search-mode-tab {{searchMode === 'coordinate' ? 'active' : ''}}" bindtap="switchSearchMode" data-mode="coordinate">
+          <text>经纬度</text>
+        </view>
+      </view>
+      
+      <!-- 地点搜索模式 -->
+      <view class="search-content" wx:if="{{searchMode === 'location'}}">
+        <view class="search-input-wrap">
+          <input 
+            type="text" 
+            class="search-input" 
+            placeholder="输入城市、地标或地址"
+            value="{{searchKeyword}}"
+            bindinput="onSearchKeywordInput"
+            bindconfirm="searchLocation"
+          />
+          <view class="search-input-btn" bindtap="searchLocation">
+            <view class="search-icon-small"></view>
+          </view>
+        </view>
+        <!-- 关键词建议列表 -->
+        <scroll-view scroll-y class="suggestion-list" wx:if="{{showSuggestions && suggestionList.length > 0}}">
+          <view class="suggestion-item" 
+                wx:for="{{suggestionList}}" 
+                wx:key="index"
+                bindtap="selectSuggestion"
+                data-index="{{index}}">
+            <view class="suggestion-icon">
+              <view class="suggestion-pin-icon"></view>
+            </view>
+            <view class="suggestion-info">
+              <text class="suggestion-title">{{item.title}}</text>
+              <text class="suggestion-address">{{item.address}}</text>
+            </view>
+          </view>
+        </scroll-view>
+        <!-- 搜索结果列表 -->
+        <scroll-view scroll-y class="search-results" wx:if="{{!showSuggestions && searchResults.length > 0}}">
+          <view class="search-result-item" 
+                wx:for="{{searchResults}}" 
+                wx:key="index"
+                bindtap="selectSearchResult"
+                data-index="{{index}}">
+            <text class="search-result-name">{{item.name}}</text>
+            <text class="search-result-address">{{item.address}}</text>
+          </view>
+        </scroll-view>
+        <!-- 无结果提示 -->
+        <view class="search-no-result" wx:if="{{!showSuggestions && searchNoResult}}">
+          <text>未找到相关位置</text>
+        </view>
+      </view>
+      
+      <!-- 经纬度输入模式 -->
+      <view class="search-content" wx:if="{{searchMode === 'coordinate'}}">
+        <view class="coordinate-input-group">
+          <view class="coordinate-input-item">
+            <text class="coordinate-label">纬度 (Lat)</text>
+            <input 
+              type="text" 
+              class="coordinate-input" 
+              placeholder="-90 到 90"
+              value="{{inputLatitude}}"
+              bindinput="onLatitudeInput"
+            />
+          </view>
+          <view class="coordinate-input-item">
+            <text class="coordinate-label">经度 (Lon)</text>
+            <input 
+              type="text" 
+              class="coordinate-input" 
+              placeholder="-180 到 180"
+              value="{{inputLongitude}}"
+              bindinput="onLongitudeInput"
+            />
+          </view>
+        </view>
+        <view class="coordinate-tip">提示：正纬度为北纬，负纬度为南纬；正经度为东经，负经度为西经</view>
+      </view>
+      
+      <!-- 操作按钮 -->
+      <view class="search-actions">
+        <view class="search-btn search-btn-cancel" bindtap="hideSearchPanel">取消</view>
+        <view class="search-btn search-btn-mylocation" bindtap="goToMyLocation">我的位置</view>
+        <view class="search-btn search-btn-confirm" bindtap="confirmSearch">定位</view>
+      </view>
+    </view>
+  </view>
+  
+  <!-- 位置搜索遮罩 -->
+  <view class="search-popup-mask {{showSearchPopup ? 'show' : ''}}" wx:if="{{showSearchPopup}}" bindtap="hideSearchPanel"></view>
   
   <!-- 卫星选择弹窗 -->
   <view class="satellite-popup {{showSatellitePopup ? 'show' : ''}}" wx:if="{{showSatellitePopup}}">

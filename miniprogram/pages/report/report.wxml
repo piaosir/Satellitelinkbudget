@@ -119,10 +119,10 @@
           <view class="dual-cell"><text class="p-label">{{t.elevation}}</text><text class="p-value">{{results.elevationResult}}<text class="p-unit">°</text></text></view>
           <view class="dual-cell"><text class="p-label">{{t.elevation}}</text><text class="p-value">{{results.rxElevationResult}}<text class="p-unit">°</text></text></view>
         </view>
-        <!-- 极化角 -->
-        <view class="dual-row" wx:if="{{results.uplinkPolarizationAngleResult !== '-' || results.downlinkPolarizationAngleResult !== '-'}}">
-          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.uplinkPolarizationAngleResult}}<text class="p-unit" wx:if="{{results.uplinkPolarizationAngleResult !== '-'}}">°</text></text></view>
-          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.downlinkPolarizationAngleResult}}<text class="p-unit" wx:if="{{results.downlinkPolarizationAngleResult !== '-'}}">°</text></text></view>
+        <!-- 方位角 -->
+        <view class="dual-row">
+          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.azimuthResult}}<text class="p-unit">°</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.rxAzimuthResult}}<text class="p-unit">°</text></text></view>
         </view>
         <!-- 自由空间损耗 -->
         <view class="dual-row">

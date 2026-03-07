@@ -2,21 +2,61 @@
 // 参数验证工具函数
 
 /**
- * 验证FEC编码率（支持分数和小数格式）
+ * 解析FEC编码率字符串，支持任意形式的分数（如 11/55, 3/4, 188/204 等）和小数
  * @param {string|number} fec - FEC编码率
- * @returns {object} { valid: boolean, message: string, value: number }
+ * @returns {object} { value: number|null, original: string, isValid: boolean }
+ */
+function parseFecValue(fec) {
+  if (fec === '' || fec === null || fec === undefined) {
+    return { value: null, original: '', isValid: false };
+  }
+  
+  const fecStr = String(fec).trim();
+  
+  // 如果包含/，说明是分数格式
+  if (fecStr.includes('/')) {
+    const parts = fecStr.split('/');
+    if (parts.length !== 2) {
+      return { value: null, original: fecStr, isValid: false };
+    }
+    
+    const numeratorStr = parts[0].trim();
+    const denominatorStr = parts[1].trim();
+    const numerator = parseFloat(numeratorStr);
+    const denominator = parseFloat(denominatorStr);
+    
+    if (isNaN(numerator) || isNaN(denominator) || denominator === 0) {
+      return { value: null, original: fecStr, isValid: false };
+    }
+    
+    return { value: numerator / denominator, original: fecStr, isValid: true };
+  } else {
+    // 小数格式
+    const value = parseFloat(fecStr);
+    if (isNaN(value)) {
+      return { value: null, original: fecStr, isValid: false };
+    }
+    return { value: value, original: fecStr, isValid: true };
+  }
+}
+
+/**
+ * 验证FEC编码率（支持任意形式的分数和小数格式）
+ * @param {string|number} fec - FEC编码率
+ * @returns {object} { valid: boolean, message: string, value: number, original: string }
  */
 function validateFec(fec) {
   if (fec === '' || fec === null || fec === undefined) {
     return {
       valid: false,
       message: 'FEC编码率不能为空',
-      value: null
+      value: null,
+      original: ''
     };
   }
 
-  let fecValue;
   const fecStr = String(fec).trim();
+  const parsed = parseFecValue(fecStr);
 
   // 如果包含/，说明是分数格式
   if (fecStr.includes('/')) {
@@ -24,19 +64,23 @@ function validateFec(fec) {
     if (parts.length !== 2) {
       return {
         valid: false,
-        message: 'FEC编码率分数格式错误，应为 a/b 格式（如 3/4）',
-        value: null
+        message: 'FEC编码率分数格式错误，应为 a/b 格式（如 3/4 或 11/55）',
+        value: null,
+        original: fecStr
       };
     }
     
-    const numerator = parseFloat(parts[0]);
-    const denominator = parseFloat(parts[1]);
+    const numeratorStr = parts[0].trim();
+    const denominatorStr = parts[1].trim();
+    const numerator = parseFloat(numeratorStr);
+    const denominator = parseFloat(denominatorStr);
     
     if (isNaN(numerator) || isNaN(denominator)) {
       return {
         valid: false,
         message: 'FEC编码率分数格式错误，分子和分母必须是数字',
-        value: null
+        value: null,
+        original: fecStr
       };
     }
     
@@ -44,37 +88,39 @@ function validateFec(fec) {
       return {
         valid: false,
         message: 'FEC编码率分数的分母不能为0',
-        value: null
+        value: null,
+        original: fecStr
       };
     }
-    
-    fecValue = numerator / denominator;
   } else {
     // 小数格式
-    fecValue = parseFloat(fecStr);
-    
-    if (isNaN(fecValue)) {
+    if (!parsed.isValid) {
       return {
         valid: false,
-        message: 'FEC编码率必须是数字或分数格式（如 0.75 或 3/4）',
-        value: null
+        message: 'FEC编码率必须是数字或分数格式（如 0.75 或 3/4 或 11/55）',
+        value: null,
+        original: fecStr
       };
     }
   }
+
+  const fecValue = parsed.value;
 
   // 验证范围
   if (fecValue <= 0 || fecValue > 1) {
     return {
       valid: false,
       message: 'FEC编码率必须在0到1之间',
-      value: null
+      value: null,
+      original: fecStr
     };
   }
 
   return { 
     valid: true, 
     message: '',
-    value: fecValue
+    value: fecValue,
+    original: fecStr
   };
 }
 
@@ -182,9 +228,9 @@ function validateLinkParams(params) {
     errors.push('上行站' + earthLatResult.message);
   }
 
-  const antennaDiameterResult = validateRange(params.antennaDiameter, 0.1, 50, '天线口径');
-  if (!antennaDiameterResult.valid) {
-    errors.push(antennaDiameterResult.message);
+  // 天线口径不设置范围限制，只验证是否为正数
+  if (!params.antennaDiameter || parseFloat(params.antennaDiameter) <= 0) {
+    errors.push('天线口径必须大于0');
   }
 
   const efficiencyResult = validateRange(params.antennaEfficiency, 1, 100, '天线效率');
@@ -208,9 +254,9 @@ function validateLinkParams(params) {
     errors.push('接收站' + rxLatResult.message);
   }
 
-  const rxAntennaDiameterResult = validateRange(params.rxAntennaDiameter, 0.1, 50, '接收天线口径');
-  if (!rxAntennaDiameterResult.valid) {
-    errors.push(rxAntennaDiameterResult.message);
+  // 接收天线口径不设置范围限制，只验证是否为正数
+  if (!params.rxAntennaDiameter || parseFloat(params.rxAntennaDiameter) <= 0) {
+    errors.push('接收天线口径必须大于0');
   }
 
   const downlinkFreqResult = validateRange(params.rxCenterFrequency, 0, 100, '下行中心频率');
@@ -308,6 +354,7 @@ function validateAllParams(satelliteParams, linkParams) {
 }
 
 module.exports = {
+  parseFecValue,
   validateRange,
   validateLongitude,
   validateLatitude,

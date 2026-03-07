@@ -4,6 +4,68 @@
 const cloud = require('wx-server-sdk');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
+/**
+ * 解析FEC编码率字符串，支持任意形式的分数和小数
+ * @param {string|number} fecInput - FEC编码率输入（如 "3/4", "11/55", "0.75"）
+ * @param {number} defaultValue - 默认值
+ * @returns {number} 解析后的数值
+ */
+function parseFecForCalculation(fecInput, defaultValue = 0.75) {
+  if (fecInput === '' || fecInput === null || fecInput === undefined) {
+    return defaultValue;
+  }
+  
+  const fecStr = String(fecInput).trim();
+  
+  // 如果包含/，说明是分数格式
+  if (fecStr.includes('/')) {
+    const parts = fecStr.split('/');
+    if (parts.length === 2) {
+      const numerator = parseFloat(parts[0].trim());
+      const denominator = parseFloat(parts[1].trim());
+      if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+        return numerator / denominator;
+      }
+    }
+    return defaultValue;
+  }
+  
+  // 小数格式
+  const value = parseFloat(fecStr);
+  return isNaN(value) ? defaultValue : value;
+}
+
+/**
+ * 解析RS编码码率字符串，支持任意形式的分数和小数
+ * @param {string|number} rsCodeInput - RS编码码率输入（如 "188/204", "0.92"）
+ * @param {number} defaultValue - 默认值 (188/204 ≈ 0.9216)
+ * @returns {number} 解析后的数值
+ */
+function parseRsCodeForCalculation(rsCodeInput, defaultValue = 188/204) {
+  if (rsCodeInput === '' || rsCodeInput === null || rsCodeInput === undefined) {
+    return defaultValue;
+  }
+  
+  const rsCodeStr = String(rsCodeInput).trim();
+  
+  // 如果包含/，说明是分数格式
+  if (rsCodeStr.includes('/')) {
+    const parts = rsCodeStr.split('/');
+    if (parts.length === 2) {
+      const numerator = parseFloat(parts[0].trim());
+      const denominator = parseFloat(parts[1].trim());
+      if (!isNaN(numerator) && !isNaN(denominator) && denominator !== 0) {
+        return numerator / denominator;
+      }
+    }
+    return defaultValue;
+  }
+  
+  // 小数格式
+  const value = parseFloat(rsCodeStr);
+  return isNaN(value) ? defaultValue : value;
+}
+
 // 物理常量
 const CONSTANTS = {
   LIGHT_SPEED: 299792.458, // 光速 km/s
@@ -108,49 +170,64 @@ function performCalculations(satParams, inputs) {
   const uplinkPolarizationDisplay = inputs.uplinkPolarization || satParams.uplinkPolarization || 'V';
   const uplinkPolarization = (uplinkPolarizationDisplay === 'LHCP' || uplinkPolarizationDisplay === 'RHCP') ? 'C' : uplinkPolarizationDisplay;
   const transponderBandwidth = parseFloat(satParams.transponderBandwidth) || 36; // MHz
-  const orbitPosition = parseFloat(satParams.position) || 110.5;
+  const orbitPosition = (satParams.position !== '' && satParams.position !== null && satParams.position !== undefined)
+    ? parseFloat(satParams.position) : 110.5;
   const EIRPs = parseFloat(inputs.rxEIRP) || 46; // dBW - 卫星下行EIRP
   const G_Ts = parseFloat(inputs.G_Ts) || 2; // dB/K - 卫星G/T
-  const SFDref = parseFloat(satParams.sfdRef) || -82; // dBW/m² - SFD参考值
+  const SFDref = (satParams.sfdRef !== '' && satParams.sfdRef !== null && satParams.sfdRef !== undefined)
+    ? parseFloat(satParams.sfdRef) : -82; // dBW/m² - SFD参考值
   
   // ============ 通信参数 ============
   const infoRate = parseFloat(inputs.infoRate) || 2048; // kbps - 信息速率
   const modulation = inputs.modulation || "QPSK";
-  const fec = parseFloat(inputs.fec) || 0.75; // FEC编码率
-  const rsCode = parseFloat(inputs.rsCode) || 1.0; // RS码效率
+  // FEC编码率：支持分数和小数格式，保留原始输入用于显示
+  const fecOriginal = String(inputs.fec || '0.75').trim();
+  const fec = parseFecForCalculation(fecOriginal, 0.75); // FEC编码率（数值）
+  // RS编码码率：支持分数和小数格式，保留原始输入用于显示
+  const rsCodeOriginal = String(inputs.rsCode || '188/204').trim();
+  const rsCode = parseRsCodeForCalculation(rsCodeOriginal, 188/204); // RS码效率（数值）
   const bandwidthFactor = parseFloat(inputs.bandwidthFactor) || 1.4; // 带宽系数
-  const berExponent = (parseFloat(inputs.ber) || 7) * -1; // 误码率指数
+  const berExponent = ((inputs.ber !== '' && inputs.ber !== null && inputs.ber !== undefined)
+    ? parseFloat(inputs.ber) : 7) * -1; // 误码率指数
   
   // 噪声比模式：支持 'ebno' 或 'esno'
   const noiseRatioMode = inputs.noiseRatioMode || 'ebno';
   const inputNoiseRatio = inputs.ebno !== '' && inputs.ebno !== null && inputs.ebno !== undefined
     ? parseFloat(inputs.ebno) : 5.0; // dB - 输入的噪声比值
   
-  const margin = parseFloat(inputs.margin) || 3; // dB - 链路余量
+  // 修复：正确处理 margin = 0 的情况
+  const margin = (inputs.margin !== '' && inputs.margin !== null && inputs.margin !== undefined)
+    ? parseFloat(inputs.margin) : 3; // dB - 链路余量
   const m = parseFloat(inputs.m) || 1.0; // 扩频增益
   
   // ============ 上行站参数 ============
-  const earthLon = parseFloat(inputs.longitude) || 116.4074;
-  const earthLat = parseFloat(inputs.latitude) || 39.9042;
+  const earthLon = (inputs.longitude !== '' && inputs.longitude !== null && inputs.longitude !== undefined)
+    ? parseFloat(inputs.longitude) : 116.4074;
+  const earthLat = (inputs.latitude !== '' && inputs.latitude !== null && inputs.latitude !== undefined)
+    ? parseFloat(inputs.latitude) : 39.9042;
   const antennaDiameter = parseFloat(inputs.antennaDiameter) || 7.3; // meters
   const antennaEfficiency = (parseFloat(inputs.antennaEfficiency) || 65) / 100;
   const feederLoss = inputs.feederLoss !== undefined && inputs.feederLoss !== '' && inputs.feederLoss !== null
     ? parseFloat(inputs.feederLoss) 
     : 0.2; // dB (支持输入0)
-  const uplinkAvailability = parseFloat(inputs.uplinkAvailability) || 99.90; // %
+  const uplinkAvailability = (inputs.uplinkAvailability !== '' && inputs.uplinkAvailability !== null && inputs.uplinkAvailability !== undefined)
+    ? parseFloat(inputs.uplinkAvailability) : 99.90; // %
   const rainRate = parseFloat(inputs.rainRate) || 0; // mm/h
   const altitude = (parseFloat(inputs.altitude) || 0) / 1000; // km
   const earthStationLocation = inputs.earthStationLocation || "上行站";
   
   // ============ 接收站参数 ============
-  const rxLongitude = parseFloat(inputs.rxLongitude) || 116.4074;
-  const rxLatitude = parseFloat(inputs.rxLatitude) || 39.9042;
+  const rxLongitude = (inputs.rxLongitude !== '' && inputs.rxLongitude !== null && inputs.rxLongitude !== undefined)
+    ? parseFloat(inputs.rxLongitude) : 116.4074;
+  const rxLatitude = (inputs.rxLatitude !== '' && inputs.rxLatitude !== null && inputs.rxLatitude !== undefined)
+    ? parseFloat(inputs.rxLatitude) : 39.9042;
   const rxAntennaDiameter = parseFloat(inputs.rxAntennaDiameter) || 1.2; // meters
   const rxAntennaEfficiency = (parseFloat(inputs.rxAntennaEfficiency) || 65) / 100;
   const rxFeederLoss = inputs.rxFeederLoss !== undefined && inputs.rxFeederLoss !== '' && inputs.rxFeederLoss !== null
     ? parseFloat(inputs.rxFeederLoss) 
     : 0.2; // dB (支持输入0)
-  const rxDownlinkAvailability = (parseFloat(inputs.rxDownlinkAvailability) || 99.90) / 100;
+  const rxDownlinkAvailability = ((inputs.rxDownlinkAvailability !== '' && inputs.rxDownlinkAvailability !== null && inputs.rxDownlinkAvailability !== undefined)
+    ? parseFloat(inputs.rxDownlinkAvailability) : 99.90) / 100;
   const rxRainRate = parseFloat(inputs.rxRainRate) || 0; // mm/h
   const rxAltitude = (parseFloat(inputs.rxAltitude) || 0) / 1000; // km
   
@@ -187,8 +264,10 @@ function performCalculations(satParams, inputs) {
     : 0; // dB - 功放回退 (支持输入0)
   
   // ============ 频率参数 ============
-  const uplinkFrequency = parseFloat(inputs.centerFrequency) || 14.25; // GHz
-  const downlinkFrequency = parseFloat(inputs.rxCenterFrequency) || 12.5; // GHz
+  const uplinkFrequency = (inputs.centerFrequency !== '' && inputs.centerFrequency !== null && inputs.centerFrequency !== undefined)
+    ? parseFloat(inputs.centerFrequency) : 14.25; // GHz
+  const downlinkFrequency = (inputs.rxCenterFrequency !== '' && inputs.rxCenterFrequency !== null && inputs.rxCenterFrequency !== undefined)
+    ? parseFloat(inputs.rxCenterFrequency) : 12.5; // GHz
   
   // ============ 计算波长和天线增益 ============
   const wavelength = 0.3 / uplinkFrequency; // 上行波长 (米)
@@ -764,8 +843,10 @@ function performCalculations(satParams, inputs) {
   results.berResult = `1×10${superscriptExp}`;
   results.ebnoResult = ebno.toFixed(2);
   results.esnoResult = esno.toFixed(2);
-  results.rsCodeResult = rsCode.toFixed(2);
-  results.fecResult = fec.toFixed(2);
+  // RS编码率显示：保持原始输入格式（分数或小数）
+  results.rsCodeResult = rsCodeOriginal;
+  // FEC编码率显示：保持原始输入格式（分数或小数）
+  results.fecResult = fecOriginal;
   results.carrierRateResult = carrierRate.toFixed(2);
   results.ChipRateResult = ChipRate.toFixed(2);
   results.symbolRateResult = symbolRate.toFixed(2);
