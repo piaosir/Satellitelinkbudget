@@ -194,7 +194,10 @@ Page({
     
     // 当前编辑状态
     isEditingConfig: false,
-    editingConfigName: ''
+    editingConfigName: '',
+
+    // 平台标识
+    isNotIOS: false
   },
 
   onLoad() {
@@ -206,7 +209,8 @@ Page({
       this.setData({
         navBarTop: menuButtonInfo.top,
         navBarHeight: menuButtonInfo.height,
-        navBarRight: systemInfo.windowWidth - menuButtonInfo.right
+        navBarRight: systemInfo.windowWidth - menuButtonInfo.right,
+        isNotIOS: systemInfo.platform !== 'ios'
       });
     } catch (e) {
       console.error('获取胶囊按钮位置失败:', e);

@@ -1521,3 +1521,32 @@ page {
 .city-search-input {
   transition: border-color 0.15s ease;
 }
+
+/* ====== 非iOS平台参数输入框字体+3rpx ====== */
+.non-ios .form-input {
+  font-size: 30rpx;
+  background: #fcfcfd;
+  border-color: #e5e7eb;
+}
+
+.non-ios .form-picker {
+  font-size: 30rpx;
+  background: #fcfcfd;
+  border-color: #e5e7eb;
+}
+
+.non-ios .form-group-compact .form-input {
+  font-size: 28rpx;
+}
+
+.non-ios .form-group-compact .form-picker {
+  font-size: 28rpx;
+}
+
+.non-ios .station-form-group .form-input {
+  font-size: 28rpx;
+}
+
+.non-ios .station-form-group .form-picker {
+  font-size: 28rpx;
+}

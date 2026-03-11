@@ -9,7 +9,7 @@
   }
   module.exports = { includes: includes };
 </wxs>
-<view class="container">
+<view class="container {{isNotIOS ? 'non-ios' : ''}}">
   <!-- 悬浮顶部操作栏 -->
   <view class="floating-action-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: {{navBarRight}}px;" catchtouchmove="preventTouchMove">
     <!-- 开始计算按钮 -->
@@ -103,7 +103,7 @@
         </view>
       </view>
       <view class="margin-popup-hint">
-        <text>📐 输入目标余量，计算所需功放功率</text>
+        <text>点击平衡，自动计算功带平衡时对应余量</text>
       </view>
     </view>
     
@@ -512,7 +512,7 @@
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">极化</text>
+            <text class="form-label">极化方式</text>
             <picker mode="selector" 
                     range="{{polarizationOptions}}" 
                     range-key="label"
@@ -746,7 +746,7 @@
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">极化</text>
+            <text class="form-label">极化方式</text>
             <picker mode="selector" 
                     range="{{polarizationOptions}}" 
                     range-key="label"
