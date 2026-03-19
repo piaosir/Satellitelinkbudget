@@ -13,7 +13,7 @@
   <!-- 悬浮顶部操作栏 -->
   <view class="floating-action-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: {{navBarRight}}px;" catchtouchmove="preventTouchMove">
     <!-- 开始计算按钮 -->
-    <view class="float-btn float-btn-primary" bindtap="calculateLink">
+    <view class="float-btn float-btn-primary" bindtap="onStartCalculate">
       <view class="float-icon icon-play"></view>
     </view>
     
@@ -101,9 +101,12 @@
         <view class="margin-popup-balance" bindtap="autoBalanceMargin">
           <text>平衡</text>
         </view>
+        <view class="margin-popup-calc" bindtap="calculateLink">
+          <text>计算</text>
+        </view>
       </view>
       <view class="margin-popup-hint">
-        <text>点击平衡，自动计算功带平衡时对应余量</text>
+        <text>输入目标余量后点击计算，或点击平衡自动计算功带平衡余量</text>
       </view>
     </view>
     
@@ -869,7 +872,7 @@
       <!-- 第一行：核心参数 4列 -->
       <view class="grid-4">
         <view class="form-group">
-          <text class="form-label">信息速率(kbps) *</text>
+          <text class="form-label">信息速率(kbps)</text>
           <input class="form-input" 
                  type="digit"
                  placeholder="2048" 
@@ -880,7 +883,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">调制方式 *</text>
+          <text class="form-label">调制方式</text>
           <picker mode="selector" 
                   range="{{modulationOptions}}" 
                   range-key="label"
@@ -894,7 +897,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">FEC编码率 *</text>
+          <text class="form-label">FEC编码率</text>
           <input class="form-input" 
                  type="text"
                  placeholder="3/4" 

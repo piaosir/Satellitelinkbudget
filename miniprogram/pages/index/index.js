@@ -1151,6 +1151,14 @@ Page({
   // ============ 原有方法 ============
 
   // 开始计算
+  onStartCalculate() {
+    if (this.data.calcMode === 'forward') {
+      this.forwardCalculate();
+    } else {
+      this.calculateLink();
+    }
+  },
+
   calculateLink() {
     // 震动反馈
     wx.vibrateShort({
