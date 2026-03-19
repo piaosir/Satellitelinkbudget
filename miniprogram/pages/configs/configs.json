@@ -2,7 +2,5 @@
   "navigationStyle": "custom",
   "navigationBarTitleText": "",
   "enablePullDownRefresh": true,
-  "enableShareAppMessage": true,
-  "enableShareTimeline": true,
   "usingComponents": {}
 }

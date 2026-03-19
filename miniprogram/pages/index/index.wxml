@@ -997,6 +997,10 @@
   <view id="result-section" class="card card-full-width" wx:if="{{hasResults}}">
     <view class="card-title">
       计算结果
+      <view class="more-results-btn" bindtap="goToResultsDetail">
+        <text>查看更多计算结果</text>
+        <text class="more-arrow">»</text>
+      </view>
     </view>
     
     <view class="collapse-content {{resultsExpandState !== 'collapsed' ? 'show' : ''}}">
@@ -1049,8 +1053,8 @@
       </view>
     </view>
 
-    <!-- 完全展开时显示所有内容 -->
-    <view wx:if="{{resultsExpandState === 'full'}}">
+    <!-- 详细结果已移至独立页面，主页仅保留核心结论和链路计算结果 -->
+    <view wx:if="{{false}}">
     <!-- 上行站结果 -->
     <view class="result-section">
       <view class="result-section-title">发信站参数</view>

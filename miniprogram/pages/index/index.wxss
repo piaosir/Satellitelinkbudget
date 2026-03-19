@@ -578,6 +578,28 @@ page {
   padding-top: 12rpx;
 }
 
+/* 查看更多计算结果按钮 */
+.more-results-btn {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding: 4rpx 0;
+  font-size: 22rpx;
+  color: #3b82f6;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.more-results-btn:active {
+  opacity: 0.6;
+}
+
+.more-results-btn .more-arrow {
+  font-size: 28rpx;
+  margin-left: 4rpx;
+  font-weight: 600;
+}
+
 /* 核心结论区样式 */
 .core-results {
   background: #f8fafc;

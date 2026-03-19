@@ -143,12 +143,12 @@ Page({
     // 获取胶囊按钮位置信息，用于对齐悬浮按钮
     try {
       const menuButtonInfo = wx.getMenuButtonBoundingClientRect();
-      const systemInfo = wx.getSystemInfoSync();
+      const windowInfo = wx.getWindowInfo();
       
       this.setData({
         navBarTop: menuButtonInfo.top,
         navBarHeight: menuButtonInfo.height,
-        navBarRight: systemInfo.windowWidth - menuButtonInfo.right
+        navBarRight: windowInfo.windowWidth - menuButtonInfo.right
       });
     } catch (e) {
       console.error('获取胶囊按钮位置失败:', e);

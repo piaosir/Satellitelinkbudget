@@ -1,0 +1,690 @@
+<wxs module="filter">
+  function strContains(str, keyword) {
+    if (str.indexOf(keyword) > -1) return true;
+    var lower = str.toLowerCase();
+    var kwLower = keyword.toLowerCase();
+    if (lower.indexOf(kwLower) > -1) return true;
+    return false;
+  }
+  function matchSearch(label, keyword, value) {
+    if (!keyword || keyword.length === 0) return true;
+    if (strContains(label, keyword)) return true;
+    if (value !== undefined && value !== null) {
+      var valStr = '' + value;
+      if (strContains(valStr, keyword)) return true;
+    }
+    return false;
+  }
+  function includes(arr, val) {
+    if (!arr || !arr.length) return false;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] === val) return true;
+    }
+    return false;
+  }
+  function sectionHasMatch(labels, keyword, results, keys, extraVals) {
+    if (!keyword || keyword.length === 0) return true;
+    for (var i = 0; i < labels.length; i++) {
+      if (strContains(labels[i], keyword)) return true;
+    }
+    if (results && keys) {
+      for (var j = 0; j < keys.length; j++) {
+        var val = results[keys[j]];
+        if (val !== undefined && val !== null) {
+          if (strContains('' + val, keyword)) return true;
+        }
+      }
+    }
+    if (extraVals) {
+      for (var k = 0; k < extraVals.length; k++) {
+        if (extraVals[k] && strContains('' + extraVals[k], keyword)) return true;
+      }
+    }
+    return false;
+  }
+  module.exports = { matchSearch: matchSearch, includes: includes, sectionHasMatch: sectionHasMatch };
+</wxs>
+
+<view class="page-container">
+  <!-- 搜索栏 -->
+  <view class="search-bar">
+    <view class="search-input-wrap">
+      <image class="search-icon" src="/images/icons/search.svg" mode="aspectFit"></image>
+      <input class="search-input" 
+             placeholder="搜索参数名称或结果值..." 
+             value="{{searchKeyword}}" 
+             bindinput="onSearchInput" 
+             confirm-type="search" />
+      <image class="search-clear" wx:if="{{searchKeyword}}" bindtap="clearSearch" src="/images/icons/search-clear.svg" mode="aspectFit"></image>
+    </view>
+    <view class="search-actions">
+      <text class="action-btn" bindtap="expandAll">展开全部</text>
+      <text class="action-divider">|</text>
+      <text class="action-btn" bindtap="collapseAll">折叠全部</text>
+    </view>
+  </view>
+
+  <!-- 快速定位锚点栏 -->
+  <scroll-view class="anchor-bar" scroll-x enhanced show-scrollbar="{{false}}">
+    <view class="anchor-item {{activeAnchor === item.id ? 'active' : ''}}" 
+          wx:for="{{sectionAnchors}}" wx:key="id"
+          bindtap="scrollToSection" data-id="{{item.id}}">
+      {{item.label}}
+    </view>
+  </scroll-view>
+
+  <!-- 高度定位锚点 -->
+  <view class="scroll-anchor"></view>
+
+  <!-- 结果内容 -->
+  <scroll-view class="results-scroll" scroll-y scroll-with-animation scroll-top="{{scrollTop}}" style="height: {{scrollViewHeight}}px;">
+
+    <!-- ===================== 发信站参数 ===================== -->
+    <view id="sec-tx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','地球站天线口径','地球站经度','地球站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','3dB波束宽度','地球站EIRP','发射天线增益','旁瓣发射增益','旁瓣EIRP','旁瓣功率谱密度','馈线损耗','星地距离','上行自由空间损耗','上行雨衰','上行云衰','上行大气衰减','功放建议功率','功放建议功率','地球站功率谱密度','国际电联旁瓣功率谱密度建议值','上行C/N'], searchKeyword, results, ['earthAntennaDiameterResult','earthLongitudeResult','earthLatitudeResult','uplinkPolarizationResult','elevationResult','azimuthResult','uplinkPolarizationAngleResult','earthAntennaEfficiencyResult','wavelengthResult','beamWidthResult','stationEIRPResult','txAntennaGainResult','txSidelobeGainResult','txSidelobeEIRPResult','txSidelobePSDResult','feederLossResult','slantRangeResult','uplinkFSLResult','uplinkRainAttenuation','uplinkCloudAttenuation','uplinkAtmosphericAttenuationResult','paRecommendationdBResult','paRecommendation','stationPSDResult','ituPsdLimitHz','uplinkCN'], [txLocation])}}">
+      <view class="section-header" bindtap="toggleSection" data-section="txStation">
+        <view class="section-title-row">
+          <view class="section-dot dot-blue"></view>
+          <text class="section-title">发信站参数</text>
+          <text class="section-count">27项</text>
+        </view>
+        <text class="section-arrow {{expandedSections.txStation ? 'expanded' : ''}}">›</text>
+      </view>
+      <view class="section-body {{expandedSections.txStation ? 'show' : ''}}">
+        <view class="detail-grid">
+          <view class="detail-item" wx:if="{{filter.matchSearch('地球站位置', searchKeyword, txLocation)}}">
+            <text class="detail-label">地球站位置</text>
+            <text class="detail-value">{{txLocation || '--'}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'earthAntennaDiameterResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('地球站天线口径', searchKeyword, results.earthAntennaDiameterResult)}}" bindtap="toggleHighlight" data-param="earthAntennaDiameterResult">
+            <text class="detail-label">地球站天线口径</text>
+            <text class="detail-value">{{results.earthAntennaDiameterResult}} 米</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'earthLongitudeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('地球站经度', searchKeyword, results.earthLongitudeResult)}}" bindtap="toggleHighlight" data-param="earthLongitudeResult">
+            <text class="detail-label">地球站经度</text>
+            <text class="detail-value">{{results.earthLongitudeResult}}°E</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'earthLatitudeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('地球站纬度', searchKeyword, results.earthLatitudeResult)}}" bindtap="toggleHighlight" data-param="earthLatitudeResult">
+            <text class="detail-label">地球站纬度</text>
+            <text class="detail-value">{{results.earthLatitudeResult}}°N</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkPolarizationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('极化方式', searchKeyword, results.uplinkPolarizationResult)}}" bindtap="toggleHighlight" data-param="uplinkPolarizationResult">
+            <text class="detail-label">极化方式</text>
+            <text class="detail-value">{{results.uplinkPolarizationResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'elevationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星仰角', searchKeyword, results.elevationResult)}}" bindtap="toggleHighlight" data-param="elevationResult">
+            <text class="detail-label">对卫星仰角</text>
+            <text class="detail-value">{{results.elevationResult}}°</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'azimuthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星方位角', searchKeyword, results.azimuthResult)}}" bindtap="toggleHighlight" data-param="azimuthResult">
+            <text class="detail-label">对卫星方位角</text>
+            <text class="detail-value">{{results.azimuthResult}}°</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkPolarizationAngleResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星极化角', searchKeyword, results.uplinkPolarizationAngleResult)}}" bindtap="toggleHighlight" data-param="uplinkPolarizationAngleResult">
+            <text class="detail-label">对卫星极化角</text>
+            <text class="detail-value">{{results.uplinkPolarizationAngleResult}}{{results.uplinkPolarizationAngleResult !== '-' ? '°' : ''}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'earthAntennaEfficiencyResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('天线效率', searchKeyword, results.earthAntennaEfficiencyResult)}}" bindtap="toggleHighlight" data-param="earthAntennaEfficiencyResult">
+            <text class="detail-label">天线效率</text>
+            <text class="detail-value">{{results.earthAntennaEfficiencyResult}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'wavelengthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('波长', searchKeyword, results.wavelengthResult)}}" bindtap="toggleHighlight" data-param="wavelengthResult">
+            <text class="detail-label">波长</text>
+            <text class="detail-value">{{results.wavelengthResult}} m</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'beamWidthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('3dB波束宽度', searchKeyword, results.beamWidthResult)}}" bindtap="toggleHighlight" data-param="beamWidthResult">
+            <text class="detail-label">3dB波束宽度</text>
+            <text class="detail-value">{{results.beamWidthResult}}°</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'stationEIRPResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('地球站EIRP', searchKeyword, results.stationEIRPResult)}}" bindtap="toggleHighlight" data-param="stationEIRPResult">
+            <text class="detail-label">地球站EIRP</text>
+            <text class="detail-value">{{results.stationEIRPResult}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'txAntennaGainResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('发射天线增益', searchKeyword, results.txAntennaGainResult)}}" bindtap="toggleHighlight" data-param="txAntennaGainResult">
+            <text class="detail-label">发射天线增益</text>
+            <text class="detail-value">{{results.txAntennaGainResult}} dBi</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'txSidelobeGainResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('旁瓣发射增益', searchKeyword, results.txSidelobeGainResult)}}" bindtap="toggleHighlight" data-param="txSidelobeGainResult">
+            <text class="detail-label">旁瓣发射增益</text>
+            <text class="detail-value">{{results.txSidelobeGainResult}} dBi</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'txSidelobeEIRPResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('旁瓣EIRP', searchKeyword, results.txSidelobeEIRPResult)}}" bindtap="toggleHighlight" data-param="txSidelobeEIRPResult">
+            <text class="detail-label">旁瓣EIRP</text>
+            <text class="detail-value">{{results.txSidelobeEIRPResult}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'txSidelobePSDResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('旁瓣功率谱密度', searchKeyword, results.txSidelobePSDResult)}}" bindtap="toggleHighlight" data-param="txSidelobePSDResult">
+            <text class="detail-label">旁瓣功率谱密度</text>
+            <text class="detail-value">{{results.txSidelobePSDResult}} dBW/Hz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'feederLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('馈线损耗', searchKeyword, results.feederLossResult)}}" bindtap="toggleHighlight" data-param="feederLossResult">
+            <text class="detail-label">馈线损耗</text>
+            <text class="detail-value">{{results.feederLossResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'slantRangeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('星地距离', searchKeyword, results.slantRangeResult)}}" bindtap="toggleHighlight" data-param="slantRangeResult">
+            <text class="detail-label">星地距离</text>
+            <text class="detail-value">{{results.slantRangeResult}} km</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkFSLResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行自由空间损耗', searchKeyword, results.uplinkFSLResult)}}" bindtap="toggleHighlight" data-param="uplinkFSLResult">
+            <text class="detail-label">上行自由空间损耗</text>
+            <text class="detail-value">{{results.uplinkFSLResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkRainAttenuation') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行雨衰', searchKeyword, results.uplinkRainAttenuation)}}" bindtap="toggleHighlight" data-param="uplinkRainAttenuation">
+            <text class="detail-label">上行雨衰@ITU-R P.618</text>
+            <text class="detail-value">{{results.uplinkRainAttenuation}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkCloudAttenuation') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行云衰', searchKeyword, results.uplinkCloudAttenuation)}}" bindtap="toggleHighlight" data-param="uplinkCloudAttenuation">
+            <text class="detail-label">上行云衰@ITU-R P.840</text>
+            <text class="detail-value">{{results.uplinkCloudAttenuation}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkAtmosphericAttenuationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行大气衰减', searchKeyword, results.uplinkAtmosphericAttenuationResult)}}" bindtap="toggleHighlight" data-param="uplinkAtmosphericAttenuationResult">
+            <text class="detail-label">上行大气衰减@ITU-R P.676</text>
+            <text class="detail-value">{{results.uplinkAtmosphericAttenuationResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'paRecommendationdBResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功放建议功率', searchKeyword, results.paRecommendationdBResult)}}" bindtap="toggleHighlight" data-param="paRecommendationdBResult">
+            <text class="detail-label">功放建议功率</text>
+            <text class="detail-value">{{results.paRecommendationdBResult}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'paRecommendation') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功放建议功率', searchKeyword, results.paRecommendation)}}" bindtap="toggleHighlight" data-param="paRecommendation">
+            <text class="detail-label">功放建议功率</text>
+            <text class="detail-value">{{results.paRecommendation}} W</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'stationPSDResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('地球站功率谱密度', searchKeyword, results.stationPSDResult)}}" bindtap="toggleHighlight" data-param="stationPSDResult">
+            <text class="detail-label">地球站功率谱密度</text>
+            <text class="detail-value">{{results.stationPSDResult}} dBW/Hz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'ituPsdLimitHz') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('国际电联旁瓣功率谱密度建议值', searchKeyword, results.ituPsdLimitHz)}}" bindtap="toggleHighlight" data-param="ituPsdLimitHz">
+            <text class="detail-label">ITU旁瓣PSD建议值</text>
+            <text class="detail-value">{{results.ituPsdLimitHz}} dBW/Hz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkCN') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行C/N', searchKeyword, results.uplinkCN)}}" bindtap="toggleHighlight" data-param="uplinkCN">
+            <text class="detail-label">上行C/N</text>
+            <text class="detail-value">{{results.uplinkCN}} dB</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===================== 收信站参数 ===================== -->
+    <view id="sec-rx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','接收天线口径','接收站经度','接收站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','接收天线增益','接收旁瓣增益','卫星到地面的PFD','ITU PFD限制','接收3dB波束宽度','星地距离','下行自由空间损耗','下行雨衰','下行云衰','下行大气衰减','G/T','G/T劣化','下行C/N','天线噪声温度','接收机噪声温度','雨噪声温度','系统噪声温度','接收馈线损耗'], searchKeyword, results, ['rxAntennaDiameterResult','rxLongitudeResult','rxLatitudeResult','downlinkPolarizationResult','rxElevationResult','rxAzimuthResult','downlinkPolarizationAngleResult','rxAntennaEfficiencyResult','rxWavelengthResult','rxAntennaGainResult','rxSidelobeGainResult','satellitePFD','ituPfdLimitPerM2','theta3','rxSlantRangeResult','downlinkFSLResult','downlinkRainAttenuationResult','downlinkCloudAttenuation','downlinkAtmosphericAttenuationResult','gOverTeResult','gOverTdegradationResult','downlinkCN','antennaNoiseTempResult','receiverNoiseTempResult','rainNoiseTempResult','systemNoiseTempKResult','systemNoiseTempDbResult','rxFeederLossResult'], [rxLocation])}}">
+      <view class="section-header" bindtap="toggleSection" data-section="rxStation">
+        <view class="section-title-row">
+          <view class="section-dot dot-green"></view>
+          <text class="section-title">收信站参数</text>
+          <text class="section-count">29项</text>
+        </view>
+        <text class="section-arrow {{expandedSections.rxStation ? 'expanded' : ''}}">›</text>
+      </view>
+      <view class="section-body {{expandedSections.rxStation ? 'show' : ''}}">
+        <view class="detail-grid">
+          <view class="detail-item" wx:if="{{filter.matchSearch('地球站位置', searchKeyword, rxLocation)}}">
+            <text class="detail-label">地球站位置</text>
+            <text class="detail-value">{{rxLocation || '--'}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxAntennaDiameterResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收天线口径', searchKeyword, results.rxAntennaDiameterResult)}}" bindtap="toggleHighlight" data-param="rxAntennaDiameterResult">
+            <text class="detail-label">接收天线口径</text>
+            <text class="detail-value">{{results.rxAntennaDiameterResult}} 米</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxLongitudeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收站经度', searchKeyword, results.rxLongitudeResult)}}" bindtap="toggleHighlight" data-param="rxLongitudeResult">
+            <text class="detail-label">接收站经度</text>
+            <text class="detail-value">{{results.rxLongitudeResult}}°E</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxLatitudeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收站纬度', searchKeyword, results.rxLatitudeResult)}}" bindtap="toggleHighlight" data-param="rxLatitudeResult">
+            <text class="detail-label">接收站纬度</text>
+            <text class="detail-value">{{results.rxLatitudeResult}}°N</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkPolarizationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('极化方式', searchKeyword, results.downlinkPolarizationResult)}}" bindtap="toggleHighlight" data-param="downlinkPolarizationResult">
+            <text class="detail-label">极化方式</text>
+            <text class="detail-value">{{results.downlinkPolarizationResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxElevationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星仰角', searchKeyword, results.rxElevationResult)}}" bindtap="toggleHighlight" data-param="rxElevationResult">
+            <text class="detail-label">对卫星仰角</text>
+            <text class="detail-value">{{results.rxElevationResult}}°</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxAzimuthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星方位角', searchKeyword, results.rxAzimuthResult)}}" bindtap="toggleHighlight" data-param="rxAzimuthResult">
+            <text class="detail-label">对卫星方位角</text>
+            <text class="detail-value">{{results.rxAzimuthResult}}°</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkPolarizationAngleResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星极化角', searchKeyword, results.downlinkPolarizationAngleResult)}}" bindtap="toggleHighlight" data-param="downlinkPolarizationAngleResult">
+            <text class="detail-label">对卫星极化角</text>
+            <text class="detail-value">{{results.downlinkPolarizationAngleResult}}{{results.downlinkPolarizationAngleResult !== '-' ? '°' : ''}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxAntennaEfficiencyResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('天线效率', searchKeyword, results.rxAntennaEfficiencyResult)}}" bindtap="toggleHighlight" data-param="rxAntennaEfficiencyResult">
+            <text class="detail-label">天线效率</text>
+            <text class="detail-value">{{results.rxAntennaEfficiencyResult}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxWavelengthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('波长', searchKeyword, results.rxWavelengthResult)}}" bindtap="toggleHighlight" data-param="rxWavelengthResult">
+            <text class="detail-label">波长</text>
+            <text class="detail-value">{{results.rxWavelengthResult}} m</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxAntennaGainResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收天线增益', searchKeyword, results.rxAntennaGainResult)}}" bindtap="toggleHighlight" data-param="rxAntennaGainResult">
+            <text class="detail-label">接收天线增益</text>
+            <text class="detail-value">{{results.rxAntennaGainResult}} dBi</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxSidelobeGainResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收旁瓣增益', searchKeyword, results.rxSidelobeGainResult)}}" bindtap="toggleHighlight" data-param="rxSidelobeGainResult">
+            <text class="detail-label">接收旁瓣增益</text>
+            <text class="detail-value">{{results.rxSidelobeGainResult}} dBi</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'satellitePFD') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星到地面的PFD', searchKeyword, results.satellitePFD)}}" bindtap="toggleHighlight" data-param="satellitePFD">
+            <text class="detail-label">卫星到地面的PFD</text>
+            <text class="detail-value">{{results.satellitePFD}} dBW/m²</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'ituPfdLimitPerM2') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('ITU PFD限制', searchKeyword, results.ituPfdLimitPerM2)}}" bindtap="toggleHighlight" data-param="ituPfdLimitPerM2">
+            <text class="detail-label">ITU PFD限制</text>
+            <text class="detail-value">{{results.ituPfdLimitPerM2}} dBW/m²</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'theta3') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收3dB波束宽度', searchKeyword, results.theta3)}}" bindtap="toggleHighlight" data-param="theta3">
+            <text class="detail-label">接收3dB波束宽度</text>
+            <text class="detail-value">{{results.theta3}}°</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxSlantRangeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('星地距离', searchKeyword, results.rxSlantRangeResult)}}" bindtap="toggleHighlight" data-param="rxSlantRangeResult">
+            <text class="detail-label">星地距离</text>
+            <text class="detail-value">{{results.rxSlantRangeResult}} km</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkFSLResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行自由空间损耗', searchKeyword, results.downlinkFSLResult)}}" bindtap="toggleHighlight" data-param="downlinkFSLResult">
+            <text class="detail-label">下行自由空间损耗</text>
+            <text class="detail-value">{{results.downlinkFSLResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkRainAttenuationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行雨衰', searchKeyword, results.downlinkRainAttenuationResult)}}" bindtap="toggleHighlight" data-param="downlinkRainAttenuationResult">
+            <text class="detail-label">下行雨衰@ITU-R P.618</text>
+            <text class="detail-value">{{results.downlinkRainAttenuationResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkCloudAttenuation') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行云衰', searchKeyword, results.downlinkCloudAttenuation)}}" bindtap="toggleHighlight" data-param="downlinkCloudAttenuation">
+            <text class="detail-label">下行云衰@ITU-R P.840</text>
+            <text class="detail-value">{{results.downlinkCloudAttenuation}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkAtmosphericAttenuationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行大气衰减', searchKeyword, results.downlinkAtmosphericAttenuationResult)}}" bindtap="toggleHighlight" data-param="downlinkAtmosphericAttenuationResult">
+            <text class="detail-label">下行大气衰减@ITU-R P.676</text>
+            <text class="detail-value">{{results.downlinkAtmosphericAttenuationResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'gOverTeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('G/T', searchKeyword, results.gOverTeResult)}}" bindtap="toggleHighlight" data-param="gOverTeResult">
+            <text class="detail-label">G/T</text>
+            <text class="detail-value">{{results.gOverTeResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'gOverTdegradationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('G/T劣化', searchKeyword, results.gOverTdegradationResult)}}" bindtap="toggleHighlight" data-param="gOverTdegradationResult">
+            <text class="detail-label">G/T劣化</text>
+            <text class="detail-value">{{results.gOverTdegradationResult}} dB</text>
+          </view>
+          <!-- 噪声温度（合并至收信站） -->
+          <view class="detail-item {{filter.includes(markedParams, 'antennaNoiseTempResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('天线噪声温度', searchKeyword, results.antennaNoiseTempResult)}}" bindtap="toggleHighlight" data-param="antennaNoiseTempResult">
+            <text class="detail-label">天线噪声温度</text>
+            <text class="detail-value">{{results.antennaNoiseTempResult}} K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'receiverNoiseTempResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收机噪声温度', searchKeyword, results.receiverNoiseTempResult)}}" bindtap="toggleHighlight" data-param="receiverNoiseTempResult">
+            <text class="detail-label">接收机噪声温度</text>
+            <text class="detail-value">{{results.receiverNoiseTempResult}} K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rainNoiseTempResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('雨噪声温度', searchKeyword, results.rainNoiseTempResult)}}" bindtap="toggleHighlight" data-param="rainNoiseTempResult">
+            <text class="detail-label">雨噪声温度</text>
+            <text class="detail-value">{{results.rainNoiseTempResult}} K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'systemNoiseTempKResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('系统噪声温度', searchKeyword, results.systemNoiseTempKResult)}}" bindtap="toggleHighlight" data-param="systemNoiseTempKResult">
+            <text class="detail-label">系统噪声温度</text>
+            <text class="detail-value">{{results.systemNoiseTempKResult}} K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'systemNoiseTempDbResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('系统噪声温度', searchKeyword, results.systemNoiseTempDbResult)}}" bindtap="toggleHighlight" data-param="systemNoiseTempDbResult">
+            <text class="detail-label">系统噪声温度(dB)</text>
+            <text class="detail-value">{{results.systemNoiseTempDbResult}} dBK</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rxFeederLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('接收馈线损耗', searchKeyword, results.rxFeederLossResult)}}" bindtap="toggleHighlight" data-param="rxFeederLossResult">
+            <text class="detail-label">接收馈线损耗</text>
+            <text class="detail-value">{{results.rxFeederLossResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkCN') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行C/N', searchKeyword, results.downlinkCN)}}" bindtap="toggleHighlight" data-param="downlinkCN">
+            <text class="detail-label">下行C/N</text>
+            <text class="detail-value">{{results.downlinkCN}} dB</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===================== 卫星参数 ===================== -->
+    <view id="sec-sat" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['卫星轨道位置','卫星EIRP','卫星SFD','卫星天线增益','输入回退','输出回退','转发器带宽','卫星功率谱密度','转发器工作区回退'], searchKeyword, results, ['orbitPositionResult','EIRPsResult','SFDsResult','antennaGainResult','BOiResult','BOoResult','transponderBandwidthResult','satellitePSDResult','actualTransponderCapacityResult'])}}">
+      <view class="section-header" bindtap="toggleSection" data-section="satellite">
+        <view class="section-title-row">
+          <view class="section-dot dot-purple"></view>
+          <text class="section-title">卫星参数</text>
+          <text class="section-count">9项</text>
+        </view>
+        <text class="section-arrow {{expandedSections.satellite ? 'expanded' : ''}}">›</text>
+      </view>
+      <view class="section-body {{expandedSections.satellite ? 'show' : ''}}">
+        <view class="detail-grid">
+          <view class="detail-item {{filter.includes(markedParams, 'orbitPositionResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星轨道位置', searchKeyword, results.orbitPositionResult)}}" bindtap="toggleHighlight" data-param="orbitPositionResult">
+            <text class="detail-label">卫星轨道位置</text>
+            <text class="detail-value">{{results.orbitPositionResult}}°E</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'EIRPsResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星EIRP', searchKeyword, results.EIRPsResult)}}" bindtap="toggleHighlight" data-param="EIRPsResult">
+            <text class="detail-label">卫星EIRP</text>
+            <text class="detail-value">{{results.EIRPsResult}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'SFDsResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星SFD', searchKeyword, results.SFDsResult)}}" bindtap="toggleHighlight" data-param="SFDsResult">
+            <text class="detail-label">卫星SFD</text>
+            <text class="detail-value">{{results.SFDsResult}} dBW/m²</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'antennaGainResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星天线增益', searchKeyword, results.antennaGainResult)}}" bindtap="toggleHighlight" data-param="antennaGainResult">
+            <text class="detail-label">卫星天线增益</text>
+            <text class="detail-value">{{results.antennaGainResult}} dBi</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'BOiResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('输入回退', searchKeyword, results.BOiResult)}}" bindtap="toggleHighlight" data-param="BOiResult">
+            <text class="detail-label">输入回退</text>
+            <text class="detail-value">{{results.BOiResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'BOoResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('输出回退', searchKeyword, results.BOoResult)}}" bindtap="toggleHighlight" data-param="BOoResult">
+            <text class="detail-label">输出回退</text>
+            <text class="detail-value">{{results.BOoResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'transponderBandwidthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('转发器带宽', searchKeyword, results.transponderBandwidthResult)}}" bindtap="toggleHighlight" data-param="transponderBandwidthResult">
+            <text class="detail-label">转发器带宽</text>
+            <text class="detail-value">{{results.transponderBandwidthResult}} MHz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'satellitePSDResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星功率谱密度', searchKeyword, results.satellitePSDResult)}}" bindtap="toggleHighlight" data-param="satellitePSDResult">
+            <text class="detail-label">卫星功率谱密度</text>
+            <text class="detail-value">{{results.satellitePSDResult}} dBW/Hz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'actualTransponderCapacityResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('转发器工作区回退', searchKeyword, results.actualTransponderCapacityResult)}}" bindtap="toggleHighlight" data-param="actualTransponderCapacityResult">
+            <text class="detail-label">转发器工作区回退</text>
+            <text class="detail-value">{{results.actualTransponderCapacityResult}} dB</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===================== 通信参数 ===================== -->
+    <view id="sec-comm" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行中心频率','下行中心频率','载波带宽','上行极化方式','下行极化方式','信息速率','调制方式','调制因子','误码率','Eb/N₀','Es/N₀','RS编码率','FEC编码率','载波速率','码片速率','符号速率','载波噪声带宽','系统余量'], searchKeyword, results, ['uplinkFrequencyResult','downlinkFrequencyResult','allocBandwidthResult','uplinkPolarizationResult','downlinkPolarizationResult','infoRateResult','modulationResult','modulationFactorResult','berResult','ebnoResult','esnoResult','rsCodeResult','fecResult','carrierRateResult','ChipRateResult','symbolRateResult','RXnoiseBW','marginResult'])}}">
+      <view class="section-header" bindtap="toggleSection" data-section="comm">
+        <view class="section-title-row">
+          <view class="section-dot dot-cyan"></view>
+          <text class="section-title">通信参数</text>
+          <text class="section-count">18项</text>
+        </view>
+        <text class="section-arrow {{expandedSections.comm ? 'expanded' : ''}}">›</text>
+      </view>
+      <view class="section-body {{expandedSections.comm ? 'show' : ''}}">
+        <view class="detail-grid">
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkFrequencyResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行中心频率', searchKeyword, results.uplinkFrequencyResult)}}" bindtap="toggleHighlight" data-param="uplinkFrequencyResult">
+            <text class="detail-label">上行中心频率</text>
+            <text class="detail-value">{{results.uplinkFrequencyResult}} GHz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkFrequencyResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行中心频率', searchKeyword, results.downlinkFrequencyResult)}}" bindtap="toggleHighlight" data-param="downlinkFrequencyResult">
+            <text class="detail-label">下行中心频率</text>
+            <text class="detail-value">{{results.downlinkFrequencyResult}} GHz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'allocBandwidthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波带宽', searchKeyword, results.allocBandwidthResult)}}" bindtap="toggleHighlight" data-param="allocBandwidthResult">
+            <text class="detail-label">载波带宽</text>
+            <text class="detail-value">{{results.allocBandwidthResult}} kHz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkPolarizationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行极化方式', searchKeyword, results.uplinkPolarizationResult)}}" bindtap="toggleHighlight" data-param="uplinkPolarizationResult">
+            <text class="detail-label">上行极化方式</text>
+            <text class="detail-value">{{results.uplinkPolarizationResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkPolarizationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行极化方式', searchKeyword, results.downlinkPolarizationResult)}}" bindtap="toggleHighlight" data-param="downlinkPolarizationResult">
+            <text class="detail-label">下行极化方式</text>
+            <text class="detail-value">{{results.downlinkPolarizationResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'infoRateResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('信息速率', searchKeyword, results.infoRateResult)}}" bindtap="toggleHighlight" data-param="infoRateResult">
+            <text class="detail-label">信息速率</text>
+            <text class="detail-value">{{results.infoRateResult}} kbps</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'modulationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('调制方式', searchKeyword, results.modulationResult)}}" bindtap="toggleHighlight" data-param="modulationResult">
+            <text class="detail-label">调制方式</text>
+            <text class="detail-value">{{results.modulationResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'modulationFactorResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('调制因子', searchKeyword, results.modulationFactorResult)}}" bindtap="toggleHighlight" data-param="modulationFactorResult">
+            <text class="detail-label">调制因子</text>
+            <text class="detail-value">{{results.modulationFactorResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'berResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('误码率', searchKeyword, results.berResult)}}" bindtap="toggleHighlight" data-param="berResult">
+            <text class="detail-label">误码率</text>
+            <text class="detail-value">{{results.berResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'ebnoResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('Eb/N₀', searchKeyword, results.ebnoResult)}}" bindtap="toggleHighlight" data-param="ebnoResult">
+            <text class="detail-label">Eb/N₀</text>
+            <text class="detail-value">{{results.ebnoResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'esnoResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('Es/N₀', searchKeyword, results.esnoResult)}}" bindtap="toggleHighlight" data-param="esnoResult">
+            <text class="detail-label">Es/N₀</text>
+            <text class="detail-value">{{results.esnoResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'rsCodeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('RS编码率', searchKeyword, results.rsCodeResult)}}" bindtap="toggleHighlight" data-param="rsCodeResult">
+            <text class="detail-label">RS编码率</text>
+            <text class="detail-value">{{results.rsCodeResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'fecResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('FEC编码率', searchKeyword, results.fecResult)}}" bindtap="toggleHighlight" data-param="fecResult">
+            <text class="detail-label">FEC编码率</text>
+            <text class="detail-value">{{results.fecResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'carrierRateResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波速率', searchKeyword, results.carrierRateResult)}}" bindtap="toggleHighlight" data-param="carrierRateResult">
+            <text class="detail-label">载波速率</text>
+            <text class="detail-value">{{results.carrierRateResult}} kbps</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'ChipRateResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('码片速率', searchKeyword, results.ChipRateResult)}}" bindtap="toggleHighlight" data-param="ChipRateResult">
+            <text class="detail-label">码片速率</text>
+            <text class="detail-value">{{results.ChipRateResult}} kcps</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'symbolRateResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('符号速率', searchKeyword, results.symbolRateResult)}}" bindtap="toggleHighlight" data-param="symbolRateResult">
+            <text class="detail-label">符号速率</text>
+            <text class="detail-value">{{results.symbolRateResult}} ksps</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'noiseBW') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波噪声带宽', searchKeyword, results.RXnoiseBW)}}" bindtap="toggleHighlight" data-param="noiseBW">
+            <text class="detail-label">载波噪声带宽</text>
+            <text class="detail-value">{{results.RXnoiseBW}} dB-Hz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'marginResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('系统余量', searchKeyword, results.marginResult)}}" bindtap="toggleHighlight" data-param="marginResult">
+            <text class="detail-label">系统余量</text>
+            <text class="detail-value">{{results.marginResult}} dB</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===================== 可用度 ===================== -->
+    <view id="sec-avail" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行可用度','下行可用度','系统可用度','转发器资源受限于','转发器可承载最大载波数'], searchKeyword, results, ['uplinkAvailabilityResult','downlinkAvailabilityResult','systemAvailabilityResult','transponderLimitedBy','maxCarrierCount'])}}">
+      <view class="section-header" bindtap="toggleSection" data-section="availability">
+        <view class="section-title-row">
+          <view class="section-dot dot-amber"></view>
+          <text class="section-title">可用度</text>
+          <text class="section-count">5项</text>
+        </view>
+        <text class="section-arrow {{expandedSections.availability ? 'expanded' : ''}}">›</text>
+      </view>
+      <view class="section-body {{expandedSections.availability ? 'show' : ''}}">
+        <view class="detail-grid">
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkAvailabilityResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行可用度', searchKeyword, results.uplinkAvailabilityResult)}}" bindtap="toggleHighlight" data-param="uplinkAvailabilityResult">
+            <text class="detail-label">上行可用度</text>
+            <text class="detail-value">{{results.uplinkAvailabilityResult}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkAvailabilityResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行可用度', searchKeyword, results.downlinkAvailabilityResult)}}" bindtap="toggleHighlight" data-param="downlinkAvailabilityResult">
+            <text class="detail-label">下行可用度</text>
+            <text class="detail-value">{{results.downlinkAvailabilityResult}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'systemAvailabilityResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('系统可用度', searchKeyword, results.systemAvailabilityResult)}}" bindtap="toggleHighlight" data-param="systemAvailabilityResult">
+            <text class="detail-label">系统可用度</text>
+            <text class="detail-value">{{results.systemAvailabilityResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'transponderLimitedBy') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('转发器资源受限于', searchKeyword, results.transponderLimitedBy)}}" bindtap="toggleHighlight" data-param="transponderLimitedBy">
+            <text class="detail-label">转发器资源受限于</text>
+            <text class="detail-value">{{results.transponderLimitedBy}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'maxCarrierCount') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('转发器可承载最大载波数', searchKeyword, results.maxCarrierCount)}}" bindtap="toggleHighlight" data-param="maxCarrierCount">
+            <text class="detail-label">最大载波数</text>
+            <text class="detail-value">{{results.maxCarrierCount}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===================== C/T和C/N ===================== -->
+    <view id="sec-ctcn" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行C/T','邻星上行C/T','极化上行C/T','下行C/T','邻星下行C/T','极化下行C/T','互调噪声C/T','总C/T','载波门限C/T','载波总C/T','载波总C/N','门限C/N','链路余量','载波上行C/T','载波下行C/T'], searchKeyword, results, ['uplinkCTResult','adjUplinkCTResult','xpolUplinkCTResult','downlinkCTResult','adjDownlinkCTResult','xpolDownlinkCTResult','intermodCTResult','totalCTResult','totalCTRainResult','carrierThresholdCT','carrierTotalCT','carrierTotalCN','thresholdCN','linkmargin','actualUplinkCT','actualDownlinkCT'])}}">
+      <view class="section-header" bindtap="toggleSection" data-section="ctcn">
+        <view class="section-title-row">
+          <view class="section-dot dot-red"></view>
+          <text class="section-title">载干比(C/T)和载噪比(C/N)</text>
+          <text class="section-count">16项</text>
+        </view>
+        <text class="section-arrow {{expandedSections.ctcn ? 'expanded' : ''}}">›</text>
+      </view>
+      <view class="section-body {{expandedSections.ctcn ? 'show' : ''}}">
+        <view class="detail-grid">
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行C/T', searchKeyword, results.uplinkCTResult)}}" bindtap="toggleHighlight" data-param="uplinkCTResult">
+            <text class="detail-label">上行C/T</text>
+            <text class="detail-value">{{results.uplinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'adjUplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('邻星上行C/T', searchKeyword, results.adjUplinkCTResult)}}" bindtap="toggleHighlight" data-param="adjUplinkCTResult">
+            <text class="detail-label">邻星上行C/T</text>
+            <text class="detail-value">{{results.adjUplinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'xpolUplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('极化上行C/T', searchKeyword, results.xpolUplinkCTResult)}}" bindtap="toggleHighlight" data-param="xpolUplinkCTResult">
+            <text class="detail-label">极化上行C/T</text>
+            <text class="detail-value">{{results.xpolUplinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行C/T', searchKeyword, results.downlinkCTResult)}}" bindtap="toggleHighlight" data-param="downlinkCTResult">
+            <text class="detail-label">下行C/T</text>
+            <text class="detail-value">{{results.downlinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'adjDownlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('邻星下行C/T', searchKeyword, results.adjDownlinkCTResult)}}" bindtap="toggleHighlight" data-param="adjDownlinkCTResult">
+            <text class="detail-label">邻星下行C/T</text>
+            <text class="detail-value">{{results.adjDownlinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'xpolDownlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('极化下行C/T', searchKeyword, results.xpolDownlinkCTResult)}}" bindtap="toggleHighlight" data-param="xpolDownlinkCTResult">
+            <text class="detail-label">极化下行C/T</text>
+            <text class="detail-value">{{results.xpolDownlinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'intermodCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('互调噪声C/T', searchKeyword, results.intermodCTResult)}}" bindtap="toggleHighlight" data-param="intermodCTResult">
+            <text class="detail-label">互调噪声C/T</text>
+            <text class="detail-value">{{results.intermodCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'totalCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('总C/T', searchKeyword, results.totalCTResult)}}" bindtap="toggleHighlight" data-param="totalCTResult">
+            <text class="detail-label">总C/T(晴天)</text>
+            <text class="detail-value">{{results.totalCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'totalCTRainResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('总C/T', searchKeyword, results.totalCTRainResult)}}" bindtap="toggleHighlight" data-param="totalCTRainResult">
+            <text class="detail-label">总C/T(雨天)</text>
+            <text class="detail-value">{{results.totalCTRainResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'carrierThresholdCT') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波门限C/T', searchKeyword, results.carrierThresholdCT)}}" bindtap="toggleHighlight" data-param="carrierThresholdCT">
+            <text class="detail-label">载波门限C/T</text>
+            <text class="detail-value">{{results.carrierThresholdCT}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'carrierTotalCT') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波总C/T', searchKeyword, results.carrierTotalCT)}}" bindtap="toggleHighlight" data-param="carrierTotalCT">
+            <text class="detail-label">载波总C/T</text>
+            <text class="detail-value">{{results.carrierTotalCT}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'carrierTotalCN') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波总C/N', searchKeyword, results.carrierTotalCN)}}" bindtap="toggleHighlight" data-param="carrierTotalCN">
+            <text class="detail-label">载波总C/N</text>
+            <text class="detail-value">{{results.carrierTotalCN}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'thresholdCN') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('门限C/N', searchKeyword, results.thresholdCN)}}" bindtap="toggleHighlight" data-param="thresholdCN">
+            <text class="detail-label">门限C/N</text>
+            <text class="detail-value">{{results.thresholdCN}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'linkmargin') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('链路余量', searchKeyword, results.linkmargin)}}" bindtap="toggleHighlight" data-param="linkmargin">
+            <text class="detail-label">链路余量</text>
+            <text class="detail-value">{{results.linkmargin}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'actualUplinkCT') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波上行C/T', searchKeyword, results.actualUplinkCT)}}" bindtap="toggleHighlight" data-param="actualUplinkCT">
+            <text class="detail-label">载波上行C/T</text>
+            <text class="detail-value">{{results.actualUplinkCT}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'actualDownlinkCT') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波下行C/T', searchKeyword, results.actualDownlinkCT)}}" bindtap="toggleHighlight" data-param="actualDownlinkCT">
+            <text class="detail-label">载波下行C/T</text>
+            <text class="detail-value">{{results.actualDownlinkCT}} dB/K</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ===================== 链路计算结果 ===================== -->
+    <view id="sec-link" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['带宽占用比','功率占用比','上行综合损耗','下行综合损耗','载波带宽','功率带宽','功放实际输出','功放建议功率','UPC','到达卫星的通量密度','每载波占卫星EIRP','上行雨天功率占比','下行雨天功率占比','下行雨卫星总C/T','转发器回退'], searchKeyword, results, ['bandwidthUsageRatio','powerUsageRatio','uplinkMiscLossResult','downlinkMiscLossResult','allocBandwidthResult','PowerBWResult','selectedPowerResult','selectedPowerWResult','paRecommendationdBResult','paRecommendation','UPCmarginResult','PFDcResult','eirpPerCarrier','uplinkPowerRatioResult','downlinkPowerRatioResult','downlinkComponentResult','RXtransponderCapacityResult','RXeirpPerCarrierResult','transponderBackoffResult'])}}">
+      <view class="section-header" bindtap="toggleSection" data-section="linkResult">
+        <view class="section-title-row">
+          <view class="section-dot dot-indigo"></view>
+          <text class="section-title">链路计算结果</text>
+          <text class="section-count">19项</text>
+        </view>
+        <text class="section-arrow {{expandedSections.linkResult ? 'expanded' : ''}}">›</text>
+      </view>
+      <view class="section-body {{expandedSections.linkResult ? 'show' : ''}}">
+        <view class="detail-grid">
+          <view class="detail-item {{filter.includes(markedParams, 'bandwidthUsageRatio') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('带宽占用比', searchKeyword, results.bandwidthUsageRatio)}}" bindtap="toggleHighlight" data-param="bandwidthUsageRatio">
+            <text class="detail-label">带宽占用比</text>
+            <text class="detail-value">{{results.bandwidthUsageRatio}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'powerUsageRatio') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功率占用比', searchKeyword, results.powerUsageRatio)}}" bindtap="toggleHighlight" data-param="powerUsageRatio">
+            <text class="detail-label">功率占用比</text>
+            <text class="detail-value">{{results.powerUsageRatio}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkMiscLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行综合损耗', searchKeyword, results.uplinkMiscLossResult)}}" bindtap="toggleHighlight" data-param="uplinkMiscLossResult">
+            <text class="detail-label">上行综合损耗</text>
+            <text class="detail-value">{{results.uplinkMiscLossResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkMiscLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行综合损耗', searchKeyword, results.downlinkMiscLossResult)}}" bindtap="toggleHighlight" data-param="downlinkMiscLossResult">
+            <text class="detail-label">下行综合损耗</text>
+            <text class="detail-value">{{results.downlinkMiscLossResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'allocBandwidthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波带宽', searchKeyword, results.allocBandwidthResult)}}" bindtap="toggleHighlight" data-param="allocBandwidthResult">
+            <text class="detail-label">载波带宽</text>
+            <text class="detail-value">{{results.allocBandwidthResult}} kHz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'PowerBWResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功率带宽', searchKeyword, results.PowerBWResult)}}" bindtap="toggleHighlight" data-param="PowerBWResult">
+            <text class="detail-label">功率带宽</text>
+            <text class="detail-value">{{results.PowerBWResult}} kHz</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'selectedPowerResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功放实际输出', searchKeyword, results.selectedPowerResult)}}" bindtap="toggleHighlight" data-param="selectedPowerResult">
+            <text class="detail-label">功放实际输出</text>
+            <text class="detail-value">{{results.selectedPowerResult}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'selectedPowerWResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功放实际输出', searchKeyword, results.selectedPowerWResult)}}" bindtap="toggleHighlight" data-param="selectedPowerWResult">
+            <text class="detail-label">功放实际输出</text>
+            <text class="detail-value">{{results.selectedPowerWResult}} W</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'paRecommendationdBResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功放建议功率', searchKeyword, results.paRecommendationdBResult)}}" bindtap="toggleHighlight" data-param="paRecommendationdBResult">
+            <text class="detail-label">功放建议功率</text>
+            <text class="detail-value">{{results.paRecommendationdBResult}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'paRecommendation') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功放建议功率', searchKeyword, results.paRecommendation)}}" bindtap="toggleHighlight" data-param="paRecommendation">
+            <text class="detail-label">功放建议功率</text>
+            <text class="detail-value">{{results.paRecommendation}} W</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'UPCmarginResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('UPC', searchKeyword, results.UPCmarginResult)}}" bindtap="toggleHighlight" data-param="UPCmarginResult">
+            <text class="detail-label">UPC</text>
+            <text class="detail-value">{{results.UPCmarginResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'PFDcResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('到达卫星的通量密度', searchKeyword, results.PFDcResult)}}" bindtap="toggleHighlight" data-param="PFDcResult">
+            <text class="detail-label">到达卫星的通量密度</text>
+            <text class="detail-value">{{results.PFDcResult}} dBW/m²</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'eirpPerCarrier') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('每载波占卫星EIRP', searchKeyword, results.eirpPerCarrier)}}" bindtap="toggleHighlight" data-param="eirpPerCarrier">
+            <text class="detail-label">每载波占卫星EIRP(上行雨)</text>
+            <text class="detail-value">{{results.eirpPerCarrier}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkPowerRatioResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行雨天功率占比', searchKeyword, results.uplinkPowerRatioResult)}}" bindtap="toggleHighlight" data-param="uplinkPowerRatioResult">
+            <text class="detail-label">上行雨天功率占比</text>
+            <text class="detail-value">{{results.uplinkPowerRatioResult}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkPowerRatioResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行雨天功率占比', searchKeyword, results.downlinkPowerRatioResult)}}" bindtap="toggleHighlight" data-param="downlinkPowerRatioResult">
+            <text class="detail-label">下行雨天功率占比</text>
+            <text class="detail-value">{{results.downlinkPowerRatioResult}}%</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkComponentResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行雨卫星总C/T', searchKeyword, results.downlinkComponentResult)}}" bindtap="toggleHighlight" data-param="downlinkComponentResult">
+            <text class="detail-label">下行雨卫星总C/T</text>
+            <text class="detail-value">{{results.downlinkComponentResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'RXtransponderCapacityResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('转发器回退', searchKeyword, results.RXtransponderCapacityResult)}}" bindtap="toggleHighlight" data-param="RXtransponderCapacityResult">
+            <text class="detail-label">转发器回退-下行雨</text>
+            <text class="detail-value">{{results.RXtransponderCapacityResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'RXeirpPerCarrierResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('每载波占卫星EIRP', searchKeyword, results.RXeirpPerCarrierResult)}}" bindtap="toggleHighlight" data-param="RXeirpPerCarrierResult">
+            <text class="detail-label">每载波占卫星EIRP(下行雨)</text>
+            <text class="detail-value">{{results.RXeirpPerCarrierResult}} dBW</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'transponderBackoffResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('转发器回退', searchKeyword, results.transponderBackoffResult)}}" bindtap="toggleHighlight" data-param="transponderBackoffResult">
+            <text class="detail-label">转发器回退-上行雨</text>
+            <text class="detail-value">{{results.transponderBackoffResult}} dB</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 底部间距 -->
+    <view style="height: 40rpx;"></view>
+  </scroll-view>
+</view>

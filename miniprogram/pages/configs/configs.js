@@ -185,14 +185,14 @@ Page({
   // 初始化导航栏参数
   initNavBarParams() {
     try {
-      const systemInfo = wx.getSystemInfoSync();
+      const windowInfo = wx.getWindowInfo();
       const menuButton = wx.getMenuButtonBoundingClientRect();
       
       // 计算导航栏位置
-      const statusBarHeight = systemInfo.statusBarHeight || 20;
+      const statusBarHeight = windowInfo.statusBarHeight || 20;
       const navBarTop = menuButton.top;
       const navBarHeight = menuButton.height;
-      const navBarRight = systemInfo.windowWidth - menuButton.right + menuButton.width + 16;
+      const navBarRight = windowInfo.windowWidth - menuButton.right + menuButton.width + 16;
       const contentPaddingTop = menuButton.bottom + 16;
       
       this.setData({

@@ -160,22 +160,8 @@ Page({
     // 计算结果
     results: {},
     
-    // 标记参数 - 默认标记链路计算结果的前12项
-    markedParams: [
-      'bandwidthUsageRatio',
-      'powerUsageRatio',
-      'allocBandwidthResult',
-      'PowerBWResult',
-      'selectedPowerResult',
-      'selectedPowerWResult',
-      'paRecommendationdBResult',
-      'paRecommendation',
-      'UPCmarginResult',
-      'stationEIRPResult',
-      'PFDcResult',
-      'stationPSDResult',
-      'satellitePSDResult'
-    ],
+    // 标记参数 - 默认无高亮，用户可手动标记
+    markedParams: [],
     
     // 实时计算结果
     realtimeParams: {
@@ -204,13 +190,14 @@ Page({
     // 获取胶囊按钮位置信息，用于对齐悬浮按钮
     try {
       const menuButtonInfo = wx.getMenuButtonBoundingClientRect();
-      const systemInfo = wx.getSystemInfoSync();
+      const windowInfo = wx.getWindowInfo();
+      const deviceInfo = wx.getDeviceInfo();
       
       this.setData({
         navBarTop: menuButtonInfo.top,
         navBarHeight: menuButtonInfo.height,
-        navBarRight: systemInfo.windowWidth - menuButtonInfo.right,
-        isNotIOS: systemInfo.platform !== 'ios'
+        navBarRight: windowInfo.windowWidth - menuButtonInfo.right,
+        isNotIOS: deviceInfo.platform !== 'ios'
       });
     } catch (e) {
       console.error('获取胶囊按钮位置失败:', e);
@@ -270,8 +257,8 @@ Page({
     this._focusingInput = false;
     this._scrollCounter = 0; // 用于确保scroll-top每次值不同以触发滚动
     try {
-      const sysInfo = wx.getSystemInfoSync();
-      this._windowHeight = sysInfo.windowHeight;
+      const windowInfo = wx.getWindowInfo();
+      this._windowHeight = windowInfo.windowHeight;
     } catch (e) {
       this._windowHeight = 667;
     }
@@ -1630,6 +1617,14 @@ Page({
     });
   },
 
+  // 跳转到详细计算结果页面
+  goToResultsDetail() {
+    if (!this.data.hasResults) return;
+    wx.navigateTo({
+      url: '/pages/results-detail/results-detail'
+    });
+  },
+
   // 跳转到卫星覆盖图页面
   goToCoverageMap() {
     this.setData({ showVisualPopup: false });
@@ -2060,7 +2055,7 @@ Page({
   // 分享给好友
   onShareAppMessage() {
     return {
-      title: '卫星链路计算器 - 专业的卫星通信链路预算工具',
+      title: '地球静止轨道卫星链路计算工具',
       path: '/pages/index/index',
       imageUrl: '' // 可选，可以设置分享图片
     };
@@ -2069,7 +2064,7 @@ Page({
   // 分享到朋友圈
   onShareTimeline() {
     return {
-      title: '卫星链路计算器 - 专业的卫星通信链路预算工具',
+      title: '地球静止轨道卫星链路计算工具',
       query: '',
       imageUrl: '' // 可选，可以设置分享图片
     };

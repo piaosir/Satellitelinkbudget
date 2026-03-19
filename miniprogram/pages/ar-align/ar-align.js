@@ -88,17 +88,18 @@ Page({
 
   onLoad() {
     // 获取屏幕尺寸和系统信息
-    const systemInfo = wx.getSystemInfoSync();
+    const windowInfo = wx.getWindowInfo();
+    const deviceInfo = wx.getDeviceInfo();
     console.log('系统信息:', {
-      platform: systemInfo.platform,
-      system: systemInfo.system,
-      model: systemInfo.model
+      platform: deviceInfo.platform,
+      system: deviceInfo.system,
+      model: deviceInfo.model
     });
     
     this.setData({
-      screenWidth: systemInfo.windowWidth,
-      screenHeight: systemInfo.windowHeight,
-      platform: systemInfo.platform // 保存平台信息用于后续判断
+      screenWidth: windowInfo.windowWidth,
+      screenHeight: windowInfo.windowHeight,
+      platform: deviceInfo.platform // 保存平台信息用于后续判断
     });
   },
 

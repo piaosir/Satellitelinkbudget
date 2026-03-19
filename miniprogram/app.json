@@ -5,14 +5,12 @@
     "pages/configs/configs",
     "pages/settings/settings",
     "pages/ar-align/ar-align",
-    "pages/satellite-coverage/satellite-coverage"
+    "pages/satellite-coverage/satellite-coverage",
+    "pages/results-detail/results-detail"
   ],
   "permission": {
     "scope.userLocation": {
       "desc": "用于AR对星辅助功能，计算卫星方位角"
-    },
-    "scope.camera": {
-      "desc": "用于AR对星辅助功能，实现增强现实对星"
     }
   },
   "requiredPrivateInfos": [
