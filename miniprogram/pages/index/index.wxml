@@ -94,7 +94,7 @@
                type="text"
                placeholder="3.00" 
                value="{{marginValue}}"
-               adjust-position="{{false}}"
+               adjust-position="{{isNotIOS}}"
                hold-keyboard="{{true}}"
                bindinput="onMarginInput" bindfocus="onMarginInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         <text class="margin-popup-unit">dB</text>
@@ -115,10 +115,10 @@
       <view class="margin-popup-row">
         <text class="margin-popup-label">功放功率</text>
         <input class="margin-popup-input" 
-               type="digit"
+               type="text"
                placeholder="400" 
                value="{{inputPaPower}}"
-               adjust-position="{{false}}"
+               adjust-position="{{isNotIOS}}"
                hold-keyboard="{{true}}"
                bindinput="onPaPowerInput" bindfocus="onMarginInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         <text class="margin-popup-unit">W</text>
@@ -201,7 +201,7 @@
       <input class="editing-config-input" 
              value="{{editingConfigName}}" 
              placeholder="配置名称"
-             adjust-position="{{false}}"
+             adjust-position="{{isNotIOS}}"
              hold-keyboard="{{true}}"
              bindinput="onEditingConfigNameChange"
              bindfocus="onMarginInputFocus"
@@ -249,7 +249,7 @@
                  placeholder="请输入" 
                  value="{{satelliteParams.satelliteName}}"
                  data-field="satelliteName"
-                 adjust-position="{{false}}"
+                 adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
@@ -260,7 +260,7 @@
                  placeholder="110.5" 
                  value="{{satelliteParams.orbitPosition}}"
                  data-field="orbitPosition"
-                 adjust-position="{{false}}"
+                 adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
       </view>
@@ -288,7 +288,7 @@
                  placeholder="-84" 
                  value="{{satelliteParams.sfdRef}}"
                  data-field="sfdRef"
-                 adjust-position="{{false}}"
+                 adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
@@ -299,7 +299,7 @@
                  placeholder="36" 
                  value="{{satelliteParams.transponderBandwidth}}"
                  data-field="transponderBandwidth"
-                 adjust-position="{{false}}"
+                 adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
@@ -310,7 +310,7 @@
                  placeholder="6" 
                  value="{{satelliteParams.BOi}}"
                  data-field="BOi"
-                 adjust-position="{{false}}"
+                 adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
       </view>
@@ -325,18 +325,18 @@
                    placeholder="3" 
                    value="{{satelliteParams.BOo}}"
                    data-field="BOo"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
 
           <view class="form-group">
             <text class="form-label">邻星离轴角(°)</text>
             <input class="form-input" 
-                   type="digit"
+                   type="text"
                    placeholder="0" 
                    value="{{satelliteParams.deltaTheta}}"
                    data-field="deltaTheta"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
 
@@ -347,7 +347,7 @@
                    placeholder="25" 
                    value="{{satelliteParams.adjUplinkFactor}}"
                    data-field="adjUplinkFactor"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
 
@@ -358,7 +358,7 @@
                    placeholder="25" 
                    value="{{satelliteParams.adjDownlinkFactor}}"
                    data-field="adjDownlinkFactor"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
         </view>
@@ -371,7 +371,7 @@
                    placeholder="30" 
                    value="{{satelliteParams.xpolUplinkFactor}}"
                    data-field="xpolUplinkFactor"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
 
@@ -382,7 +382,7 @@
                    placeholder="30" 
                    value="{{satelliteParams.xpolDownlinkFactor}}"
                    data-field="xpolDownlinkFactor"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
 
@@ -393,7 +393,7 @@
                    placeholder="22" 
                    value="{{satelliteParams.intermodFactor}}"
                    data-field="intermodFactor"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
 
@@ -431,7 +431,7 @@
                      placeholder="" 
                      value="{{linkParams.earthStationLocation}}"
                      data-field="earthStationLocation"
-                     adjust-position="{{false}}"
+                     adjust-position="{{isNotIOS ? '' : false}}"
                      bindinput="onCityInput"
                      bindconfirm="onCityConfirm"
                      data-type="uplink" />
@@ -461,7 +461,7 @@
                    placeholder="116.4" 
                    value="{{linkParams.longitude}}"
                    data-field="longitude"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange"
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
@@ -472,7 +472,7 @@
                    placeholder="39.9" 
                    value="{{linkParams.latitude}}"
                    data-field="latitude"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange"
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
@@ -487,17 +487,17 @@
                    placeholder="6.2" 
                    value="{{linkParams.antennaDiameter}}"
                    data-field="antennaDiameter"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
             <text class="form-label">天线效率(%)</text>
             <input class="form-input" 
-                   type="digit"
+                   type="text"
                    placeholder="65" 
                    value="{{linkParams.antennaEfficiency}}"
                    data-field="antennaEfficiency"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
         </view>
@@ -507,11 +507,11 @@
           <view class="station-form-group">
             <text class="form-label">上行中心频率(GHz)</text>
             <input class="form-input" 
-                   type="digit"
+                   type="text"
                    placeholder="14.25" 
                    value="{{linkParams.centerFrequency}}"
                    data-field="centerFrequency"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
@@ -538,17 +538,21 @@
                    placeholder="2.0" 
                    value="{{linkParams.G_Ts}}"
                    data-field="G_Ts"
-                   adjust-position="{{false}}"
+                   data-focus-area="station"
+                   adjust-position="{{true}}"
+                   cursor-spacing="120"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
             <text class="form-label">可用度(%)</text>
             <input class="form-input" 
-                   type="digit"
+                   type="text"
                    placeholder="99.90" 
                    value="{{linkParams.uplinkAvailability}}"
                    data-field="uplinkAvailability"
-                   adjust-position="{{false}}"
+                   data-focus-area="station"
+                   adjust-position="{{true}}"
+                   cursor-spacing="120"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
         </view>
@@ -563,7 +567,9 @@
                      placeholder="0" 
                      value="{{linkParams.altitude}}"
                      data-field="altitude"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
@@ -573,7 +579,9 @@
                      placeholder="40" 
                      value="{{linkParams.rainRate}}"
                      data-field="rainRate"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
           </view>
@@ -586,7 +594,9 @@
                      placeholder="5" 
                      value="{{linkParams.paBackoff}}"
                      data-field="paBackoff"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
@@ -596,7 +606,9 @@
                      placeholder="3.5" 
                      value="{{linkParams.feederLoss}}"
                      data-field="feederLoss"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
           </view>
@@ -622,7 +634,9 @@
                      placeholder="3.0" 
                      value="{{linkParams.upcValue}}"
                      data-field="upcValue"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
           </view>
@@ -665,7 +679,7 @@
                      placeholder="" 
                      value="{{linkParams.rxEarthStationLocation}}"
                      data-field="rxEarthStationLocation"
-                     adjust-position="{{false}}"
+                     adjust-position="{{isNotIOS ? '' : false}}"
                      bindinput="onCityInput"
                      bindconfirm="onCityConfirm"
                      data-type="downlink" />
@@ -695,7 +709,7 @@
                    placeholder="116.4" 
                    value="{{linkParams.rxLongitude}}"
                    data-field="rxLongitude"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange"
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
@@ -706,7 +720,7 @@
                    placeholder="39.9" 
                    value="{{linkParams.rxLatitude}}"
                    data-field="rxLatitude"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange"
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
@@ -721,17 +735,17 @@
                    placeholder="3.7" 
                    value="{{linkParams.rxAntennaDiameter}}"
                    data-field="rxAntennaDiameter"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
             <text class="form-label">天线效率(%)</text>
             <input class="form-input" 
-                   type="digit"
+                   type="text"
                    placeholder="65" 
                    value="{{linkParams.rxAntennaEfficiency}}"
                    data-field="rxAntennaEfficiency"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
         </view>
@@ -741,11 +755,11 @@
           <view class="station-form-group">
             <text class="form-label">下行中心频率(GHz)</text>
             <input class="form-input" 
-                   type="digit"
+                   type="text"
                    placeholder="12.5" 
                    value="{{linkParams.rxCenterFrequency}}"
                    data-field="rxCenterFrequency"
-                   adjust-position="{{false}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
@@ -772,17 +786,21 @@
                    placeholder="46.0" 
                    value="{{linkParams.rxEIRP}}"
                    data-field="rxEIRP"
-                   adjust-position="{{false}}"
+                   data-focus-area="station"
+                   adjust-position="{{true}}"
+                   cursor-spacing="120"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
             <text class="form-label">可用度(%)</text>
             <input class="form-input" 
-                   type="digit"
+                   type="text"
                    placeholder="99.90" 
                    value="{{linkParams.rxDownlinkAvailability}}"
                    data-field="rxDownlinkAvailability"
-                   adjust-position="{{false}}"
+                   data-focus-area="station"
+                   adjust-position="{{true}}"
+                   cursor-spacing="120"
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
         </view>
@@ -797,7 +815,9 @@
                      placeholder="0" 
                      value="{{linkParams.rxAltitude}}"
                      data-field="rxAltitude"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
@@ -807,7 +827,9 @@
                      placeholder="40" 
                      value="{{linkParams.rxRainRate}}"
                      data-field="rxRainRate"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
           </view>
@@ -820,7 +842,9 @@
                      placeholder="35" 
                      value="{{linkParams.rxAntennaNoiseTemp}}"
                      data-field="rxAntennaNoiseTemp"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
@@ -830,7 +854,9 @@
                      placeholder="75" 
                      value="{{linkParams.rxReceiverNoiseTemp}}"
                      data-field="rxReceiverNoiseTemp"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
           </view>
@@ -843,7 +869,9 @@
                      placeholder="0.2" 
                      value="{{linkParams.rxFeederLoss}}"
                      data-field="rxFeederLoss"
-                     adjust-position="{{false}}"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
@@ -874,11 +902,13 @@
         <view class="form-group">
           <text class="form-label">信息速率(kbps)</text>
           <input class="form-input" 
-                 type="digit"
+                 type="text"
                  placeholder="2048" 
                  value="{{linkParams.infoRate}}"
                  data-field="infoRate"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
@@ -903,7 +933,9 @@
                  placeholder="3/4" 
                  value="{{linkParams.fec}}"
                  data-field="fec"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onFecInput" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
@@ -917,7 +949,9 @@
                  placeholder="5.50" 
                  value="{{linkParams.ebno}}"
                  data-field="ebno"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
       </view>
@@ -931,7 +965,9 @@
                  placeholder="188/204" 
                  value="{{linkParams.rsCode}}"
                  data-field="rsCode"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onRsCodeInput" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
@@ -942,29 +978,35 @@
                  placeholder="7" 
                  value="{{linkParams.ber}}"
                  data-field="ber"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
         <view class="form-group">
           <text class="form-label">扩频增益</text>
           <input class="form-input" 
-                 type="digit"
+                 type="text"
                  placeholder="1.00" 
                  value="{{linkParams.m}}"
                  data-field="m"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
         <view class="form-group">
           <text class="form-label">滚降系数(1+α)</text>
           <input class="form-input" 
-                 type="digit"
+                 type="text"
                  placeholder="1.20" 
                  value="{{linkParams.bandwidthFactor}}"
                  data-field="bandwidthFactor"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
       </view>
@@ -978,10 +1020,12 @@
         <view class="station-result-item station-result-editable">
           <text class="station-result-label">符号率</text>
           <input class="station-result-input" 
-                 type="digit"
+                 type="text"
                  placeholder="--" 
                  value="{{realtimeParams.symbolRate}}"
-                 adjust-position="{{false}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
                  bindinput="onSymbolRateInput"
                  bindblur="onSymbolRateBlur"
                  bindfocus="onInputFocus"

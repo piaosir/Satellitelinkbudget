@@ -255,6 +255,7 @@ Page({
     this._currentScrollTop = 0;
     this._lastTouchY = 0;
     this._focusingInput = false;
+    this._useSystemFocusAdjust = false;
     this._scrollCounter = 0; // 用于确保scroll-top每次值不同以触发滚动
     try {
       const windowInfo = wx.getWindowInfo();
@@ -266,7 +267,7 @@ Page({
     this._kbCallback = (res) => {
       const prevHeight = this._keyboardHeight;
       this._keyboardHeight = res.height;
-      if (res.height > 0 && this._focusingInput) {
+      if (res.height > 0 && this._focusingInput && !this._useSystemFocusAdjust) {
         // 键盘刚弹出，执行平滑滚动
         this._adjustScrollForKeyboard();
       }
@@ -290,6 +291,13 @@ Page({
   // scroll-view滚动事件：记录滚动位置（替代onPageScroll）
   onContentScroll(e) {
     this._currentScrollTop = e.detail.scrollTop;
+    // 安卓：用户手动滚动时收起键盘，防止原生input覆盖层脱离scroll-view位置
+    if (this.data.isNotIOS && this._keyboardHeight > 0) {
+      // 排除编程式滚动（聚焦输入框时的自动定位滚动）
+      if (!this._programmaticScrollUntil || Date.now() > this._programmaticScrollUntil) {
+        wx.hideKeyboard();
+      }
+    }
   },
 
   // 检查是否有分享码需要跳转到配置页面
@@ -636,6 +644,16 @@ Page({
   // 输入框聚焦时全选内容 + 键盘滚动管理
   onInputFocus(e) {
     this.setData({ inputSelectAll: true });
+    const focusArea = e && e.currentTarget && e.currentTarget.dataset
+      ? e.currentTarget.dataset.focusArea
+      : '';
+    this._useSystemFocusAdjust = focusArea === 'carrier' || focusArea === 'station';
+
+    if (this._useSystemFocusAdjust) {
+      this._focusingInput = false;
+      return;
+    }
+
     this._focusingInput = true;
 
     // 如果键盘已经弹出（切换输入框），直接调整滚动
@@ -682,6 +700,8 @@ Page({
   // 通过scroll-view的scroll-top属性实现编程式滚动
   // 每次设置不同的值以确保scroll-view响应（相同值不会触发滚动）
   _scrollTo(scrollTop) {
+    // 标记编程式滚动时间窗口，防止onContentScroll误收键盘
+    this._programmaticScrollUntil = Date.now() + 400;
     this._scrollCounter++;
     this.setData({
       contentScrollTop: scrollTop + this._scrollCounter * 0.001

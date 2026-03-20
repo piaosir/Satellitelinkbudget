@@ -268,7 +268,7 @@ Page({
         color: satelliteTextColor,
         fontSize: 10,
         borderRadius: 3,
-        bgColor: 'rgba(255,255,255,0)',
+        bgColor: '#00000000',
         padding: 4,
         display: 'BYCLICK'  // 点击时显示
       }
@@ -985,7 +985,7 @@ Page({
           color: satelliteTextColor,
           fontSize: 10,
           borderRadius: 3,
-          bgColor: 'rgba(255,255,255,0)',
+          bgColor: '#00000000',
           padding: 4,
           display: 'BYCLICK'
         }
@@ -3234,7 +3234,7 @@ Page({
         color: textColor,
         fontSize: 10,
         borderRadius: 3,
-        bgColor: 'rgba(255,255,255,0)',
+        bgColor: '#00000000',
         padding: 4,
         display: 'ALWAYS'
       }
@@ -3377,8 +3377,13 @@ Page({
             const sw = region.southwest;
             const ne = region.northeast;
             
-            // 根据相对位置计算经纬度
-            const latitude = ne.latitude - relY * (ne.latitude - sw.latitude);
+            // 使用Mercator投影修正纬度计算（地图使用Web Mercator投影，纬度在屏幕上非线性分布）
+            const latToMercY = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
+            const mercYToLat = (y) => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
+            const swMercY = latToMercY(sw.latitude);
+            const neMercY = latToMercY(ne.latitude);
+            const mercY = neMercY - relY * (neMercY - swMercY);
+            const latitude = mercYToLat(mercY);
             const longitude = sw.longitude + relX * (ne.longitude - sw.longitude);
             
             // 添加标记
@@ -3436,7 +3441,7 @@ Page({
         color: textColor,
         fontSize: 10,
         borderRadius: 3,
-        bgColor: 'rgba(255,255,255,0)',
+        bgColor: '#00000000',
         padding: 4,
         display: 'ALWAYS'
       }
