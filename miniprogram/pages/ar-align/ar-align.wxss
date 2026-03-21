@@ -329,11 +329,7 @@
   transform: translateZ(0); /* 启用硬件加速 */
   backface-visibility: hidden; /* 隐藏背面，提升性能 */
   
-  /* 轻微的平滑过渡，不影响准确性 */
-  transition: left 0.05s ease-out, top 0.05s ease-out;
-  
-  /* 减少浮动动画幅度 */
-  animation: satelliteFloat 4s ease-in-out infinite;
+  /* AR模式不加过渡延迟，确保图标锚定在真实世界位置 */
 }
 
 .satellite-image {

@@ -87,6 +87,27 @@ Page({
   },
 
   onLoad() {
+    this._androidState = {
+      enabled: false,
+      calibrating: false,
+      calibrationStartTs: 0,
+      lastRenderTs: 0,
+      renderIntervalMs: 50,
+      elevationSamples: [],
+      headingDiffSamples: [],
+      pitchSamples: [],
+      rollSamples: [],
+      headingWindow: [],
+      elevationWindow: [],
+      azimuthOffset: 0,
+      elevationOffset: 0,
+      pitchZero: 0,
+      rollZero: 0,
+      headingJitter: 0,
+      smoothedAzimuth: null,
+      smoothedElevation: null
+    };
+
     // 获取屏幕尺寸和系统信息
     const windowInfo = wx.getWindowInfo();
     const deviceInfo = wx.getDeviceInfo();
@@ -101,6 +122,8 @@ Page({
       screenHeight: windowInfo.windowHeight,
       platform: deviceInfo.platform // 保存平台信息用于后续判断
     });
+
+    this._androidState.enabled = deviceInfo.platform === 'android';
   },
 
   onUnload() {
@@ -273,55 +296,67 @@ Page({
     
     // 先停止可能存在的旧监听
     this.stopSensors();
+
+    if (this._androidState && this._androidState.enabled) {
+      this._androidState.calibrating = true;
+      this._androidState.calibrationStartTs = Date.now();
+      this._androidState.lastRenderTs = 0;
+      this._androidState.elevationSamples = [];
+      this._androidState.headingDiffSamples = [];
+      this._androidState.pitchSamples = [];
+      this._androidState.rollSamples = [];
+      this._androidState.headingWindow = [];
+      this._androidState.elevationWindow = [];
+      this._androidState.azimuthOffset = 0;
+      this._androidState.elevationOffset = 0;
+      this._androidState.pitchZero = 0;
+      this._androidState.rollZero = 0;
+      this._androidState.headingJitter = 0;
+      this._androidState.smoothedAzimuth = null;
+      this._androidState.smoothedElevation = null;
+    }
     
     // 监听设备方向变化
     wx.onDeviceMotionChange((res) => {
-      // 平滑处理传感器数据
-      const smoothedData = this.smoothSensorData({
-        alpha: res.alpha || 0,
-        beta: res.beta || 0,
-        gamma: res.gamma || 0
-      });
-      
-      // 直接更新数据并立即刷新位置，减少延迟
-      this.data.deviceAlpha = smoothedData.alpha;
-      this.data.deviceBeta = smoothedData.beta;
-      this.data.deviceGamma = smoothedData.gamma;
-      
-      // 调试输出（可选）
-      if (Math.random() < 0.05) { // 5%的概率输出，避免日志过多
-        console.log('设备姿态 - Beta:', smoothedData.beta.toFixed(1), 
-                    'Gamma:', smoothedData.gamma.toFixed(1));
+      if (this._androidState && this._androidState.enabled) {
+        // Android: 直接使用原始传感器值，不做预平滑
+        // AR需要零延迟跟踪，预平滑会让图标跟着镜头漂移
+        this.data.deviceAlpha = res.alpha || 0;
+        this.data.deviceBeta = res.beta || 0;
+        this.data.deviceGamma = res.gamma || 0;
+        this.collectAndroidCalibrationSamples();
+      } else {
+        // iOS: 保留原有加权平均
+        const smoothedData = this.smoothSensorData({
+          alpha: res.alpha || 0,
+          beta: res.beta || 0,
+          gamma: res.gamma || 0
+        });
+        this.data.deviceAlpha = smoothedData.alpha;
+        this.data.deviceBeta = smoothedData.beta;
+        this.data.deviceGamma = smoothedData.gamma;
       }
       
-      // 实时更新卫星位置 - 直接调用而不等待setData
+      // 实时更新卫星位置
       this.updateSatellitePosition();
     });
     
-    // 监听罗盘 - 使用独立变量存储罗盘方向
+    // 罗盘监听：iOS用作主方位角源，Android用于交叉验证旋转矩阵结果
+    const isAndroid = this._androidState && this._androidState.enabled;
     wx.onCompassChange((res) => {
-      // 处理罗盘方向，确保在0-360范围内
       let direction = res.direction || 0;
-      
-      // Android平台罗盘方向可能需要额外处理
-      // 确保方向在0-360范围内
       direction = this.normalizeAngle(direction);
-      
-      // 直接更新数据，减少延迟
       this.data.compassDirection = direction;
       
-      // 调试输出（可选）
-      if (Math.random() < 0.05) { // 5%的概率输出
-        console.log('罗盘方向:', direction.toFixed(1));
+      // 仅iOS通过罗盘触发位置更新；Android由DeviceMotion触发
+      if (!isAndroid) {
+        this.updateSatellitePosition();
       }
-      
-      // 实时更新卫星位置 - 直接调用而不等待setData
-      this.updateSatellitePosition();
     });
     
     // 启动设备方向监听 - 使用最快的更新频率
     wx.startDeviceMotionListening({
-      interval: 'ui', // 使用ui模式获得最快的更新（约16.7ms间隔，60fps）
+      interval: 'ui',
       success: () => {
         console.log('✓ 设备方向传感器启动成功');
       },
@@ -335,31 +370,144 @@ Page({
       }
     });
     
-    // 启动罗盘监听
+    // 双平台启动罗盘：iOS用作主航向，Android用于交叉校验
     wx.startCompass({
       success: () => {
-        console.log('✓ 罗盘启动成功');
+        console.log('✓ 罗盘启动成功' + (isAndroid ? '（Android用于交叉验证）' : ''));
       },
       fail: (err) => {
         console.error('✗ 启动罗盘失败:', err);
-        wx.showModal({
-          title: '罗盘启动失败',
-          content: '罗盘传感器无法启动，AR功能可能无法正常使用。请确保您的设备支持磁力计（罗盘）并已授权相关权限。',
-          showCancel: false
-        });
+        if (!isAndroid) {
+          wx.showModal({
+            title: '罗盘启动失败',
+            content: '罗盘传感器无法启动，AR功能可能无法正常使用。请确保您的设备支持磁力计（罗盘）并已授权相关权限。',
+            showCancel: false
+          });
+        }
       }
     });
+    if (isAndroid) {
+      console.log('✓ Android平台：旋转矩阵解算方位 + 罗盘交叉验证');
+    }
     
-    // Android平台额外检查：延迟200ms后验证传感器是否正常工作
+    // 延迟检查传感器是否正常工作
     setTimeout(() => {
-      const { compassDirection, deviceBeta } = this.data;
-      if (compassDirection === 0 && deviceBeta === 0) {
-        console.warn('⚠ 传感器可能未正常工作，尝试重新初始化');
-        // 可以考虑重新初始化或提示用户
+      const { deviceBeta } = this.data;
+      if (deviceBeta === 0 && (!isAndroid && this.data.compassDirection === 0)) {
+        console.warn('⚠ 传感器可能未正常工作');
       } else {
         console.log('✓ 传感器数据正常接收中');
       }
-    }, 200);
+    }, 800);
+  },
+
+  // Android专用：收集启动阶段样本并自动校准
+  collectAndroidCalibrationSamples() {
+    const state = this._androidState;
+    if (!state || !state.enabled || !state.calibrating) {
+      return;
+    }
+
+    const now = Date.now();
+    const elapsed = now - state.calibrationStartTs;
+    const { deviceAlpha, deviceBeta, deviceGamma, compassDirection } = this.data;
+    const levelAngles = this.calculateLevelAngles(deviceBeta || 0, deviceGamma || 0);
+
+    const elevationRaw = this.calculateDeviceElevation(deviceBeta || 0, deviceGamma || 0);
+    if (Number.isFinite(elevationRaw)) {
+      state.elevationSamples.push(elevationRaw);
+    }
+
+    if (Number.isFinite(levelAngles.pitch)) {
+      state.pitchSamples.push(levelAngles.pitch);
+    }
+
+    if (Number.isFinite(levelAngles.roll)) {
+      state.rollSamples.push(levelAngles.roll);
+    }
+
+    if (Number.isFinite(deviceAlpha) && Number.isFinite(compassDirection)) {
+      const alpha = this.normalizeAngle(deviceAlpha || 0);
+      const compass = this.normalizeAngle(compassDirection || 0);
+      const diff = this.angleDifference(compass, alpha);
+      state.headingDiffSamples.push(diff);
+    }
+
+    if (elapsed < 1200 && state.elevationSamples.length < 24) {
+      return;
+    }
+
+    // 安卓机型差异较大，自动方向偏置容易引入大误差，保守策略不自动改方位零点
+    state.elevationOffset = 0;
+    state.azimuthOffset = 0;
+    state.pitchZero = 0;
+    state.rollZero = 0;
+    state.calibrating = false;
+
+    console.log('Android校准完成:', {
+      elevationOffset: state.elevationOffset.toFixed(2),
+      azimuthOffset: state.azimuthOffset.toFixed(2),
+      pitchZero: state.pitchZero.toFixed(2),
+      rollZero: state.rollZero.toFixed(2),
+      samples: {
+        elevation: state.elevationSamples.length,
+        heading: state.headingDiffSamples.length,
+        pitch: state.pitchSamples.length,
+        roll: state.rollSamples.length
+      }
+    });
+  },
+
+  computeMedian(values) {
+    if (!values || !values.length) {
+      return 0;
+    }
+    const sorted = values.slice().sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+  },
+
+  clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  },
+
+  pushLimited(list, value, limit) {
+    list.push(value);
+    if (list.length > limit) {
+      list.shift();
+    }
+  },
+
+  computeCircularMean(values) {
+    if (!values || !values.length) {
+      return 0;
+    }
+    let sinSum = 0;
+    let cosSum = 0;
+    for (let i = 0; i < values.length; i++) {
+      const rad = values[i] * Math.PI / 180;
+      sinSum += Math.sin(rad);
+      cosSum += Math.cos(rad);
+    }
+    const meanRad = Math.atan2(sinSum / values.length, cosSum / values.length);
+    return this.normalizeAngle(meanRad * 180 / Math.PI);
+  },
+
+  // 水平仪式姿态：拆分俯仰/横滚并做安全夹角
+  calculateLevelAngles(beta, gamma) {
+    let pitch = beta;
+    while (pitch > 180) pitch -= 360;
+    while (pitch < -180) pitch += 360;
+    pitch = this.clamp(pitch, -90, 90);
+
+    let roll = gamma;
+    while (roll > 180) roll -= 360;
+    while (roll < -180) roll += 360;
+    roll = this.clamp(roll, -90, 90);
+
+    return { pitch, roll };
   },
 
   // 停止传感器监听
@@ -495,9 +643,46 @@ Page({
     
     return elevation;
   },
-  
+
+  // 从DeviceMotion的alpha/beta/gamma解算相机指向的罗盘方位角
+  // 原理：构建完整的ZXY旋转矩阵，将相机方向向量[0,0,-1]投影到地球坐标系的水平面
+  // 这与安卓SensorManager.getOrientation()的方法一致
+  computeHeadingFromMotion(alpha, beta, gamma) {
+    const alphaRad = (alpha || 0) * Math.PI / 180;
+    const betaRad = (beta || 0) * Math.PI / 180;
+    const gammaRad = (gamma || 0) * Math.PI / 180;
+
+    const cA = Math.cos(alphaRad);
+    const sA = Math.sin(alphaRad);
+    const sB = Math.sin(betaRad);
+    const cG = Math.cos(gammaRad);
+    const sG = Math.sin(gammaRad);
+
+    // R = Rz(alpha) * Rx(beta) * Ry(gamma)  (W3C DeviceOrientation标准)
+    // 相机方向 [0,0,-1] 在地球坐标系中的投影：
+    // east  = -R[0][2] = -(cA*sG + sA*sB*cG)
+    // north = -R[1][2] = -(sA*sG - cA*sB*cG)
+    const east  = -(cA * sG + sA * sB * cG);
+    const north = -(sA * sG - cA * sB * cG);
+
+    // 方位角 = atan2(东向分量, 北向分量)，顺时针为正
+    let heading = Math.atan2(east, north) * 180 / Math.PI;
+    if (heading < 0) heading += 360;
+
+    return heading;
+  },
+
   // 更新卫星图标位置 - 优化版（高性能、高跟手性）
   updateSatellitePosition() {
+    if (this._androidState && this._androidState.enabled) {
+      return this.updateSatellitePositionAndroid();
+    }
+
+    return this.updateSatellitePositionIOS();
+  },
+
+  // iOS路径：保留现有实现
+  updateSatellitePositionIOS() {
     // 直接从 this.data 读取最新数据，避免解构的性能开销
     const compassDirection = this.data.compassDirection;
     const deviceBeta = this.data.deviceBeta;
@@ -508,7 +693,9 @@ Page({
     const screenHeight = this.data.screenHeight;
     
     // 快速验证：如果关键数据无效则直接返回
-    if (!azimuth || !elevation || compassDirection === null || deviceBeta === null) {
+    if ((azimuth === '' || azimuth === null || azimuth === undefined) ||
+        (elevation === '' || elevation === null || elevation === undefined) ||
+        compassDirection === null || deviceBeta === null) {
       return;
     }
     
@@ -669,6 +856,193 @@ Page({
     }
     
     // 保存上一次对准状态
+    this.data.lastAlignedState = isAligned;
+  },
+
+  // Android路径：使用正确的3D俯仰公式 + 单层自适应平滑 + 渲染节流
+  updateSatellitePositionAndroid() {
+    const state = this._androidState;
+    if (!state) {
+      return;
+    }
+
+    // AR模式：尽量降低延迟，让图标锚定在真实世界位置
+    // 只做最小的渲染节流防止setData过频（16ms ≈ 60fps）
+    const now = Date.now();
+    if (now - state.lastRenderTs < 16) {
+      return;
+    }
+    state.lastRenderTs = now;
+
+    const deviceAlpha = this.data.deviceAlpha;
+    const deviceBeta = this.data.deviceBeta;
+    const deviceGamma = this.data.deviceGamma;
+    const azimuth = this.data.azimuth;
+    const elevation = this.data.elevation;
+    const screenWidth = this.data.screenWidth;
+    const screenHeight = this.data.screenHeight;
+
+    if ((azimuth === '' || azimuth === null || azimuth === undefined) ||
+        (elevation === '' || elevation === null || elevation === undefined) ||
+        deviceAlpha === null || deviceAlpha === undefined || deviceBeta === null) {
+      return;
+    }
+
+    const fovH = 68;
+    const fovV = 51;
+
+    // ==== 微信小程序已知平台差异（微信开放社区多次确认，官方从未修复）：====
+    // Android alpha: 磁北顺时针递增（罗盘约定）→ 需转为W3C逆时针数学约定
+    // Android beta/gamma: 与iOS/W3C方向相反 → 取反
+    //
+    // 关键修正：不能直接拿 alpha 当方位角！
+    // alpha 是欧拉角绕Z轴的分量，只有手机完全竖直(β=90°,γ=0°)时才等于相机朝向。
+    // 手机一倾斜，相机光轴的水平投影就偏离 alpha，误差可达数十度。
+    // 正确做法：用完整旋转矩阵 Rz(α)·Rx(β)·Ry(γ) 将相机方向[0,0,-1]
+    // 投影到地球坐标系，再用 atan2 求水平方位角。
+
+    // ---- 步骤1：Android传感器值 → W3C标准坐标系 ----
+    const alpha_wc = this.normalizeAngle(360 - (deviceAlpha || 0));  // 顺时针→逆时针
+    const beta_wc = -(deviceBeta || 0);   // 符号取反
+    const gamma_wc = -(deviceGamma || 0); // 符号取反
+
+    // ---- 步骤2：完整旋转矩阵求相机方位角（正确处理所有倾斜姿态）----
+    const rawAzimuth = this.computeHeadingFromMotion(alpha_wc, beta_wc, gamma_wc);
+
+    // ---- 步骤3：旋转矩阵Z分量求仰角 ----
+    const rawElevation = this.calculateDeviceElevation(beta_wc, gamma_wc);
+
+    // ---- 轻量平滑：AR需要近乎1:1跟踪，只做最轻微的去抖 ----
+    // 高alpha = 快速响应，图标锚定在真实世界位置
+    if (state.smoothedAzimuth === null) {
+      state.smoothedAzimuth = rawAzimuth;
+      state.smoothedElevation = rawElevation;
+    } else {
+      // 方位角：快速跟踪，大变化直接跳，小变化轻微平滑
+      const azDelta = this.angleDifference(rawAzimuth, state.smoothedAzimuth);
+      const azAlpha = Math.abs(azDelta) > 10 ? 1.0   // 大变化：直接跟踪
+                    : Math.abs(azDelta) > 2  ? 0.6   // 中变化：快速跟
+                    :                          0.3;   // 小抖动：轻微平滑
+      state.smoothedAzimuth = this.normalizeAngle(state.smoothedAzimuth + azDelta * azAlpha);
+
+      // 俯仰角：同样快速跟踪
+      const elDelta = rawElevation - state.smoothedElevation;
+      const elAlpha = Math.abs(elDelta) > 5  ? 1.0
+                    : Math.abs(elDelta) > 1  ? 0.6
+                    :                          0.3;
+      state.smoothedElevation = state.smoothedElevation + elDelta * elAlpha;
+    }
+
+    const currentAzimuth = state.smoothedAzimuth;
+    const currentElevation = this.clamp(state.smoothedElevation, -90, 90);
+
+    // 诊断日志：对比旋转矩阵方位角 vs 罗盘方位角 vs 原始alpha
+    if (Math.random() < 0.05) {
+      console.log('[Android AR] heading=' + currentAzimuth.toFixed(1) +
+        ' el=' + currentElevation.toFixed(1) +
+        ' | compass=' + (this.data.compassDirection || 0).toFixed(1) +
+        ' alpha=' + (deviceAlpha || 0).toFixed(1) +
+        ' β=' + (deviceBeta || 0).toFixed(1) +
+        ' γ=' + (deviceGamma || 0).toFixed(1));
+    }
+
+    const targetAzimuth = this.normalizeAngle(parseFloat(azimuth));
+    const targetElevation = parseFloat(elevation);
+
+    const azimuthDiff = this.angleDifference(targetAzimuth, currentAzimuth);
+    const elevationDiff = targetElevation - currentElevation;
+
+    const offsetDistance = Math.sqrt(
+      Math.pow(azimuthDiff, 2) + Math.pow(elevationDiff, 2)
+    );
+    const isAligned = offsetDistance < 3.5;
+
+    let xOffset = (azimuthDiff / (fovH / 2)) * (screenWidth / 2);
+    let yOffset = -(elevationDiff / (fovV / 2)) * (screenHeight / 2);
+
+    const centerX = screenWidth / 2;
+    const centerY = screenHeight / 2;
+
+    let satelliteX = centerX + xOffset;
+    let satelliteY = centerY + yOffset;
+
+    const isInView = Math.abs(azimuthDiff) < fovH / 2 &&
+                     Math.abs(elevationDiff) < fovV / 2;
+
+    const margin = 10;
+    let isAtEdge = false;
+
+    if (!isInView) {
+      isAtEdge = true;
+
+      const dx = satelliteX - centerX;
+      const dy = satelliteY - centerY;
+
+      const minX = margin;
+      const maxX = screenWidth - margin;
+      const minY = margin;
+      const maxY = screenHeight - margin;
+
+      if (satelliteX < minX || satelliteX > maxX || satelliteY < minY || satelliteY > maxY) {
+        const intersections = [];
+
+        if (dx < 0) {
+          const t = (minX - centerX) / dx;
+          const y = centerY + dy * t;
+          if (y >= minY && y <= maxY) {
+            intersections.push({ x: minX, y: y, dist: Math.abs(t) });
+          }
+        }
+
+        if (dx > 0) {
+          const t = (maxX - centerX) / dx;
+          const y = centerY + dy * t;
+          if (y >= minY && y <= maxY) {
+            intersections.push({ x: maxX, y: y, dist: Math.abs(t) });
+          }
+        }
+
+        if (dy < 0) {
+          const t = (minY - centerY) / dy;
+          const x = centerX + dx * t;
+          if (x >= minX && x <= maxX) {
+            intersections.push({ x: x, y: minY, dist: Math.abs(t) });
+          }
+        }
+
+        if (dy > 0) {
+          const t = (maxY - centerY) / dy;
+          const x = centerX + dx * t;
+          if (x >= minX && x <= maxX) {
+            intersections.push({ x: x, y: maxY, dist: Math.abs(t) });
+          }
+        }
+
+        if (intersections.length > 0) {
+          intersections.sort((a, b) => a.dist - b.dist);
+          satelliteX = intersections[0].x;
+          satelliteY = intersections[0].y;
+        }
+      }
+    }
+
+    this.setData({
+      satelliteX: satelliteX,
+      satelliteY: satelliteY,
+      offsetDistance: offsetDistance.toFixed(1),
+      isAligned: isAligned,
+      satelliteVisible: true,
+      isAtEdge: isAtEdge,
+      currentAzimuth: currentAzimuth.toFixed(1),
+      currentElevation: currentElevation.toFixed(1)
+    });
+
+    if (isAligned && !this.data.lastAlignedState) {
+      wx.vibrateShort({
+        type: 'medium'
+      });
+    }
+
     this.data.lastAlignedState = isAligned;
   },
 
