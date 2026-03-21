@@ -76,6 +76,16 @@
         </view>
         <view class="visual-option-arrow">›</view>
       </view>
+      <view class="visual-option" bindtap="showSunOutagePanel">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-sun-outage"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">日凌计算</text>
+          <text class="visual-option-desc">计算太阳干扰中断时间窗口</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
     </view>
   </view>
 
@@ -86,6 +96,16 @@
       <text class="azel-popup-close" bindtap="hideAzElToolPanel">✕</text>
     </view>
     <view class="azel-popup-body">
+      <view class="azel-row">
+        <text class="azel-label">卫星</text>
+        <picker mode="selector"
+                range="{{satellites}}"
+                range-key="name"
+                value="{{azElSatelliteIndex}}"
+                bindchange="onAzElSatelliteChange">
+          <view class="azel-picker">{{satellites[azElSatelliteIndex].name}}</view>
+        </picker>
+      </view>
       <view class="azel-row">
         <text class="azel-label">纬度</text>
         <input class="azel-input"
@@ -102,16 +122,6 @@
                value="{{azElLongitude}}"
                bindinput="onAzElLongitudeInput" />
       </view>
-      <view class="azel-row">
-        <text class="azel-label">卫星</text>
-        <picker mode="selector"
-                range="{{satellites}}"
-                range-key="name"
-                value="{{azElSatelliteIndex}}"
-                bindchange="onAzElSatelliteChange">
-          <view class="azel-picker">{{satellites[azElSatelliteIndex].name}}</view>
-        </picker>
-      </view>
       <view class="azel-actions">
         <view class="azel-btn azel-btn-map" bindtap="goToMapPickForAzEl">
           <text>地图选点</text>
@@ -122,16 +132,25 @@
       </view>
       <view class="azel-actions azel-actions-bottom">
         <view class="azel-btn azel-btn-calc" bindtap="calculateAzElConclusion">
-          <text>输出结论</text>
+          <text>计算</text>
         </view>
       </view>
       <view class="azel-result" wx:if="{{azElResultReady}}">
         <view class="azel-result-head {{azElConclusionLevel}}">{{azElConclusionTitle}}</view>
+        <!-- 方位角/仰角核心结论 -->
+        <view class="azel-result-highlight">
+          <view class="azel-highlight-item">
+            <text class="azel-highlight-label">方位角</text>
+            <text class="azel-highlight-value">{{azElAzimuth}}°</text>
+          </view>
+          <view class="azel-highlight-item">
+            <text class="azel-highlight-label">仰角</text>
+            <text class="azel-highlight-value {{azElConclusionLevel}}">{{azElElevation}}°</text>
+          </view>
+        </view>
         <text class="azel-result-line">经纬度: {{azElInputLatitude}}, {{azElInputLongitude}}</text>
         <text class="azel-result-line">卫星名称: {{azElSatelliteName}}</text>
         <text class="azel-result-line">轨道位置: {{azElSatelliteOrbit}}</text>
-        <text class="azel-result-line">方位角(从正北0°顺时针到天线指向): {{azElAzimuth}}°</text>
-        <text class="azel-result-line">仰角: {{azElElevation}}°</text>
         <text class="azel-result-line">建议: {{azElSuggestion}}</text>
         <text class="azel-result-line">方位角怎么找: {{azElAzimuthGuide}}</text>
         <text class="azel-result-line">仰角怎么找: {{azElElevationGuide}}</text>
@@ -141,7 +160,175 @@
 
   <!-- 方位仰角工具遮罩 -->
   <view class="azel-popup-mask {{showAzElToolPopup ? 'show' : ''}}" wx:if="{{showAzElToolPopup}}" bindtap="hideAzElToolPanel" catchtouchmove="preventTouchMove"></view>
-  
+
+  <!-- 日凌计算工具弹层 -->
+  <view class="azel-popup sunoutage-popup {{showSunOutagePopup ? 'show' : ''}}" wx:if="{{showSunOutagePopup}}" catchtouchmove="preventTouchMove">
+    <view class="azel-popup-header">
+      <text class="azel-popup-title">日凌时间计算</text>
+      <text class="azel-popup-close" bindtap="hideSunOutagePanel">✕</text>
+    </view>
+    <scroll-view scroll-y class="sunoutage-scroll-body">
+    <view class="azel-popup-body so-form">
+      <!-- 卫星选择 -->
+      <view class="so-field">
+        <text class="so-field-label">卫星</text>
+        <picker mode="selector"
+                range="{{satellites}}"
+                range-key="name"
+                value="{{sunOutageSatelliteIndex}}"
+                bindchange="onSunOutageSatelliteChange"
+                class="so-field-picker-wrap">
+          <view class="so-field-picker">
+            <text>{{satellites[sunOutageSatelliteIndex].name}}</text>
+            <text class="so-picker-arrow">▾</text>
+          </view>
+        </picker>
+      </view>
+      <!-- 经纬度 -->
+      <view class="so-field-row-2col">
+        <view class="so-field so-field-half">
+          <text class="so-field-label">纬度(°N)</text>
+          <input class="so-field-input"
+                 type="text"
+                 placeholder="39.9042"
+                 value="{{sunOutageLatitude}}"
+                 bindinput="onSunOutageLatInput" />
+        </view>
+        <view class="so-field so-field-half">
+          <text class="so-field-label">经度(°E)</text>
+          <input class="so-field-input"
+                 type="text"
+                 placeholder="116.4074"
+                 value="{{sunOutageLongitude}}"
+                 bindinput="onSunOutageLonInput" />
+        </view>
+      </view>
+      <!-- 位置按钮 -->
+      <view class="so-loc-btns">
+        <view class="so-loc-btn" bindtap="goToMapPickForSunOutage">
+          <text>地图选点</text>
+        </view>
+        <view class="so-loc-btn" bindtap="useMyLocationForSunOutage">
+          <text>我的位置</text>
+        </view>
+      </view>
+      <!-- 天线口径 -->
+      <view class="so-field">
+        <text class="so-field-label">天线口径(m)</text>
+        <input class="so-field-input"
+               type="text"
+               placeholder="3.0"
+               value="{{sunOutageDiameter}}"
+               bindinput="onSunOutageDiameterInput" />
+      </view>
+      <!-- 年份 + 季节 -->
+      <view class="so-field-row-2col">
+        <view class="so-field so-field-half">
+          <text class="so-field-label">年份</text>
+          <input class="so-field-input"
+                 type="number"
+                 placeholder="{{sunOutageYear}}"
+                 value="{{sunOutageYear}}"
+                 bindinput="onSunOutageYearInput" />
+        </view>
+        <view class="so-field so-field-half">
+          <text class="so-field-label">季节</text>
+          <picker mode="selector"
+                  range="{{sunOutageSeasons}}"
+                  value="{{sunOutageSeasonIndex}}"
+                  bindchange="onSunOutageSeasonChange"
+                  class="so-field-picker-wrap">
+            <view class="so-field-picker">
+              <text>{{sunOutageSeasons[sunOutageSeasonIndex]}}</text>
+              <text class="so-picker-arrow">▾</text>
+            </view>
+          </picker>
+        </view>
+      </view>
+      <!-- 下行频段 -->
+      <view class="so-field">
+        <text class="so-field-label">下行频段</text>
+        <picker mode="selector"
+                range="{{sunOutageBands}}"
+                value="{{sunOutageBandIndex}}"
+                bindchange="onSunOutageBandChange"
+                class="so-field-picker-wrap">
+          <view class="so-field-picker">
+            <text>{{sunOutageBands[sunOutageBandIndex]}}</text>
+            <text class="so-picker-arrow">▾</text>
+          </view>
+        </picker>
+      </view>
+      <!-- 自定义频率 -->
+      <view class="so-field" wx:if="{{sunOutageShowCustomFreq}}">
+        <text class="so-field-label">下行频率(GHz)</text>
+        <input class="so-field-input"
+               type="text"
+               placeholder="输入频率"
+               value="{{sunOutageCustomFreq}}"
+               bindinput="onSunOutageCustomFreqInput" />
+      </view>
+      <view class="so-freq-link" bindtap="toggleSunOutageCustomFreq">
+        <text>{{sunOutageShowCustomFreq ? '使用默认频率' : '自定义下行频率'}}</text>
+      </view>
+      <!-- 计算按钮 -->
+      <view class="so-calc-btn {{sunOutageCalculating ? 'btn-disabled' : ''}}" bindtap="calculateSunOutage">
+        <text>{{sunOutageCalculating ? '计算中...' : '开始计算'}}</text>
+      </view>
+      <!-- 结果区域 -->
+      <view class="sunoutage-result" wx:if="{{sunOutageResultReady && sunOutageResult}}">
+        <view class="sunoutage-result-summary">
+          <view class="azel-result-head {{sunOutageResult.totalDays > 0 ? 'warn' : 'ok'}}">
+            {{sunOutageResult.totalDays > 0 ? '存在日凌影响' : '无日凌影响'}}
+          </view>
+          <!-- 时间模式切换 -->
+          <view class="sunoutage-time-toggle" wx:if="{{sunOutageResult.totalDays > 0}}">
+            <text class="sunoutage-time-label">时间显示:</text>
+            <view class="sunoutage-time-switch" bindtap="toggleSunOutageTimeMode">
+              <text class="sunoutage-time-opt {{sunOutageTimeMode === 'bjt' ? 'active' : ''}}">北京时间</text>
+              <text class="sunoutage-time-opt {{sunOutageTimeMode === 'gmt' ? 'active' : ''}}">GMT</text>
+            </view>
+          </view>
+          <text class="azel-result-line">{{sunOutageResult.seasonName}} 日期: {{sunOutageResult.equinoxDate}}</text>
+          <text class="azel-result-line">卫星仰角: {{sunOutageResult.satEl}}°  方位角: {{sunOutageResult.satAz}}°</text>
+          <text class="azel-result-line">天线波束宽度: {{sunOutageResult.beamWidth}}°</text>
+          <text class="azel-result-line">下行频率: {{sunOutageResult.frequency}} GHz</text>
+          <text class="azel-result-line" wx:if="{{sunOutageResult.totalDays > 0}}">影响天数: {{sunOutageResult.totalDays}} 天</text>
+          <text class="azel-result-line" wx:if="{{sunOutageResult.totalDays > 0}}">影响期: {{sunOutageResult.startDate}} ~ {{sunOutageResult.endDate}}</text>
+          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">峰值日最长中断: {{sunOutageResult.maxDurationStr}}</text>
+          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">日凌最大时刻({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}}): {{sunOutageTimeMode === 'bjt' ? sunOutageResult.peakRecord.peakTimeBJT : sunOutageResult.peakRecord.peakTimeUTC}}</text>
+          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">峰值日期: {{sunOutageResult.peakRecord.date}}</text>
+        </view>
+        <!-- 展开/收起详细列表 -->
+        <view class="sunoutage-detail-toggle" bindtap="toggleSunOutageDetail" wx:if="{{sunOutageResult.totalDays > 0}}">
+          <text>{{sunOutageShowDetail ? '收起逐日详情 ▲' : '查看逐日详情 ▼'}}</text>
+        </view>
+        <view class="sunoutage-detail-list" wx:if="{{sunOutageShowDetail && sunOutageResult.dailyResults.length > 0}}">
+          <view class="sunoutage-detail-header">
+            <text class="so-col so-col-date">日期</text>
+            <text class="so-col so-col-time">开始({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}})</text>
+            <text class="so-col so-col-time">峰值({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}})</text>
+            <text class="so-col so-col-time">结束({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}})</text>
+            <text class="so-col so-col-dur">时长</text>
+            <text class="so-col so-col-cn">强度</text>
+          </view>
+          <view class="sunoutage-detail-row {{item.isPeak ? 'peak-row' : ''}}" wx:for="{{sunOutageResult.dailyResults}}" wx:key="date">
+            <text class="so-col so-col-date">{{item.date}}</text>
+            <text class="so-col so-col-time">{{sunOutageTimeMode === 'bjt' ? item.startTimeBJT : item.startTimeUTC}}</text>
+            <text class="so-col so-col-time">{{sunOutageTimeMode === 'bjt' ? item.peakTimeBJT : item.peakTimeUTC}}</text>
+            <text class="so-col so-col-time">{{sunOutageTimeMode === 'bjt' ? item.endTimeBJT : item.endTimeUTC}}</text>
+            <text class="so-col so-col-dur">{{item.durationStr}}</text>
+            <text class="so-col so-col-cn {{item.intensityClass}}">{{item.intensity}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+    </scroll-view>
+  </view>
+
+  <!-- 日凌计算工具遮罩 -->
+  <view class="azel-popup-mask {{showSunOutagePopup ? 'show' : ''}}" wx:if="{{showSunOutagePopup}}" bindtap="hideSunOutagePanel" catchtouchmove="preventTouchMove"></view>
+
   <!-- 可视化面板遮罩 -->
   <view class="visual-popup-mask {{showVisualPopup ? 'show' : ''}}" wx:if="{{showVisualPopup}}" bindtap="hideVisualPanel" catchtouchmove="preventTouchMove"></view>
 

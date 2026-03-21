@@ -6,6 +6,7 @@ const { formatResultsForDisplay } = require('../../utils/formatter');
 const { calculateLinkBudget } = require('../../utils/linkCalculator');
 const { getAllCities, searchCities, getCityByName } = require('../../utils/cities');
 const { estimateRainRate, getNearestCityInfo } = require('../../utils/rainRate');
+const { calculateSunOutage, BAND_PARAMS } = require('../../utils/sunOutageCalculator');
 
 // 解析分数或小数字符串的辅助函数
 function parseFractionOrDecimal(input, defaultValue) {
@@ -140,6 +141,25 @@ Page({
     azElSuggestion: '--',
     azElAzimuthGuide: '--',
     azElElevationGuide: '--',
+
+    // 日凌计算工具
+    showSunOutagePopup: false,
+    sunOutageSatelliteIndex: 0,
+    sunOutageLatitude: '',
+    sunOutageLongitude: '',
+    sunOutageDiameter: '3.0',
+    sunOutageYear: String(new Date().getFullYear()),
+    sunOutageSeasonIndex: 0,
+    sunOutageSeasons: ['春分时', '秋分时'],
+    sunOutageBandIndex: 1,
+    sunOutageBands: ['C', 'Ku', '扩展Ku', 'Ka', 'Q'],
+    sunOutageCustomFreq: '',
+    sunOutageShowCustomFreq: false,
+    sunOutageCalculating: false,
+    sunOutageResultReady: false,
+    sunOutageResult: null,
+    sunOutageShowDetail: false,
+    sunOutageTimeMode: 'bjt', // 'bjt' 北京时间 | 'gmt' GMT时间
     
     // 选项数据
     frequencyBandOptions: FREQUENCY_BAND_OPTIONS,
@@ -488,6 +508,7 @@ Page({
 
       // 回填来自覆盖页的地图选点
       this.consumeAzElPickedLocation();
+      this.consumeSunOutagePickedLocation();
     } catch (e) {
       console.error('恢复配置失败:', e);
     }
@@ -517,6 +538,33 @@ Page({
       });
     } catch (e) {
       console.error('读取地图选点失败:', e);
+    }
+  },
+
+  consumeSunOutagePickedLocation() {
+    try {
+      const picked = wx.getStorageSync('sunOutagePickedLocation');
+      if (!picked || !picked.timestamp) return;
+
+      if (Date.now() - picked.timestamp > 10 * 60 * 1000) {
+        wx.removeStorageSync('sunOutagePickedLocation');
+        return;
+      }
+
+      this.setData({
+        sunOutageLatitude: String(picked.latitude),
+        sunOutageLongitude: String(picked.longitude),
+        sunOutageSatelliteIndex: typeof picked.satelliteIndex === 'number' ? picked.satelliteIndex : this.data.sunOutageSatelliteIndex,
+        showSunOutagePopup: true,
+        sunOutageResultReady: false
+      });
+      wx.removeStorageSync('sunOutagePickedLocation');
+      wx.showToast({
+        title: '已回填地图坐标',
+        icon: 'none'
+      });
+    } catch (e) {
+      console.error('读取日凌地图选点失败:', e);
     }
   },
 
@@ -1866,6 +1914,161 @@ Page({
       azElAzimuthGuide: azimuthGuide,
       azElElevationGuide: elevationGuide
     });
+  },
+
+  // ====== 日凌计算工具 ======
+  showSunOutagePanel() {
+    const defaultLat = this.data.linkParams.latitude || '';
+    const defaultLon = this.data.linkParams.longitude || '';
+    this.setData({
+      showVisualPopup: false,
+      showSunOutagePopup: true,
+      sunOutageSatelliteIndex: this.data.satelliteIndex,
+      sunOutageLatitude: this.data.sunOutageLatitude || defaultLat,
+      sunOutageLongitude: this.data.sunOutageLongitude || defaultLon,
+      sunOutageResultReady: false,
+      sunOutageShowDetail: false
+    });
+  },
+
+  hideSunOutagePanel() {
+    this.setData({ showSunOutagePopup: false });
+  },
+
+  onSunOutageSatelliteChange(e) {
+    this.setData({ sunOutageSatelliteIndex: Number(e.detail.value || 0), sunOutageResultReady: false });
+  },
+
+  onSunOutageLatInput(e) {
+    this.setData({ sunOutageLatitude: e.detail.value, sunOutageResultReady: false });
+  },
+
+  onSunOutageLonInput(e) {
+    this.setData({ sunOutageLongitude: e.detail.value, sunOutageResultReady: false });
+  },
+
+  onSunOutageDiameterInput(e) {
+    this.setData({ sunOutageDiameter: e.detail.value, sunOutageResultReady: false });
+  },
+
+  onSunOutageYearInput(e) {
+    this.setData({ sunOutageYear: e.detail.value, sunOutageResultReady: false });
+  },
+
+  onSunOutageSeasonChange(e) {
+    this.setData({ sunOutageSeasonIndex: Number(e.detail.value || 0), sunOutageResultReady: false });
+  },
+
+  onSunOutageBandChange(e) {
+    this.setData({ sunOutageBandIndex: Number(e.detail.value || 0), sunOutageResultReady: false });
+  },
+
+  onSunOutageCustomFreqInput(e) {
+    this.setData({ sunOutageCustomFreq: e.detail.value, sunOutageResultReady: false });
+  },
+
+  toggleSunOutageCustomFreq() {
+    this.setData({ sunOutageShowCustomFreq: !this.data.sunOutageShowCustomFreq });
+  },
+
+  toggleSunOutageDetail() {
+    this.setData({ sunOutageShowDetail: !this.data.sunOutageShowDetail });
+  },
+
+  toggleSunOutageTimeMode() {
+    this.setData({
+      sunOutageTimeMode: this.data.sunOutageTimeMode === 'bjt' ? 'gmt' : 'bjt'
+    });
+  },
+
+  goToMapPickForSunOutage() {
+    const satIndex = this.data.sunOutageSatelliteIndex || 0;
+    wx.navigateTo({
+      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satIndex}&pickMode=1&pickSource=sunOutageTool`
+    });
+  },
+
+  useMyLocationForSunOutage() {
+    wx.getLocation({
+      type: 'gcj02',
+      success: (res) => {
+        this.setData({
+          sunOutageLatitude: String(Number(res.latitude).toFixed(6)),
+          sunOutageLongitude: String(Number(res.longitude).toFixed(6)),
+          sunOutageResultReady: false
+        });
+        wx.showToast({ title: '已填入我的位置', icon: 'none' });
+      },
+      fail: () => {
+        wx.showToast({ title: '获取位置失败', icon: 'none' });
+      }
+    });
+  },
+
+  calculateSunOutage() {
+    const lat = parseFloat(this.data.sunOutageLatitude);
+    const lon = parseFloat(this.data.sunOutageLongitude);
+    const diameter = parseFloat(this.data.sunOutageDiameter);
+    const year = parseInt(this.data.sunOutageYear);
+
+    if (isNaN(lat) || isNaN(lon)) {
+      wx.showToast({ title: '请输入有效经纬度', icon: 'none' });
+      return;
+    }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      wx.showToast({ title: '经纬度超出范围', icon: 'none' });
+      return;
+    }
+    if (isNaN(diameter) || diameter <= 0) {
+      wx.showToast({ title: '请输入有效天线口径', icon: 'none' });
+      return;
+    }
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      wx.showToast({ title: '年份范围 2000-2100', icon: 'none' });
+      return;
+    }
+
+    const sat = this.data.satellites[this.data.sunOutageSatelliteIndex];
+    const satLon = parseFloat(sat.position);
+    if (isNaN(satLon)) {
+      wx.showToast({ title: '该卫星轨位无效', icon: 'none' });
+      return;
+    }
+
+    const bandMap = { 0: 'C', 1: 'Ku', 2: 'ExtKu', 3: 'Ka', 4: 'Q' };
+    const band = bandMap[this.data.sunOutageBandIndex] || 'Ku';
+    const season = this.data.sunOutageSeasonIndex === 0 ? 'vernal' : 'autumnal';
+
+    let customFreq = null;
+    if (this.data.sunOutageShowCustomFreq && this.data.sunOutageCustomFreq) {
+      customFreq = parseFloat(this.data.sunOutageCustomFreq);
+      if (isNaN(customFreq) || customFreq <= 0) {
+        wx.showToast({ title: '请输入有效频率', icon: 'none' });
+        return;
+      }
+    }
+
+    this.setData({ sunOutageCalculating: true, sunOutageResultReady: false });
+
+    // 使用 setTimeout 让 UI 先更新"计算中"状态
+    setTimeout(() => {
+      const result = calculateSunOutage({
+        lat, lon, satLon, diameter, year, season, band, customFreq
+      });
+
+      if (result.error) {
+        wx.showToast({ title: result.message, icon: 'none' });
+        this.setData({ sunOutageCalculating: false });
+        return;
+      }
+
+      this.setData({
+        sunOutageCalculating: false,
+        sunOutageResultReady: true,
+        sunOutageResult: result,
+        sunOutageShowDetail: false
+      });
+    }, 50);
   },
 
   // 显示可视化功能面板

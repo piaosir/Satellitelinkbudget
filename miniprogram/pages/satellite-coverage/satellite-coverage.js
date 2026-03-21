@@ -3287,15 +3287,16 @@ Page({
     this.saveCoverageSettings();
 
     // 选点回传模式：确认后将经纬度回填给首页工具
-    if (this.data.pickMode && this.data.pickSource === 'azElTool') {
+    if (this.data.pickMode && (this.data.pickSource === 'azElTool' || this.data.pickSource === 'sunOutageTool')) {
       wx.showModal({
         title: '使用该位置',
         content: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
         confirmText: '回填',
         success: (res) => {
           if (!res.confirm) return;
+          const storageKey = this.data.pickSource === 'sunOutageTool' ? 'sunOutagePickedLocation' : 'azElPickedLocation';
           try {
-            wx.setStorageSync('azElPickedLocation', {
+            wx.setStorageSync(storageKey, {
               latitude,
               longitude,
               name,
@@ -3470,15 +3471,16 @@ Page({
     const elevation = this.calculateElevationAngle(latitude, longitude, satLon);
 
     // 选点回传模式：长按也支持直接回填
-    if (this.data.pickMode && this.data.pickSource === 'azElTool') {
+    if (this.data.pickMode && (this.data.pickSource === 'azElTool' || this.data.pickSource === 'sunOutageTool')) {
       wx.showModal({
         title: '使用该位置',
         content: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
         confirmText: '回填',
         success: (res) => {
           if (!res.confirm) return;
+          const storageKey = this.data.pickSource === 'sunOutageTool' ? 'sunOutagePickedLocation' : 'azElPickedLocation';
           try {
-            wx.setStorageSync('azElPickedLocation', {
+            wx.setStorageSync(storageKey, {
               latitude,
               longitude,
               name: `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`,

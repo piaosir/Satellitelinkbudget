@@ -1689,11 +1689,324 @@ page {
   color: #991b1b;
 }
 
+.azel-result-highlight {
+  display: flex;
+  justify-content: space-around;
+  margin: 16rpx 0;
+  padding: 16rpx 0;
+}
+
+.azel-highlight-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.azel-highlight-label {
+  font-size: 22rpx;
+  color: #6b7280;
+  margin-bottom: 4rpx;
+}
+
+.azel-highlight-value {
+  font-size: 56rpx;
+  font-weight: 800;
+  color: #1e3a8a;
+  letter-spacing: 1rpx;
+}
+
+.azel-highlight-value.ok {
+  color: #065f46;
+}
+
+.azel-highlight-value.warn {
+  color: #92400e;
+}
+
+.azel-highlight-value.danger {
+  color: #991b1b;
+}
+
 .azel-result-line {
   display: block;
   font-size: 24rpx;
   color: #1f2937;
   margin-bottom: 4rpx;
+}
+
+/* ====== 日凌计算工具 ====== */
+.sunoutage-popup {
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.sunoutage-scroll-body {
+  flex: 1;
+  max-height: calc(80vh - 80rpx);
+}
+
+.azel-unit {
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-left: 8rpx;
+  white-space: nowrap;
+}
+
+.sunoutage-freq-toggle {
+  text-align: right;
+  margin: 4rpx 0 12rpx;
+}
+
+.sunoutage-freq-toggle text {
+  font-size: 22rpx;
+  color: #3b82f6;
+}
+
+.btn-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.sunoutage-result {
+  margin-top: 16rpx;
+  border-radius: 8rpx;
+  border: 1rpx solid #e5e7eb;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.sunoutage-result-summary {
+  padding: 14rpx 16rpx;
+}
+
+/* 时间模式切换 */
+.sunoutage-time-toggle {
+  display: flex;
+  align-items: center;
+  margin: 8rpx 0 4rpx;
+}
+
+.sunoutage-time-label {
+  font-size: 22rpx;
+  color: #6b7280;
+  margin-right: 8rpx;
+}
+
+.sunoutage-time-switch {
+  display: flex;
+  background: #e5e7eb;
+  border-radius: 8rpx;
+  overflow: hidden;
+}
+
+.sunoutage-time-opt {
+  font-size: 20rpx;
+  padding: 4rpx 14rpx;
+  color: #6b7280;
+  transition: all 0.2s;
+}
+
+.sunoutage-time-opt.active {
+  background: #3b82f6;
+  color: #fff;
+  border-radius: 8rpx;
+}
+
+.sunoutage-detail-toggle {
+  text-align: center;
+  padding: 12rpx 0;
+  border-top: 1rpx solid #e5e7eb;
+}
+
+.sunoutage-detail-toggle text {
+  font-size: 22rpx;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.sunoutage-detail-list {
+  border-top: 1rpx solid #e5e7eb;
+}
+
+.sunoutage-detail-header {
+  display: flex;
+  padding: 10rpx 12rpx;
+  background: #f1f5f9;
+  border-bottom: 1rpx solid #e2e8f0;
+}
+
+.sunoutage-detail-header .so-col {
+  font-size: 20rpx;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.sunoutage-detail-row {
+  display: flex;
+  padding: 8rpx 12rpx;
+  border-bottom: 1rpx solid #f1f5f9;
+}
+
+.sunoutage-detail-row:last-child {
+  border-bottom: none;
+}
+
+.sunoutage-detail-row.peak-row {
+  background: #fef3c7;
+}
+
+.so-col {
+  font-size: 20rpx;
+  color: #374151;
+}
+
+.so-col-date {
+  flex: 2.5;
+}
+
+.so-col-time {
+  flex: 2;
+  text-align: center;
+}
+
+.so-col-dur {
+  flex: 1.5;
+  text-align: center;
+}
+
+.so-col-cn {
+  flex: 1.2;
+  text-align: center;
+  font-weight: 600;
+}
+
+.so-intensity-high { color: #dc2626; }
+.so-intensity-mid  { color: #f59e0b; }
+.so-intensity-low  { color: #22c55e; }
+
+/* ====== 日凌输入区域 ====== */
+.so-form {
+  padding: 16rpx 20rpx 20rpx;
+}
+
+.so-field {
+  margin-bottom: 10rpx;
+}
+
+.so-field-label {
+  display: block;
+  font-size: 24rpx;
+  color: #6b7280;
+  margin-bottom: 4rpx;
+}
+
+.so-field-input {
+  width: 100%;
+  height: 64rpx;
+  background: #f9fafb;
+  border: 1rpx solid #d1d5db;
+  border-radius: 8rpx;
+  padding: 0 16rpx;
+  font-size: 28rpx;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.so-field-picker-wrap {
+  width: 100%;
+}
+
+.so-field-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64rpx;
+  background: #f9fafb;
+  border: 1rpx solid #d1d5db;
+  border-radius: 8rpx;
+  padding: 0 16rpx;
+  font-size: 28rpx;
+  color: #111827;
+  box-sizing: border-box;
+}
+
+.so-picker-arrow {
+  font-size: 22rpx;
+  color: #9ca3af;
+}
+
+.so-field-row-2col {
+  display: flex;
+  gap: 12rpx;
+}
+
+.so-field-half {
+  flex: 1;
+  min-width: 0;
+}
+
+.so-loc-btns {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 10rpx;
+}
+
+.so-loc-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 56rpx;
+  background: #475569;
+  border-radius: 8rpx;
+  font-size: 24rpx;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.so-loc-btn:active {
+  opacity: 0.85;
+}
+
+.so-freq-link {
+  text-align: right;
+  margin-bottom: 10rpx;
+}
+
+.so-freq-link text {
+  font-size: 22rpx;
+  color: #3b82f6;
+}
+
+.so-calc-btn {
+  width: 100%;
+  height: 72rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+  border-radius: 8rpx;
+  margin-bottom: 8rpx;
+}
+
+.so-calc-btn:active {
+  opacity: 0.85;
+}
+
+.so-calc-btn text {
+  font-size: 26rpx;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.so-calc-btn.btn-disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.icon-sun-outage {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='4' stroke='%231f2937' stroke-width='2'/%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12' stroke='%231f2937' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M6 17L18 7' stroke='%23dc2626' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 /* ====== 键盘弹出时的底部占位 ====== */
