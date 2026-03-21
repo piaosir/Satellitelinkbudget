@@ -1,0 +1,43 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0EA5A4"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="64" y1="20" x2="64" y2="72" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F8FAFC" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#F8FAFC" stop-opacity="0.35"/>
+    </linearGradient>
+    <filter id="softGlow" x="0" y="0" width="128" height="128" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="1.8" result="blur"/>
+      <feBlend in="SourceGraphic" in2="blur" mode="normal"/>
+    </filter>
+  </defs>
+
+  <rect x="8" y="8" width="112" height="112" rx="28" fill="url(#bg)"/>
+  <rect x="8" y="8" width="112" height="112" rx="28" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="2"/>
+
+  <g opacity="0.28">
+    <circle cx="64" cy="64" r="40" stroke="#FFFFFF" stroke-width="2"/>
+    <circle cx="64" cy="64" r="26" stroke="#FFFFFF" stroke-width="2"/>
+    <line x1="24" y1="64" x2="104" y2="64" stroke="#FFFFFF" stroke-width="2"/>
+    <line x1="64" y1="24" x2="64" y2="104" stroke="#FFFFFF" stroke-width="2"/>
+  </g>
+
+  <g filter="url(#softGlow)">
+    <path d="M64 20L72 36H56L64 20Z" fill="#FFFFFF"/>
+    <line x1="64" y1="36" x2="64" y2="56" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <g>
+    <path d="M48 86C48 77.163 55.163 70 64 70C72.837 70 80 77.163 80 86" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+    <path d="M42 90H86" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+    <path d="M64 70V92" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <g>
+    <path d="M64 44C76.5 44 86.5 54 86.5 66.5" stroke="url(#beam)" stroke-width="3" stroke-linecap="round"/>
+    <path d="M64 38C80.5 38 94 51.5 94 68" stroke="url(#beam)" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="64" cy="64" r="3.8" fill="#FFFFFF"/>
+  </g>
+</svg>

@@ -68,7 +68,7 @@
       </view>
       <view class="visual-option" bindtap="showAzElToolPanel">
         <view class="visual-option-icon">
-          <view class="option-icon icon-coverage"></view>
+          <view class="option-icon icon-az-el"></view>
         </view>
         <view class="visual-option-content">
           <text class="visual-option-title">方位仰角工具</text>
