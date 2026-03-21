@@ -17,7 +17,7 @@
     enable-zoom="{{true}}"
     enable-scroll="{{true}}"
     enable-rotate="{{true}}"
-    enable-poi="{{false}}"
+    enable-poi="{{pickMode ? true : false}}"
     enable-satellite="{{enableSatellite}}"
     setting="{{mapSetting}}"
     bindmarkertap="onMarkerTap"
@@ -34,12 +34,12 @@
     </view>
     
     <!-- 卫星选择器 -->
-    <view class="float-btn float-btn-satellite" bindtap="showSatelliteSelector">
+    <view class="float-btn float-btn-satellite" bindtap="showSatelliteSelector" wx:if="{{!pickMode}}">
       <text class="float-satellite-name">{{currentSatellite.name}}</text>
     </view>
     
     <!-- 卫星地图切换按钮 -->
-    <view class="float-btn {{enableSatellite ? 'active' : ''}}" bindtap="toggleSatelliteMap">
+    <view class="float-btn {{enableSatellite ? 'active' : ''}}" bindtap="toggleSatelliteMap" wx:if="{{!pickMode}}">
       <view class="float-icon icon-satellite-map"></view>
     </view>
     
@@ -50,7 +50,7 @@
   </view>
   
   <!-- 底部功能按钮区 -->
-  <view class="bottom-btn-container">
+  <view class="bottom-btn-container" wx:if="{{!pickMode}}">
     <!-- 功能按钮组 -->
     <view class="bottom-btn-group {{bottomBtnsCollapsed ? 'collapsed' : ''}}">
       <!-- 等仰角线按钮 -->

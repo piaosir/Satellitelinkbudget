@@ -136,7 +136,11 @@ Page({
     // 卫星切换状态（防止快速切换导致状态不同步）
     isSwitchingSatellite: false,
     // 覆盖数据加载中状态
-    isLoadingCoverageData: false
+    isLoadingCoverageData: false,
+
+    // 选点回传模式（给首页方位仰角工具使用）
+    pickMode: false,
+    pickSource: ''
   },
 
   onLoad(options) {
@@ -159,13 +163,38 @@ Page({
     if (options && options.satelliteIndex !== undefined) {
       satelliteIndex = parseInt(options.satelliteIndex);
     }
+
+    const pickMode = options && options.pickMode === '1';
+    const pickSource = options && options.pickSource ? options.pickSource : '';
     
     const currentSatellite = this.data.satellites[satelliteIndex];
     
     this.setData({
       satelliteIndex: satelliteIndex,
-      currentSatellite: currentSatellite
+      currentSatellite: currentSatellite,
+      pickMode,
+      pickSource
     });
+
+    if (pickMode) {
+      this.setData({
+        mapSetting: {
+          ...this.data.mapSetting,
+          enablePoi: 1,
+          showMapText: 1
+        }
+      });
+    }
+
+    if (pickMode) {
+      setTimeout(() => {
+        wx.showToast({
+          title: '搜索或输入坐标后点“定位”即可回填',
+          icon: 'none',
+          duration: 2200
+        });
+      }, 400);
+    }
     
     // 检查并初始化覆盖数据状态
     this.updateCoverageDataStatus();
@@ -3256,6 +3285,31 @@ Page({
     
     // 保存设置（确保搜索标记被持久化）
     this.saveCoverageSettings();
+
+    // 选点回传模式：确认后将经纬度回填给首页工具
+    if (this.data.pickMode && this.data.pickSource === 'azElTool') {
+      wx.showModal({
+        title: '使用该位置',
+        content: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        confirmText: '回填',
+        success: (res) => {
+          if (!res.confirm) return;
+          try {
+            wx.setStorageSync('azElPickedLocation', {
+              latitude,
+              longitude,
+              name,
+              satelliteIndex: this.data.satelliteIndex,
+              timestamp: Date.now()
+            });
+          } catch (e) {
+            console.error('写入选点数据失败:', e);
+          }
+          wx.navigateBack();
+        }
+      });
+      return;
+    }
     
     // 显示仰角信息
     if (elevation > 0) {
@@ -3414,6 +3468,31 @@ Page({
   addLongTapMarker(latitude, longitude) {
     const satLon = this.data.currentSatellite.position;
     const elevation = this.calculateElevationAngle(latitude, longitude, satLon);
+
+    // 选点回传模式：长按也支持直接回填
+    if (this.data.pickMode && this.data.pickSource === 'azElTool') {
+      wx.showModal({
+        title: '使用该位置',
+        content: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        confirmText: '回填',
+        success: (res) => {
+          if (!res.confirm) return;
+          try {
+            wx.setStorageSync('azElPickedLocation', {
+              latitude,
+              longitude,
+              name: `${latitude.toFixed(4)}°, ${longitude.toFixed(4)}°`,
+              satelliteIndex: this.data.satelliteIndex,
+              timestamp: Date.now()
+            });
+          } catch (e) {
+            console.error('写入选点数据失败:', e);
+          }
+          wx.navigateBack();
+        }
+      });
+      return;
+    }
     
     // 构建经纬度显示字符串
     const latStr = latitude >= 0 ? `${latitude.toFixed(2)}°N` : `${Math.abs(latitude).toFixed(2)}°S`;

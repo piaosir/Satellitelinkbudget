@@ -66,8 +66,81 @@
         </view>
         <view class="visual-option-arrow">›</view>
       </view>
+      <view class="visual-option" bindtap="showAzElToolPanel">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-coverage"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">方位仰角工具</text>
+          <text class="visual-option-desc">填坐标或地图选点，选择卫星后输出结论</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
     </view>
   </view>
+
+  <!-- 方位仰角工具弹层 -->
+  <view class="azel-popup {{showAzElToolPopup ? 'show' : ''}}" wx:if="{{showAzElToolPopup}}" catchtouchmove="preventTouchMove">
+    <view class="azel-popup-header">
+      <text class="azel-popup-title">方位仰角工具</text>
+      <text class="azel-popup-close" bindtap="hideAzElToolPanel">✕</text>
+    </view>
+    <view class="azel-popup-body">
+      <view class="azel-row">
+        <text class="azel-label">纬度</text>
+        <input class="azel-input"
+               type="text"
+               placeholder="例如 39.9042"
+               value="{{azElLatitude}}"
+               bindinput="onAzElLatitudeInput" />
+      </view>
+      <view class="azel-row">
+        <text class="azel-label">经度</text>
+        <input class="azel-input"
+               type="text"
+               placeholder="例如 116.4074"
+               value="{{azElLongitude}}"
+               bindinput="onAzElLongitudeInput" />
+      </view>
+      <view class="azel-row">
+        <text class="azel-label">卫星</text>
+        <picker mode="selector"
+                range="{{satellites}}"
+                range-key="name"
+                value="{{azElSatelliteIndex}}"
+                bindchange="onAzElSatelliteChange">
+          <view class="azel-picker">{{satellites[azElSatelliteIndex].name}}</view>
+        </picker>
+      </view>
+      <view class="azel-actions">
+        <view class="azel-btn azel-btn-map" bindtap="goToMapPickForAzEl">
+          <text>地图选点</text>
+        </view>
+        <view class="azel-btn azel-btn-locate" bindtap="useMyLocationForAzEl">
+          <text>我的位置</text>
+        </view>
+      </view>
+      <view class="azel-actions azel-actions-bottom">
+        <view class="azel-btn azel-btn-calc" bindtap="calculateAzElConclusion">
+          <text>输出结论</text>
+        </view>
+      </view>
+      <view class="azel-result" wx:if="{{azElResultReady}}">
+        <view class="azel-result-head {{azElConclusionLevel}}">{{azElConclusionTitle}}</view>
+        <text class="azel-result-line">经纬度: {{azElInputLatitude}}, {{azElInputLongitude}}</text>
+        <text class="azel-result-line">卫星名称: {{azElSatelliteName}}</text>
+        <text class="azel-result-line">轨道位置: {{azElSatelliteOrbit}}</text>
+        <text class="azel-result-line">方位角(从正北0°顺时针到天线指向): {{azElAzimuth}}°</text>
+        <text class="azel-result-line">仰角: {{azElElevation}}°</text>
+        <text class="azel-result-line">建议: {{azElSuggestion}}</text>
+        <text class="azel-result-line">方位角怎么找: {{azElAzimuthGuide}}</text>
+        <text class="azel-result-line">仰角怎么找: {{azElElevationGuide}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 方位仰角工具遮罩 -->
+  <view class="azel-popup-mask {{showAzElToolPopup ? 'show' : ''}}" wx:if="{{showAzElToolPopup}}" bindtap="hideAzElToolPanel" catchtouchmove="preventTouchMove"></view>
   
   <!-- 可视化面板遮罩 -->
   <view class="visual-popup-mask {{showVisualPopup ? 'show' : ''}}" wx:if="{{showVisualPopup}}" bindtap="hideVisualPanel" catchtouchmove="preventTouchMove"></view>

@@ -1,0 +1,30 @@
+<view class="container">
+  <view class="top-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: {{navBarRight}}px; right: {{navBarRight}}px;">
+    <view class="top-btn" bindtap="goBack">返回</view>
+    <picker mode="selector" range="{{satellites}}" range-key="name" value="{{satelliteIndex}}" bindchange="onSatelliteChange">
+      <view class="satellite-picker">{{satellites[satelliteIndex].name}}</view>
+    </picker>
+    <view class="top-btn" bindtap="moveToMyLocation">我的位置</view>
+  </view>
+
+  <map
+    id="azelPickerMap"
+    class="map"
+    latitude="{{latitude}}"
+    longitude="{{longitude}}"
+    scale="{{scale}}"
+    markers="{{markers}}"
+    show-location="{{hasUserLocation}}"
+    bindtap="onMapTap"
+  ></map>
+
+  <view class="panel">
+    <text class="title">点地图选位置（单独选点页）</text>
+    <text class="coord">纬度: {{selectedLatitudeText}}</text>
+    <text class="coord">经度: {{selectedLongitudeText}}</text>
+    <view class="actions">
+      <view class="btn btn-ghost" bindtap="clearSelection">清除</view>
+      <view class="btn btn-primary" bindtap="confirmPick">确认回填</view>
+    </view>
+  </view>
+</view>

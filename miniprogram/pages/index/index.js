@@ -122,6 +122,24 @@ Page({
     
     // 可视化面板
     showVisualPopup: false, // 是否显示可视化功能选择面板
+
+    // 方位仰角工具
+    showAzElToolPopup: false,
+    azElLatitude: '',
+    azElLongitude: '',
+    azElSatelliteIndex: 0,
+    azElResultReady: false,
+    azElAzimuth: '--',
+    azElElevation: '--',
+    azElInputLatitude: '--',
+    azElInputLongitude: '--',
+    azElSatelliteName: '--',
+    azElSatelliteOrbit: '--',
+    azElConclusionLevel: 'warn',
+    azElConclusionTitle: '--',
+    azElSuggestion: '--',
+    azElAzimuthGuide: '--',
+    azElElevationGuide: '--',
     
     // 选项数据
     frequencyBandOptions: FREQUENCY_BAND_OPTIONS,
@@ -467,8 +485,38 @@ Page({
       
       // 更新实时参数
       this.updateRealtimeParams();
+
+      // 回填来自覆盖页的地图选点
+      this.consumeAzElPickedLocation();
     } catch (e) {
       console.error('恢复配置失败:', e);
+    }
+  },
+
+  consumeAzElPickedLocation() {
+    try {
+      const picked = wx.getStorageSync('azElPickedLocation');
+      if (!picked || !picked.timestamp) return;
+
+      // 超过10分钟的旧数据忽略
+      if (Date.now() - picked.timestamp > 10 * 60 * 1000) {
+        wx.removeStorageSync('azElPickedLocation');
+        return;
+      }
+
+      this.setData({
+        azElLatitude: String(picked.latitude),
+        azElLongitude: String(picked.longitude),
+        azElSatelliteIndex: typeof picked.satelliteIndex === 'number' ? picked.satelliteIndex : this.data.azElSatelliteIndex,
+        showAzElToolPopup: true
+      });
+      wx.removeStorageSync('azElPickedLocation');
+      wx.showToast({
+        title: '已回填地图坐标',
+        icon: 'none'
+      });
+    } catch (e) {
+      console.error('读取地图选点失败:', e);
     }
   },
 
@@ -1651,6 +1699,172 @@ Page({
     const satelliteIndex = this.data.satelliteIndex;
     wx.navigateTo({
       url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satelliteIndex}`
+    });
+  },
+
+  // 显示方位仰角工具面板
+  showAzElToolPanel() {
+    const defaultLat = this.data.linkParams.latitude || '';
+    const defaultLon = this.data.linkParams.longitude || '';
+    this.setData({
+      showVisualPopup: false,
+      showAzElToolPopup: true,
+      azElSatelliteIndex: this.data.satelliteIndex,
+      azElLatitude: this.data.azElLatitude || defaultLat,
+      azElLongitude: this.data.azElLongitude || defaultLon
+    });
+  },
+
+  hideAzElToolPanel() {
+    this.setData({
+      showAzElToolPopup: false
+    });
+  },
+
+  onAzElLatitudeInput(e) {
+    this.setData({
+      azElLatitude: e.detail.value,
+      azElResultReady: false
+    });
+  },
+
+  onAzElLongitudeInput(e) {
+    this.setData({
+      azElLongitude: e.detail.value,
+      azElResultReady: false
+    });
+  },
+
+  onAzElSatelliteChange(e) {
+    this.setData({
+      azElSatelliteIndex: Number(e.detail.value || 0),
+      azElResultReady: false
+    });
+  },
+
+  goToMapPickForAzEl() {
+    const satIndex = this.data.azElSatelliteIndex || 0;
+    wx.navigateTo({
+      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satIndex}&pickMode=1&pickSource=azElTool`
+    });
+  },
+
+  useMyLocationForAzEl() {
+    wx.getLocation({
+      type: 'gcj02',
+      success: (res) => {
+        this.setData({
+          azElLatitude: String(Number(res.latitude).toFixed(6)),
+          azElLongitude: String(Number(res.longitude).toFixed(6)),
+          azElResultReady: false
+        });
+        wx.showToast({
+          title: '已填入我的位置',
+          icon: 'none'
+        });
+      },
+      fail: () => {
+        wx.showToast({
+          title: '获取位置失败',
+          icon: 'none'
+        });
+      }
+    });
+  },
+
+  computeAzEl(lat, lon, satLon) {
+    const PI = Math.PI;
+    const latRad = lat * PI / 180;
+    const deltaLonRad = (satLon - lon) * PI / 180;
+    const cosTerm = Math.cos(latRad) * Math.cos(deltaLonRad);
+
+    const denom = Math.sqrt(Math.max(1 - Math.pow(cosTerm, 2), 1e-12));
+    const elevation = Math.atan((cosTerm - 0.15127) / denom) * 180 / PI;
+
+    let azimuth;
+    if (Math.abs(Math.sin(latRad)) < 1e-8) {
+      azimuth = (satLon > lon) ? 90 : 270;
+    } else {
+      const temp = Math.abs(Math.atan(
+        Math.tan((lon - satLon) * PI / 180) / Math.sin(latRad)
+      ) * 180 / PI);
+      if (lat > 0) {
+        azimuth = (satLon > lon) ? 180 - temp : 180 + temp;
+      } else {
+        azimuth = (satLon > lon) ? temp : 360 - temp;
+      }
+    }
+
+    return {
+      azimuth: Number(azimuth.toFixed(2)),
+      elevation: Number(elevation.toFixed(2))
+    };
+  },
+
+  calculateAzElConclusion() {
+    const lat = parseFloat(this.data.azElLatitude);
+    const lon = parseFloat(this.data.azElLongitude);
+
+    if (isNaN(lat) || isNaN(lon)) {
+      wx.showToast({
+        title: '请先输入有效经纬度',
+        icon: 'none'
+      });
+      return;
+    }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      wx.showToast({
+        title: '经纬度超出范围',
+        icon: 'none'
+      });
+      return;
+    }
+
+    const sat = this.data.satellites[this.data.azElSatelliteIndex];
+    const satLon = parseFloat(sat.position);
+    if (isNaN(satLon)) {
+      wx.showToast({
+        title: '该卫星轨位无效',
+        icon: 'none'
+      });
+      return;
+    }
+
+    const result = this.computeAzEl(lat, lon, satLon);
+    const satName = sat.name || '--';
+    const satOrbit = `${satLon.toFixed(1)}°E`;
+    const latText = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'}`;
+    const lonText = `${Math.abs(lon).toFixed(4)}°${lon >= 0 ? 'E' : 'W'}`;
+    const azimuthGuide = `方位角定义为“从正北(0°)开始，顺时针转到天线指向方向”的夹角；操作时先校准指南针，再顺时针转到 ${result.azimuth}°。`;
+    const elevationGuide = `使用天线仰角刻度或手机测斜仪，从水平 0° 抬升到 ${result.elevation}°，锁紧后小步微调。`;
+
+    let level = 'ok';
+    let title = '可见，当前站点可以对星';
+    let suggestion = '可按下方步骤完成初对星，再结合信号强度做微调。';
+
+    if (result.elevation <= 0) {
+      level = 'danger';
+      title = '不可见，当前站点无法对该星';
+      suggestion = '该星在地平线以下，建议切换卫星轨位或更换站点后重算。';
+    } else if (result.elevation < 5) {
+      level = 'warn';
+      title = '低仰角，可见但链路风险较高';
+      suggestion = '仰角较低，先确认地平线方向无遮挡，再按下方步骤对星并复核雨衰。';
+    }
+
+    this.setData({
+      azElResultReady: true,
+      azElInputLatitude: latText,
+      azElInputLongitude: lonText,
+      azElSatelliteName: satName,
+      azElSatelliteOrbit: satOrbit,
+      azElAzimuth: result.azimuth,
+      azElElevation: result.elevation,
+      azElConclusionLevel: level,
+      azElConclusionTitle: title,
+      azElSuggestion: suggestion,
+      azElAzimuthGuide: azimuthGuide,
+      azElElevationGuide: elevationGuide
     });
   },
 
