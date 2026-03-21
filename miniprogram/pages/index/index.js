@@ -83,8 +83,7 @@ Page({
       { "name": "JCSAT-1C", "position": "150" },
       { "name": "JCSAT-2B", "position": "154" },
       { "name": "JCSAT-3A", "position": "128" },
-      { "name": "JCSAT-4B", "position": "124" },
-      { "name": "其他", "position": "" }
+      { "name": "JCSAT-4B", "position": "124" }
     ],
     satelliteIndex: 0,
     
@@ -129,6 +128,8 @@ Page({
     azElLatitude: '',
     azElLongitude: '',
     azElSatelliteIndex: 0,
+    azElUseCustom: false,
+    azElCustomPosition: '',
     azElResultReady: false,
     azElAzimuth: '--',
     azElElevation: '--',
@@ -145,6 +146,8 @@ Page({
     // 日凌计算工具
     showSunOutagePopup: false,
     sunOutageSatelliteIndex: 0,
+    sunOutageUseCustom: false,
+    sunOutageCustomPosition: '',
     sunOutageLatitude: '',
     sunOutageLongitude: '',
     sunOutageDiameter: '3.0',
@@ -249,6 +252,13 @@ Page({
 
     // 检查是否有分享码需要跳转到配置页面
     this.checkAndRedirectToConfigs();
+
+    // 为卫星列表添加含轨道位置的显示名称
+    const satellites = this.data.satellites.map(sat => ({
+      ...sat,
+      displayName: sat.position ? sat.name + ' (' + sat.position + '°E)' : sat.name
+    }));
+    this.setData({ satellites });
 
     // 初始化参数
     this.initParams();
@@ -1790,6 +1800,20 @@ Page({
     });
   },
 
+  toggleAzElCustomMode() {
+    this.setData({
+      azElUseCustom: !this.data.azElUseCustom,
+      azElResultReady: false
+    });
+  },
+
+  onAzElCustomPositionInput(e) {
+    this.setData({
+      azElCustomPosition: e.detail.value,
+      azElResultReady: false
+    });
+  },
+
   goToMapPickForAzEl() {
     const satIndex = this.data.azElSatelliteIndex || 0;
     wx.navigateTo({
@@ -1868,18 +1892,19 @@ Page({
       return;
     }
 
-    const sat = this.data.satellites[this.data.azElSatelliteIndex];
-    const satLon = parseFloat(sat.position);
-    if (isNaN(satLon)) {
+    const isCustom = this.data.azElUseCustom;
+    const sat = isCustom ? null : this.data.satellites[this.data.azElSatelliteIndex];
+    const satLon = isCustom ? parseFloat(this.data.azElCustomPosition) : parseFloat(sat.position);
+    if (isNaN(satLon) || satLon < -180 || satLon > 180) {
       wx.showToast({
-        title: '该卫星轨位无效',
+        title: isCustom ? '请输入有效轨道位置' : '该卫星轨位无效',
         icon: 'none'
       });
       return;
     }
 
     const result = this.computeAzEl(lat, lon, satLon);
-    const satName = sat.name || '--';
+    const satName = isCustom ? '自定义 (' + satLon + '°E)' : (sat.name || '--');
     const satOrbit = `${satLon.toFixed(1)}°E`;
     const latText = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'}`;
     const lonText = `${Math.abs(lon).toFixed(4)}°${lon >= 0 ? 'E' : 'W'}`;
@@ -1937,6 +1962,14 @@ Page({
 
   onSunOutageSatelliteChange(e) {
     this.setData({ sunOutageSatelliteIndex: Number(e.detail.value || 0), sunOutageResultReady: false });
+  },
+
+  toggleSunOutageCustomMode() {
+    this.setData({ sunOutageUseCustom: !this.data.sunOutageUseCustom, sunOutageResultReady: false });
+  },
+
+  onSunOutageCustomPositionInput(e) {
+    this.setData({ sunOutageCustomPosition: e.detail.value, sunOutageResultReady: false });
   },
 
   onSunOutageLatInput(e) {
@@ -2028,10 +2061,11 @@ Page({
       return;
     }
 
-    const sat = this.data.satellites[this.data.sunOutageSatelliteIndex];
-    const satLon = parseFloat(sat.position);
-    if (isNaN(satLon)) {
-      wx.showToast({ title: '该卫星轨位无效', icon: 'none' });
+    const isCustomSo = this.data.sunOutageUseCustom;
+    const sat = isCustomSo ? null : this.data.satellites[this.data.sunOutageSatelliteIndex];
+    const satLon = isCustomSo ? parseFloat(this.data.sunOutageCustomPosition) : parseFloat(sat.position);
+    if (isNaN(satLon) || satLon < -180 || satLon > 180) {
+      wx.showToast({ title: isCustomSo ? '请输入有效轨道位置' : '该卫星轨位无效', icon: 'none' });
       return;
     }
 
@@ -2061,6 +2095,13 @@ Page({
         this.setData({ sunOutageCalculating: false });
         return;
       }
+
+      // 附加显示用字段
+      result.satName = sat.name;
+      result.satLonDisplay = satLon;
+      result.stationLat = lat;
+      result.stationLon = lon;
+      result.antennaD = diameter;
 
       this.setData({
         sunOutageCalculating: false,

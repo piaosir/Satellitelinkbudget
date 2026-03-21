@@ -98,13 +98,22 @@
     <view class="azel-popup-body">
       <view class="azel-row">
         <text class="azel-label">卫星</text>
-        <picker mode="selector"
-                range="{{satellites}}"
-                range-key="name"
-                value="{{azElSatelliteIndex}}"
-                bindchange="onAzElSatelliteChange">
-          <view class="azel-picker">{{satellites[azElSatelliteIndex].name}}</view>
-        </picker>
+        <view class="azel-sat-toggle">
+          <picker wx:if="{{!azElUseCustom}}" mode="selector"
+                  range="{{satellites}}"
+                  range-key="displayName"
+                  value="{{azElSatelliteIndex}}"
+                  bindchange="onAzElSatelliteChange"
+                  class="azel-picker-flex">
+            <view class="azel-picker">{{satellites[azElSatelliteIndex].displayName}}</view>
+          </picker>
+          <input wx:if="{{azElUseCustom}}" class="azel-input"
+                 type="digit"
+                 placeholder="输入轨道位置(°E)"
+                 value="{{azElCustomPosition}}"
+                 bindinput="onAzElCustomPositionInput" />
+          <text class="azel-toggle-link" bindtap="toggleAzElCustomMode">{{azElUseCustom ? '选择' : '自定义'}}</text>
+        </view>
       </view>
       <view class="azel-row">
         <text class="azel-label">纬度</text>
@@ -172,17 +181,25 @@
       <!-- 卫星选择 -->
       <view class="so-field">
         <text class="so-field-label">卫星</text>
-        <picker mode="selector"
-                range="{{satellites}}"
-                range-key="name"
-                value="{{sunOutageSatelliteIndex}}"
-                bindchange="onSunOutageSatelliteChange"
-                class="so-field-picker-wrap">
-          <view class="so-field-picker">
-            <text>{{satellites[sunOutageSatelliteIndex].name}}</text>
-            <text class="so-picker-arrow">▾</text>
-          </view>
-        </picker>
+        <view class="so-sat-toggle">
+          <picker wx:if="{{!sunOutageUseCustom}}" mode="selector"
+                  range="{{satellites}}"
+                  range-key="displayName"
+                  value="{{sunOutageSatelliteIndex}}"
+                  bindchange="onSunOutageSatelliteChange"
+                  class="so-field-picker-wrap">
+            <view class="so-field-picker">
+              <text>{{satellites[sunOutageSatelliteIndex].displayName}}</text>
+              <text class="so-picker-arrow">▾</text>
+            </view>
+          </picker>
+          <input wx:if="{{sunOutageUseCustom}}" class="so-field-input so-field-input-custom"
+                 type="digit"
+                 placeholder="输入轨道位置(°E)"
+                 value="{{sunOutageCustomPosition}}"
+                 bindinput="onSunOutageCustomPositionInput" />
+          <text class="azel-toggle-link" bindtap="toggleSunOutageCustomMode">{{sunOutageUseCustom ? '选择' : '自定义'}}</text>
+        </view>
       </view>
       <!-- 经纬度 -->
       <view class="so-field-row-2col">
@@ -289,15 +306,13 @@
               <text class="sunoutage-time-opt {{sunOutageTimeMode === 'gmt' ? 'active' : ''}}">GMT</text>
             </view>
           </view>
-          <text class="azel-result-line">{{sunOutageResult.seasonName}} 日期: {{sunOutageResult.equinoxDate}}</text>
-          <text class="azel-result-line">卫星仰角: {{sunOutageResult.satEl}}°  方位角: {{sunOutageResult.satAz}}°</text>
-          <text class="azel-result-line">天线波束宽度: {{sunOutageResult.beamWidth}}°</text>
-          <text class="azel-result-line">下行频率: {{sunOutageResult.frequency}} GHz</text>
-          <text class="azel-result-line" wx:if="{{sunOutageResult.totalDays > 0}}">影响天数: {{sunOutageResult.totalDays}} 天</text>
-          <text class="azel-result-line" wx:if="{{sunOutageResult.totalDays > 0}}">影响期: {{sunOutageResult.startDate}} ~ {{sunOutageResult.endDate}}</text>
+          <!-- 基本参数 -->
+          <text class="azel-result-line">卫星: {{sunOutageResult.satName}} ({{sunOutageResult.satLonDisplay}}°E)  仰角: {{sunOutageResult.satEl}}°  方位角: {{sunOutageResult.satAz}}°</text>
+          <text class="azel-result-line">地球站: {{sunOutageResult.stationLat}}°N, {{sunOutageResult.stationLon}}°E  口径: {{sunOutageResult.antennaD}}m  频率: {{sunOutageResult.frequency}} GHz</text>
+          <!-- 日凌影响 -->
+          <text class="azel-result-line" wx:if="{{sunOutageResult.totalDays > 0}}">{{sunOutageResult.seasonName}}  影响天数: {{sunOutageResult.totalDays}} 天  影响期: {{sunOutageResult.startDate}} ~ {{sunOutageResult.endDate}}</text>
           <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">峰值日最长中断: {{sunOutageResult.maxDurationStr}}</text>
-          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">日凌最大时刻({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}}): {{sunOutageTimeMode === 'bjt' ? sunOutageResult.peakRecord.peakTimeBJT : sunOutageResult.peakRecord.peakTimeUTC}}</text>
-          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">峰值日期: {{sunOutageResult.peakRecord.date}}</text>
+          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">峰值日期/日凌最大时刻({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}}): {{sunOutageResult.peakRecord.date}} {{sunOutageTimeMode === 'bjt' ? sunOutageResult.peakRecord.peakTimeBJT : sunOutageResult.peakRecord.peakTimeUTC}}</text>
         </view>
         <!-- 展开/收起详细列表 -->
         <view class="sunoutage-detail-toggle" bindtap="toggleSunOutageDetail" wx:if="{{sunOutageResult.totalDays > 0}}">
