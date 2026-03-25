@@ -158,6 +158,14 @@ Page({
       console.error('获取胶囊按钮位置失败:', e);
     }
     
+    // 检测平台（安卓的 map label textAlign:'center' 不生效，需手动补偿 anchorX）
+    try {
+      const deviceInfo = wx.getDeviceInfo();
+      this._isAndroid = deviceInfo.platform === 'android';
+    } catch (e) {
+      this._isAndroid = false;
+    }
+
     // 获取从主页面传来的卫星索引
     let satelliteIndex = 0;
     if (options && options.satelliteIndex !== undefined) {
@@ -206,6 +214,27 @@ Page({
   onReady() {
     // 获取地图上下文
     this.mapCtx = wx.createMapContext('coverageMap');
+  },
+
+  // 构建地图标签配置（兼容 iOS/Android 居中对齐）
+  _buildCenteredLabel(content, fontSize, color, anchorY) {
+    const label = {
+      content: content,
+      color: color,
+      fontSize: fontSize,
+      anchorX: 0,
+      anchorY: anchorY,
+      textAlign: 'center'
+    };
+    // 安卓的 map marker label textAlign:'center' 不生效，手动计算偏移量
+    if (this._isAndroid) {
+      let textWidth = 0;
+      for (let i = 0; i < content.length; i++) {
+        textWidth += content.charCodeAt(i) > 127 ? fontSize : fontSize * 0.61;
+      }
+      label.anchorX = -Math.round(textWidth / 2);
+    }
+    return label;
   },
 
   onHide() {
@@ -824,9 +853,9 @@ Page({
             label: {
               content: angle + '°',
               color: lineColor,
-              fontSize: 11,
-              anchorX: -10,
-              anchorY: -13
+              fontSize: 9,
+              anchorX: -8,
+              anchorY: -11
             }
           });
           
@@ -841,8 +870,8 @@ Page({
             label: {
               content: angle + '°',
               color: lineColor,
-              fontSize: 11,
-              anchorX: -10,
+              fontSize: 9,
+              anchorX: -8,
               anchorY: 1
             }
           });
@@ -858,9 +887,9 @@ Page({
             label: {
               content: angle + '°',
               color: lineColor,
-              fontSize: 11,
+              fontSize: 9,
               anchorX: 2,
-              anchorY: -6
+              anchorY: -5
             }
           });
           
@@ -875,9 +904,9 @@ Page({
             label: {
               content: angle + '°',
               color: lineColor,
-              fontSize: 11,
-              anchorX: -22,
-              anchorY: -6
+              fontSize: 9,
+              anchorX: -18,
+              anchorY: -5
             }
           });
         }
@@ -2207,6 +2236,7 @@ Page({
     // 排除id>=10000的残留描边层markers
     const existingMarkers = this.data.markers.filter(m => m.id === 1 || (m.id >= 100 && m.id < 1000) || (m.id >= 5000 && m.id < 10000));
     const coverageMarkers = [];
+    let markerIdCounter = 1000;  // 使用自增计数器避免同一增益值多段等值线导致ID重复
     
     data.contours.forEach((contour, idx) => {
       // 跳过无效数据或未选中的值
@@ -2258,9 +2288,8 @@ Page({
           const labelPositions = this.calculateContourLabelPositions(points, contour.g, colorIndex);
           
           labelPositions.forEach((labelPos, labelIdx) => {
-            // 使用id从1000开始，每条等值线最多4个标签
             coverageMarkers.push({
-              id: 1000 + colorIndex * 10 + labelIdx,
+              id: markerIdCounter++,
               latitude: labelPos.point.latitude,
               longitude: labelPos.point.longitude,
               iconPath: '/images/transparent.png',
@@ -2269,7 +2298,7 @@ Page({
               label: {
                 content: contour.g + '',
                 color: color,
-                fontSize: 11,
+                fontSize: 9,
                 anchorX: labelPos.anchorX,
                 anchorY: labelPos.anchorY
               }
@@ -2305,17 +2334,10 @@ Page({
           iconPath: '/images/transparent.png',
           width: 1,
           height: 1,
-          label: {
-            content: '+',
-            color: labelColor,
-            fontSize: 18,
-            anchorX: 0,
-            anchorY: -9,
-            textAlign: 'center'
-          }
+          label: this._buildCenteredLabel('+', 14, labelColor, -7)
         });
         
-        // 覆盖值（"+"正上方）：底边紧贴"+"顶边，anchorY = -9-11 = -20
+        // 覆盖值（"+"正上方）：底边紧贴"+"顶边
         if (bore.gain !== undefined) {
           coverageMarkers.push({
             id: borePointIdCounter++,
@@ -2324,18 +2346,11 @@ Page({
             iconPath: '/images/transparent.png',
             width: 1,
             height: 1,
-            label: {
-              content: bore.gain + '',
-              color: labelColor,
-              fontSize: 11,
-              anchorX: 0,
-              anchorY: -20,
-              textAlign: 'center'
-            }
+            label: this._buildCenteredLabel(bore.gain + '', 9, labelColor, -16)
           });
         }
         
-        // 波束名（"+"正下方）：顶边紧贴"+"底边，anchorY = -9+18 = 9
+        // 波束名（"+"正下方）：顶边紧贴"+"底边
         if (this.data.showBeamLabels && beamName) {
           coverageMarkers.push({
             id: borePointIdCounter++,
@@ -2344,14 +2359,7 @@ Page({
             iconPath: '/images/transparent.png',
             width: 1,
             height: 1,
-            label: {
-              content: beamName,
-              color: labelColor,
-              fontSize: 11,
-              anchorX: 0,
-              anchorY: 9,
-              textAlign: 'center'
-            }
+            label: this._buildCenteredLabel(beamName, 9, labelColor, 7)
           });
         }
       });
@@ -2360,7 +2368,7 @@ Page({
       const beamCenter = this.calculateBeamCenter(data);
       if (beamCenter && isFinite(beamCenter.latitude) && isFinite(beamCenter.longitude)) {
         const labelText = beamName || '波束';
-        const fontSize = 11;
+        const fontSize = 9;
         const labelColor = colors.length > 0 ? colors[0] : '#2563eb';
         coverageMarkers.push({
           id: 4000,
@@ -2369,14 +2377,7 @@ Page({
           iconPath: '/images/transparent.png',
           width: 1,
           height: 1,
-          label: {
-            content: labelText,
-            color: labelColor,
-            fontSize: fontSize,
-            anchorX: 0,
-            anchorY: -fontSize / 2,
-            textAlign: 'center'
-          }
+          label: this._buildCenteredLabel(labelText, fontSize, labelColor, -fontSize / 2)
         });
       }
     }
@@ -2491,7 +2492,7 @@ Page({
                 label: {
                   content: contour.g + '',
                   color: color,
-                  fontSize: 11,
+                  fontSize: 9,
                   anchorX: labelPos.anchorX,
                   anchorY: labelPos.anchorY
                 }
@@ -2518,17 +2519,10 @@ Page({
             iconPath: '/images/transparent.png',
             width: 1,
             height: 1,
-            label: {
-              content: '+',
-              color: labelColor,
-              fontSize: 18,
-              anchorX: 0,
-              anchorY: -9,
-              textAlign: 'center'
-            }
+            label: this._buildCenteredLabel('+', 14, labelColor, -7)
           });
           
-          // 覆盖值（"+"正上方）：底边紧贴"+"顶边，anchorY = -9-11 = -20
+          // 覆盖值（"+"正上方）：底边紧贴"+"顶边
           if (bore.gain !== undefined) {
             coverageMarkers.push({
               id: borePointIdCounter++,
@@ -2537,18 +2531,11 @@ Page({
               iconPath: '/images/transparent.png',
               width: 1,
               height: 1,
-              label: {
-                content: bore.gain + '',
-                color: labelColor,
-                fontSize: 11,
-                anchorX: 0,
-                anchorY: -20,
-                textAlign: 'center'
-              }
+              label: this._buildCenteredLabel(bore.gain + '', 9, labelColor, -16)
             });
           }
           
-          // 波束名（"+"正下方）：顶边紧贴"+"底边，anchorY = -9+18 = 9
+          // 波束名（"+"正下方）：顶边紧贴"+"底边
           if (this.data.showBeamLabels && beamName) {
             coverageMarkers.push({
               id: borePointIdCounter++,
@@ -2557,14 +2544,7 @@ Page({
               iconPath: '/images/transparent.png',
               width: 1,
               height: 1,
-              label: {
-                content: beamName,
-                color: labelColor,
-                fontSize: 11,
-                anchorX: 0,
-                anchorY: 9,
-                textAlign: 'center'
-              }
+              label: this._buildCenteredLabel(beamName, 9, labelColor, 7)
             });
           }
         });
@@ -2579,14 +2559,7 @@ Page({
             iconPath: '/images/transparent.png',
             width: 1,
             height: 1,
-            label: {
-              content: beamName,
-              color: labelColor,
-              fontSize: 11,
-              anchorX: 0,
-              anchorY: -6,
-              textAlign: 'center'
-            }
+            label: this._buildCenteredLabel(beamName, 9, labelColor, -5)
           });
         }
       }

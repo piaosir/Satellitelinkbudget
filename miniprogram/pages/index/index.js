@@ -262,6 +262,12 @@ Page({
 
     // 初始化参数
     this.initParams();
+
+    // 初始化雨衰检查坐标记录（用于判断经纬度是否同时变化）
+    this._lastRainCheckCoords = {
+      uplink: { lon: this.data.linkParams.longitude || '', lat: this.data.linkParams.latitude || '' },
+      downlink: { lon: this.data.linkParams.rxLongitude || '', lat: this.data.linkParams.rxLatitude || '' }
+    };
     
     // 恢复噪声比模式
     try {
@@ -605,6 +611,13 @@ Page({
       linkParams: app.globalData.linkParams[linkNum],
       hasResults: false
     });
+
+    // 更新雨衰检查坐标记录
+    const lp = this.data.linkParams;
+    this._lastRainCheckCoords = {
+      uplink: { lon: lp.longitude || '', lat: lp.latitude || '' },
+      downlink: { lon: lp.rxLongitude || '', lat: lp.rxLatitude || '' }
+    };
   },
 
   // 保存当前链路参数
@@ -889,14 +902,37 @@ Page({
   },
 
   // 经纬度输入框失去焦点时检查降雨率
+  // 只有经度和纬度同时变化才触发雨衰自动填充
   onCoordinateBlur(e) {
     const field = e.currentTarget.dataset.field;
     
-    // 根据字段判断是上行还是下行
+    // 初始化记录（防止未经onLoad初始化的情况）
+    if (!this._lastRainCheckCoords) {
+      this._lastRainCheckCoords = {
+        uplink: { lon: '', lat: '' },
+        downlink: { lon: '', lat: '' }
+      };
+    }
+
+    let type = '';
     if (field === 'longitude' || field === 'latitude') {
-      this.checkRainRateEstimation('uplink');
+      type = 'uplink';
     } else if (field === 'rxLongitude' || field === 'rxLatitude') {
-      this.checkRainRateEstimation('downlink');
+      type = 'downlink';
+    }
+    if (!type) return;
+
+    const curLon = (type === 'uplink' ? this.data.linkParams.longitude : this.data.linkParams.rxLongitude) || '';
+    const curLat = (type === 'uplink' ? this.data.linkParams.latitude : this.data.linkParams.rxLatitude) || '';
+    const last = this._lastRainCheckCoords[type];
+
+    const lonChanged = String(curLon) !== String(last.lon);
+    const latChanged = String(curLat) !== String(last.lat);
+
+    // 经度和纬度必须同时变化才触发
+    if (lonChanged && latChanged) {
+      this._lastRainCheckCoords[type] = { lon: curLon, lat: curLat };
+      this.checkRainRateEstimation(type);
     }
   },
 
