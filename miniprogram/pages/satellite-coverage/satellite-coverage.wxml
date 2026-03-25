@@ -17,7 +17,7 @@
     enable-zoom="{{true}}"
     enable-scroll="{{true}}"
     enable-rotate="{{true}}"
-    enable-poi="{{pickMode ? true : false}}"
+    enable-poi="{{true}}"
     enable-satellite="{{enableSatellite}}"
     setting="{{mapSetting}}"
     bindmarkertap="onMarkerTap"

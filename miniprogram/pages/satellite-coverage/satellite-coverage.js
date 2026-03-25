@@ -26,7 +26,7 @@ Page({
       gestureEnable: 1,    // 允许手势
       showMapText: 1,      // 显示地图文字（省份、城市等标签）
       enable3D: 0,         // 禁用3D
-      enablePoi: 0,        // 禁用POI点显示
+      enablePoi: 1,        // 启用POI点显示
       enableTraffic: 0,    // 禁用交通线
       baseMap: {
         features: ['base', 'point']  // 仅显示基础底图和点要素，不包含道路road
@@ -272,6 +272,11 @@ Page({
       m.id >= 1000 && m.id < 2000
     );
     
+    // 保留波束中心标记（id 3000-3999）
+    const existingBorePointMarkers = this.data.markers.filter(m => 
+      m.id >= 3000 && m.id < 4000
+    );
+    
     // 保留波束名标记（id 4000-4999）
     const existingBeamLabelMarkers = this.data.markers.filter(m => 
       m.id >= 4000 && m.id < 5000
@@ -303,8 +308,8 @@ Page({
       }
     };
     
-    // 合并标记：卫星标记 + 保留的等仰角线标记 + 覆盖值标记 + 波束名标记 + 搜索标记
-    const markers = [satelliteMarker, ...existingElevationMarkers, ...existingCoverageMarkers, ...existingBeamLabelMarkers, ...existingSearchMarkers];
+    // 合并标记：卫星标记 + 保留的等仰角线标记 + 覆盖值标记 + 波束中心标记 + 波束名标记 + 搜索标记
+    const markers = [satelliteMarker, ...existingElevationMarkers, ...existingCoverageMarkers, ...existingBorePointMarkers, ...existingBeamLabelMarkers, ...existingSearchMarkers];
     
     // 判断用户是否在覆盖范围内
     if (hasUserLocation) {
@@ -640,11 +645,12 @@ Page({
    * 清除等仰角线
    */
   clearElevationContours() {
-    // 保留卫星标记(id=1)、覆盖值标记(id 1000-1999)、波束名标记(id 4000-4999)、搜索标记(id>=5000且<10000)
+    // 保留卫星标记(id=1)、覆盖值标记(id 1000-1999)、波束中心标记(id 3000-3999)、波束名标记(id 4000-4999)、搜索标记(id>=5000且<10000)
     // 移除仰角线标注(id 100-999)和残留描边层(id>=10000)
     const markers = this.data.markers.filter(m => 
       m.id === 1 || 
       (m.id >= 1000 && m.id < 2000) ||  // 覆盖值标记
+      (m.id >= 3000 && m.id < 4000) ||  // 波束中心标记
       (m.id >= 4000 && m.id < 5000) ||  // 波束名标记
       (m.id >= 5000 && m.id < 10000)    // 搜索标记
     );
@@ -736,11 +742,12 @@ Page({
       p.color !== '#000000' && p.color !== '#FFFFFF'
     );
     const polylines = [];
-    // 保留卫星标记(id=1)、覆盖值标记(id 1000-1999)、波束名标记(id 4000-4999)、搜索标记(id>=5000且<10000)
+    // 保留卫星标记(id=1)、覆盖值标记(id 1000-1999)、波束中心标记(id 3000-3999)、波束名标记(id 4000-4999)、搜索标记(id>=5000且<10000)
     // 只移除之前的仰角标注(id 100-999)和残留描边层(id>=10000)
     const existingMarkers = this.data.markers.filter(m => 
       m.id === 1 || 
       (m.id >= 1000 && m.id < 2000) ||  // 覆盖值标记
+      (m.id >= 3000 && m.id < 4000) ||  // 波束中心标记
       (m.id >= 4000 && m.id < 5000) ||  // 波束名标记
       (m.id >= 5000 && m.id < 10000)    // 搜索标记
     );
@@ -2279,17 +2286,84 @@ Page({
       existingElevationPolylines = this.data.polylines.filter(p => p.color === '#000000');
     }
     
-    // 如果开启了波束名显示，在波束中心添加波束名标记（单波束模式）
+    // 绘制波束中心标记（borePoints）：在波束中心画"+"号，标注覆盖值，显示波束名
     const beamName = data.beamName || (this.data.selectedBeams.length > 0 ? this.data.selectedBeams[0] : '');
-    if (this.data.showBeamLabels && beamName) {
+    let borePointIdCounter = 3000;
+    if (data.borePoints && data.borePoints.length > 0) {
+      const labelColor = colors.length > 0 ? colors[0] : '#2563eb';
+      data.borePoints.forEach((bore) => {
+        if (!bore || !bore.pos || bore.pos.length < 2) return;
+        const boreLon = this.normalizeLongitude(bore.pos[0]);
+        const boreLat = bore.pos[1];
+        if (!isFinite(boreLat) || !isFinite(boreLon)) return;
+        
+        // "+" 号标记：anchorY=-9使18px字体的中心精确对准经纬度坐标
+        coverageMarkers.push({
+          id: borePointIdCounter++,
+          latitude: boreLat,
+          longitude: boreLon,
+          iconPath: '/images/transparent.png',
+          width: 1,
+          height: 1,
+          label: {
+            content: '+',
+            color: labelColor,
+            fontSize: 18,
+            anchorX: 0,
+            anchorY: -9,
+            textAlign: 'center'
+          }
+        });
+        
+        // 覆盖值（"+"正上方）：底边紧贴"+"顶边，anchorY = -9-11 = -20
+        if (bore.gain !== undefined) {
+          coverageMarkers.push({
+            id: borePointIdCounter++,
+            latitude: boreLat,
+            longitude: boreLon,
+            iconPath: '/images/transparent.png',
+            width: 1,
+            height: 1,
+            label: {
+              content: bore.gain + '',
+              color: labelColor,
+              fontSize: 11,
+              anchorX: 0,
+              anchorY: -20,
+              textAlign: 'center'
+            }
+          });
+        }
+        
+        // 波束名（"+"正下方）：顶边紧贴"+"底边，anchorY = -9+18 = 9
+        if (this.data.showBeamLabels && beamName) {
+          coverageMarkers.push({
+            id: borePointIdCounter++,
+            latitude: boreLat,
+            longitude: boreLon,
+            iconPath: '/images/transparent.png',
+            width: 1,
+            height: 1,
+            label: {
+              content: beamName,
+              color: labelColor,
+              fontSize: 11,
+              anchorX: 0,
+              anchorY: 9,
+              textAlign: 'center'
+            }
+          });
+        }
+      });
+    } else if (this.data.showBeamLabels && beamName) {
+      // 无borePoints时回退到几何中心显示波束名
       const beamCenter = this.calculateBeamCenter(data);
       if (beamCenter && isFinite(beamCenter.latitude) && isFinite(beamCenter.longitude)) {
         const labelText = beamName || '波束';
         const fontSize = 11;
-        // 波束名标签颜色使用已选等值线的颜色（取第一个）
         const labelColor = colors.length > 0 ? colors[0] : '#2563eb';
         coverageMarkers.push({
-          id: 4000,  // 波束名标记使用id=4000
+          id: 4000,
           latitude: beamCenter.latitude,
           longitude: beamCenter.longitude,
           iconPath: '/images/transparent.png',
@@ -2299,8 +2373,8 @@ Page({
             content: labelText,
             color: labelColor,
             fontSize: fontSize,
-            anchorX: 0,  // textAlign: 'center' 时不需要额外偏移
-            anchorY: -fontSize / 2,   // 垂直居中：向上偏移字体大小的一半
+            anchorX: 0,
+            anchorY: -fontSize / 2,
             textAlign: 'center'
           }
         });
@@ -2344,6 +2418,7 @@ Page({
     
     let markerIdCounter = 1000;
     let beamLabelIdCounter = 4001;  // 波束名标记从4001开始（4000-4999范围）
+    let borePointIdCounter = 3000;  // 波束中心标记从3000开始（3000-3999范围）
     
     beamDataList.forEach((data, beamIndex) => {
       if (!data || !data.contours) return;
@@ -2426,16 +2501,77 @@ Page({
         }
       });
       
-      // 如果开启了波束名显示，为每个波束添加波束名标记
-      if (this.data.showBeamLabels && uniqueGainValues.length > 0) {
+      // 绘制波束中心标记（borePoints）：在波束中心画"+"号，标注覆盖值，显示波束名
+      const labelColor = colorSet[0 % colorSet.length];
+      if (data.borePoints && data.borePoints.length > 0) {
+        data.borePoints.forEach((bore) => {
+          if (!bore || !bore.pos || bore.pos.length < 2) return;
+          const boreLon = this.normalizeLongitude(bore.pos[0]);
+          const boreLat = bore.pos[1];
+          if (!isFinite(boreLat) || !isFinite(boreLon)) return;
+          
+          // "+" 号标记：anchorY=-9使18px字体的中心精确对准经纬度坐标
+          coverageMarkers.push({
+            id: borePointIdCounter++,
+            latitude: boreLat,
+            longitude: boreLon,
+            iconPath: '/images/transparent.png',
+            width: 1,
+            height: 1,
+            label: {
+              content: '+',
+              color: labelColor,
+              fontSize: 18,
+              anchorX: 0,
+              anchorY: -9,
+              textAlign: 'center'
+            }
+          });
+          
+          // 覆盖值（"+"正上方）：底边紧贴"+"顶边，anchorY = -9-11 = -20
+          if (bore.gain !== undefined) {
+            coverageMarkers.push({
+              id: borePointIdCounter++,
+              latitude: boreLat,
+              longitude: boreLon,
+              iconPath: '/images/transparent.png',
+              width: 1,
+              height: 1,
+              label: {
+                content: bore.gain + '',
+                color: labelColor,
+                fontSize: 11,
+                anchorX: 0,
+                anchorY: -20,
+                textAlign: 'center'
+              }
+            });
+          }
+          
+          // 波束名（"+"正下方）：顶边紧贴"+"底边，anchorY = -9+18 = 9
+          if (this.data.showBeamLabels && beamName) {
+            coverageMarkers.push({
+              id: borePointIdCounter++,
+              latitude: boreLat,
+              longitude: boreLon,
+              iconPath: '/images/transparent.png',
+              width: 1,
+              height: 1,
+              label: {
+                content: beamName,
+                color: labelColor,
+                fontSize: 11,
+                anchorX: 0,
+                anchorY: 9,
+                textAlign: 'center'
+              }
+            });
+          }
+        });
+      } else if (this.data.showBeamLabels && uniqueGainValues.length > 0) {
+        // 无borePoints时回退到几何中心显示波束名
         const beamCenter = this.calculateBeamCenter(data);
         if (beamCenter && isFinite(beamCenter.latitude) && isFinite(beamCenter.longitude)) {
-          const labelText = beamName;
-          const fontSize = 11;
-          
-          // 使用该波束实际绘制的等值线颜色（取第一个已选中的等值线颜色）
-          const labelColor = colorSet[0 % colorSet.length];
-          
           coverageMarkers.push({
             id: beamLabelIdCounter++,
             latitude: beamCenter.latitude,
@@ -2444,11 +2580,11 @@ Page({
             width: 1,
             height: 1,
             label: {
-              content: labelText,
+              content: beamName,
               color: labelColor,
-              fontSize: fontSize,
-              anchorX: 0,  // textAlign: 'center' 时不需要额外偏移
-              anchorY: -fontSize / 2,
+              fontSize: 11,
+              anchorX: 0,
+              anchorY: -6,
               textAlign: 'center'
             }
           });
@@ -2589,6 +2725,7 @@ Page({
       if (cachedSettingsV2) {
         cachedSettingsV2.coveragePolylines = [];
         cachedSettingsV2.coverageMarkers = [];
+        cachedSettingsV2.borePointMarkers = [];
         cachedSettingsV2.beamLabelMarkers = [];
         cachedSettingsV2.showCoverageContours = false;
         cachedSettingsV2.showBeamLabels = false;
@@ -3717,11 +3854,13 @@ Page({
     // 分离标记
     // 等仰角线标记: id 100-999
     // 覆盖值标记: id 1000-1999
+    // 波束中心标记: id 3000-3999
     // 波束名标记: id 4000-4999
     // 搜索标记/定位标签: id >= 5000 且 < 10000
     const allMarkers = markers || [];
     const elevationMarkers = allMarkers.filter(m => m.id >= 100 && m.id < 1000);
     const coverageMarkers = allMarkers.filter(m => m.id >= 1000 && m.id < 2000);
+    const borePointMarkers = allMarkers.filter(m => m.id >= 3000 && m.id < 4000);
     const beamLabelMarkers = allMarkers.filter(m => m.id >= 4000 && m.id < 5000);
     const locationMarkers = allMarkers.filter(m => m.id >= 5000 && m.id < 10000);
     
@@ -3745,6 +3884,7 @@ Page({
       elevationMarkers: elevationMarkers,
       coveragePolylines: coveragePolylines,
       coverageMarkers: coverageMarkers,
+      borePointMarkers: borePointMarkers,
       beamLabelMarkers: beamLabelMarkers,
       // 定位标签
       locationMarkers: locationMarkers,
@@ -3934,6 +4074,7 @@ Page({
       elevationMarkers: elevationMarkers,
       coveragePolylines: coveragePolylines,
       coverageMarkers: coverageMarkers,
+      borePointMarkers: [],  // 旧缓存无bore数据
       beamLabelMarkers: beamLabelMarkers,
       locationMarkers: allLocationMarkers,
       searchMarkerIdCounter: oldSettings.searchMarkerIdCounter || 5000,
@@ -3974,6 +4115,11 @@ Page({
       }
       if (settings.coverageMarkers && settings.coverageMarkers.length > 0) {
         allMarkers.push(...settings.coverageMarkers);
+      }
+      
+      // 恢复波束中心标记
+      if (settings.borePointMarkers && settings.borePointMarkers.length > 0) {
+        allMarkers.push(...settings.borePointMarkers);
       }
       
       // 恢复波束名标记
