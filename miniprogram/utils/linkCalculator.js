@@ -537,9 +537,9 @@ function performCalculations(satParams, inputs) {
   // 接收天线半功率波束宽度
   const theta3 = 70 * rxWavelength / rxAntennaDiameter;
   
-  // ============ 大气衰减计算 ============
-  const uplinkAtmosphericAttenuation = calculateAtmosphericAttenuation(uplinkFrequency);
-  const downlinkAtmosphericAttenuation = calculateAtmosphericAttenuation(downlinkFrequency);
+  // ============ 大气衰减计算 (ITU-R P.676-13) ============
+  const uplinkAtmosphericAttenuation = calculateAtmosphericAttenuation(uplinkFrequency, elevation);
+  const downlinkAtmosphericAttenuation = calculateAtmosphericAttenuation(downlinkFrequency, rxElevation);
   
   // ============ 降雨衰减计算 ============
   // 上行降雨衰减
@@ -1624,20 +1624,84 @@ function calculatePolarizationAngle(stationLon, stationLat, satLon) {
 }
 
 /**
- * 计算大气衰减 - 根据频率
+ * 获取天顶方向的大气衰减分量（氧气 + 水蒸气）
+ * 基于 ITU-R P.676-13 Annex 2 简化模型
+ * 标准大气条件: 温度15°C, 水蒸气密度7.5 g/m³, 地面气压1013 hPa
+ *
+ * @param {number} freq - 频率 (GHz)
+ * @returns {object} { oxygenZenith, waterVaporZenith } 天顶方向氧气和水蒸气衰减 (dB)
  */
-function calculateAtmosphericAttenuation(frequencyGHz) {
-  if (frequencyGHz >= 55) return 42.33;
-  if (frequencyGHz >= 54) return 18.75;
-  if (frequencyGHz >= 53) return 8.45;
-  if (frequencyGHz >= 52) return 4.50;
-  if (frequencyGHz >= 50) return 2;
-  if (frequencyGHz >= 45) return 0.89;
-  if (frequencyGHz >= 40) return 0.52;
-  if (frequencyGHz >= 20) return 0.28;
-  if (frequencyGHz >= 18) return 0.16;
-  if (frequencyGHz >= 10) return 0.1;
-  return 0.06;
+function getZenithAttenuation(freq) {
+  // γ_o × h_o 和 γ_w × h_w 的典型值（标准大气）
+  // 氧气等效高度 h_o ≈ 6 km, 水蒸气等效高度 h_w ≈ 2.1 km
+  if (freq >= 55) return { oxygenZenith: 40.00, waterVaporZenith: 2.33 };
+  if (freq >= 54) return { oxygenZenith: 17.50, waterVaporZenith: 1.25 };
+  if (freq >= 53) return { oxygenZenith: 7.50,  waterVaporZenith: 0.95 };
+  if (freq >= 52) return { oxygenZenith: 3.80,  waterVaporZenith: 0.70 };
+  if (freq >= 50) return { oxygenZenith: 1.50,  waterVaporZenith: 0.50 };
+  if (freq >= 45) return { oxygenZenith: 0.52,  waterVaporZenith: 0.37 };
+  if (freq >= 40) return { oxygenZenith: 0.22,  waterVaporZenith: 0.30 };
+  if (freq >= 20) return { oxygenZenith: 0.08,  waterVaporZenith: 0.20 };
+  if (freq >= 18) return { oxygenZenith: 0.06,  waterVaporZenith: 0.10 };
+  if (freq >= 10) return { oxygenZenith: 0.04,  waterVaporZenith: 0.06 };
+  return { oxygenZenith: 0.03, waterVaporZenith: 0.03 };
+}
+
+/**
+ * 计算大气衰减 - 根据 ITU-R P.676-13 建议书
+ *
+ * 参考文献:
+ *   ITU-R P.676-13 (12/2022)
+ *   "Attenuation by atmospheric gases and related effects"
+ *   Annex 2, Section 2.2 — Slant path gaseous attenuation
+ *
+ * 天顶方向大气衰减:
+ *   A_zenith = γ_o × h_o + γ_w × h_w          (Eq. 37)
+ *
+ * 倾斜路径衰减:
+ *   仰角 θ ≥ 10°:
+ *     A(θ) = A_zenith / sin(θ)                (Eq. 38)
+ *   仰角 θ < 10°（考虑地球曲率修正）:
+ *     A(θ) = (γ_o·h_o)/√(sin²θ + 2·h_o/R_e)
+ *          + (γ_w·h_w)/√(sin²θ + 2·h_w/R_e)  (Eq. 39)
+ *   其中:
+ *     h_o = 6.0 km   — 干燥空气(氧气)等效高度
+ *     h_w = 2.1 km   — 水蒸气等效高度
+ *     R_e = 8500 km  — 等效地球半径
+ *
+ * @param {number} frequencyGHz  - 频率 (GHz)
+ * @param {number} elevationDeg  - 仰角 (度)
+ * @returns {number} 大气衰减 (dB)
+ */
+function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg) {
+  const { oxygenZenith, waterVaporZenith } = getZenithAttenuation(frequencyGHz);
+  const zenithTotal = oxygenZenith + waterVaporZenith;
+
+  // 未提供仰角时返回天顶衰减（向后兼容）
+  if (elevationDeg === undefined || elevationDeg === null || elevationDeg >= 90) {
+    return zenithTotal;
+  }
+
+  // 最低限制为 0°
+  if (elevationDeg < 0) elevationDeg = 0;
+
+  // ITU-R P.676-13 等效高度参数
+  const h_o = 6.0;    // 干燥空气等效高度 (km)
+  const h_w = 2.1;    // 水蒸气等效高度 (km)
+  const R_e = 8500;   // 等效地球半径 (km)
+
+  const sinEl = Math.sin(elevationDeg * Math.PI / 180);
+
+  if (elevationDeg >= 10) {
+    // 仰角 ≥ 10°: 余割法则 — ITU-R P.676-13 Eq. (38)
+    return zenithTotal / sinEl;
+  }
+
+  // 仰角 < 10°: 分别对氧气和水蒸气应用地球曲率修正
+  // ITU-R P.676-13 Eq. (39)
+  const oxygenSlant     = oxygenZenith     / Math.sqrt(sinEl * sinEl + 2 * h_o / R_e);
+  const waterVaporSlant  = waterVaporZenith / Math.sqrt(sinEl * sinEl + 2 * h_w / R_e);
+  return oxygenSlant + waterVaporSlant;
 }
 
 /**
