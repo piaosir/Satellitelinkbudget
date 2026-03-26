@@ -1623,84 +1623,245 @@ function calculatePolarizationAngle(stationLon, stationLat, satLon) {
   return polarizationAngleDeg;
 }
 
+// ============================================================
+// 大气气体衰减计算 — 严格依据 ITU-R P.676-13 (12/2022)
+// "Attenuation by atmospheric gases and related effects"
+// Annex 2: Approximate estimation of gaseous attenuation
+// 适用频率范围: 1 – 350 GHz
+//
+// 关键吸收特征:
+//   22.235 GHz — 水蒸气谐振吸收线
+//   60 GHz 附近 — 氧气吸收复合体 (50-70 GHz)
+//   118.75 GHz — 氧气吸收线
+//   183.31 GHz — 水蒸气吸收线
+//
+// 参考标准大气 (ITU-R P.835-6):
+//   气压 P = 1013.25 hPa, 温度 T = 15°C, 水蒸气密度 ρ = 7.5 g/m³
+// ============================================================
+
 /**
- * 获取天顶方向的大气衰减分量（氧气 + 水蒸气）
- * 基于 ITU-R P.676-13 Annex 2 简化模型
- * 标准大气条件: 温度15°C, 水蒸气密度7.5 g/m³, 地面气压1013 hPa
- *
- * @param {number} freq - 频率 (GHz)
- * @returns {object} { oxygenZenith, waterVaporZenith } 天顶方向氧气和水蒸气衰减 (dB)
+ * 辅助函数 φ(rp, rt, a, b, c, d)
+ * ITU-R P.676-13 Annex 2
  */
-function getZenithAttenuation(freq) {
-  // γ_o × h_o 和 γ_w × h_w 的典型值（标准大气）
-  // 氧气等效高度 h_o ≈ 6 km, 水蒸气等效高度 h_w ≈ 2.1 km
-  if (freq >= 55) return { oxygenZenith: 40.00, waterVaporZenith: 2.33 };
-  if (freq >= 54) return { oxygenZenith: 17.50, waterVaporZenith: 1.25 };
-  if (freq >= 53) return { oxygenZenith: 7.50,  waterVaporZenith: 0.95 };
-  if (freq >= 52) return { oxygenZenith: 3.80,  waterVaporZenith: 0.70 };
-  if (freq >= 50) return { oxygenZenith: 1.50,  waterVaporZenith: 0.50 };
-  if (freq >= 45) return { oxygenZenith: 0.52,  waterVaporZenith: 0.37 };
-  if (freq >= 40) return { oxygenZenith: 0.22,  waterVaporZenith: 0.30 };
-  if (freq >= 20) return { oxygenZenith: 0.08,  waterVaporZenith: 0.20 };
-  if (freq >= 18) return { oxygenZenith: 0.06,  waterVaporZenith: 0.10 };
-  if (freq >= 10) return { oxygenZenith: 0.04,  waterVaporZenith: 0.06 };
-  return { oxygenZenith: 0.03, waterVaporZenith: 0.03 };
+function phi676(rp, rt, a, b, c, d) {
+  return Math.pow(rp, a) * Math.pow(rt, b) *
+         Math.exp(c * (1 - rp) + d * (1 - rt));
 }
 
 /**
- * 计算大气衰减 - 根据 ITU-R P.676-13 建议书
+ * 干燥空气(氧气)比衰减 γ_o (dB/km)
+ * ITU-R P.676-13 Annex 2 Section 2.1, Eq. (22a)-(22f)
+ *
+ * @param {number} f   频率 (GHz), 1-350
+ * @param {number} rp  气压比 = P/1013
+ * @param {number} rt  逆温度比 = 288/(273+t)
+ * @returns {number} γ_o (dB/km)
+ */
+function calcSpecificAttenOxygen(f, rp, rt) {
+  const xi1 = phi676(rp, rt, 0.0717, -1.8132, 0.0156, -1.6515);
+  const xi2 = phi676(rp, rt, 0.5146, -4.6368, -0.1921, -5.7416);
+  const xi3 = phi676(rp, rt, 0.3414, -6.5851, 0.2130, -8.5854);
+
+  if (f <= 54) {
+    // Eq. (22a)
+    const A = 7.2 * Math.pow(rt, 2.8) /
+              (f * f + 0.34 * rp * rp * Math.pow(rt, 1.6));
+    const B = 0.62 * xi3 /
+              (Math.pow(Math.max(54 - f, 0.5), 1.16 * xi1) + 0.83 * xi2);
+    return (A + B) * f * f * rp * rp * 1e-3;
+  }
+
+  if (f > 66 && f <= 120) {
+    // Eq. (22e)
+    const xi4 = phi676(rp, rt, -0.0112, 0.0092, -0.1033, -0.0009);
+    const xi5 = phi676(rp, rt, 0.2705, -2.7192, -0.3016, -4.1033);
+    const xi6 = phi676(rp, rt, 0.2445, -5.9191, 0.0422, -8.0719);
+    const xi7 = phi676(rp, rt, -0.1833, 6.5589, -0.2402, 6.131);
+    const A = 3.02e-4 * Math.pow(rt, 3.5);
+    const B = 0.283 * Math.pow(rt, 3.8) /
+              (Math.pow(f - 118.75, 2) + 2.91 * rp * rp * Math.pow(rt, 1.6));
+    const C = 0.502 * xi6 * (1 - 0.0163 * xi7 * (f - 66)) /
+              (Math.pow(f - 66, 1.4346 * xi4) + 1.15 * xi5);
+    return (A + B + C) * f * f * rp * rp * 1e-3;
+  }
+
+  if (f > 120) {
+    // Eq. (22f)
+    const A = 3.02e-4 / (1 + 1.9e-5 * Math.pow(f, 1.5));
+    const B = 0.283 * Math.pow(rt, 0.3) /
+              (Math.pow(f - 118.75, 2) + 2.91 * rp * rp * Math.pow(rt, 1.6));
+    return (A + B) * f * f * rp * rp * Math.pow(rt, 3.5) * 1e-3;
+  }
+
+  // 54 < f ≤ 66: 氧气吸收复合体（对数插值）
+  // 此频段因极端衰减不用于卫星通信
+  const gamma54 = calcSpecificAttenOxygen(54, rp, rt);
+  const gamma66 = calcSpecificAttenOxygen(66.01, rp, rt);
+  const gammaPeak60 = 14.9 * rp * rp * Math.pow(rt, 3.5);
+  if (f <= 60) {
+    const t = (f - 54) / 6;
+    return Math.exp(Math.log(gamma54) * (1 - t) + Math.log(gammaPeak60) * t);
+  }
+  const t = (f - 60) / 6;
+  return Math.exp(Math.log(gammaPeak60) * (1 - t) + Math.log(gamma66) * t);
+}
+
+/**
+ * 水蒸气比衰减 γ_w (dB/km)
+ * ITU-R P.676-13 Annex 2 Section 2.1, Eq. (23)
+ *
+ * 包含 22.235 GHz 水蒸气谐振吸收线的精确建模
+ *
+ * @param {number} f    频率 (GHz)
+ * @param {number} rp   气压比
+ * @param {number} rt   逆温度比
+ * @param {number} rho  水蒸气密度 (g/m³)
+ * @returns {number} γ_w (dB/km)
+ */
+function calcSpecificAttenWaterVapor(f, rp, rt, rho) {
+  const eta1 = 0.955 * rp * Math.pow(rt, 0.68) + 0.006 * rho;
+  const eta2 = 0.735 * rp * Math.pow(rt, 0.5) + 0.0353 * Math.pow(rt, 4) * rho;
+
+  // g(f, fi) = 1 + ((f - fi)/(f + fi))²  — Eq. (23) 中的线型函数
+  function g(fi) {
+    const r = (f - fi) / (f + fi);
+    return 1 + r * r;
+  }
+
+  const sum =
+      3.98 * eta1 * Math.exp(2.23 * (1 - rt)) /
+        (Math.pow(f - 22.235, 2) + 9.42 * eta1 * eta1) * g(22)
+    + 11.96 * eta1 * Math.exp(0.7 * (1 - rt)) /
+        (Math.pow(f - 183.31, 2) + 11.14 * eta1 * eta1)
+    + 0.081 * eta1 * Math.exp(6.44 * (1 - rt)) /
+        (Math.pow(f - 321.226, 2) + 6.29 * eta1 * eta1)
+    + 3.66 * eta1 * Math.exp(1.6 * (1 - rt)) /
+        (Math.pow(f - 325.153, 2) + 9.22 * eta1 * eta1)
+    + 25.37 * eta1 * Math.exp(1.09 * (1 - rt)) /
+        Math.pow(f - 380, 2)
+    + 17.4 * eta1 * Math.exp(1.46 * (1 - rt)) /
+        Math.pow(f - 448, 2)
+    + 844.6 * eta1 * Math.exp(0.17 * (1 - rt)) /
+        Math.pow(f - 557, 2) * g(557)
+    + 290 * eta1 * Math.exp(0.41 * (1 - rt)) /
+        Math.pow(f - 752, 2) * g(752)
+    + 8.3328e4 * eta2 * Math.exp(0.99 * (1 - rt)) /
+        Math.pow(f - 1780, 2) * g(1780);
+
+  return sum * f * f * Math.pow(rt, 2.5) * rho * 1e-4;
+}
+
+/**
+ * 氧气等效高度 h_o (km) — 频率相关
+ * ITU-R P.676-13 Annex 2 Section 2.2, Eq. (32)
+ *
+ * @param {number} f   频率 (GHz)
+ * @param {number} rp  气压比
+ * @returns {number} h_o (km)
+ */
+function calcEquivHeightOxygen(f, rp) {
+  // t₁: 60 GHz 氧气吸收复合体的等效高度修正
+  const sigma1 = 2.87 + 12.4 * Math.exp(-7.9 * rp);
+  const t1 = 4.64 / (1 + 0.066 * Math.pow(rp, -2.3)) *
+             Math.exp(-Math.pow((f - 59.7) / sigma1, 2));
+
+  // t₂: 118.75 GHz 氧气吸收线修正
+  const t2 = 0.14 * Math.exp(2.12 * rp) /
+             (Math.pow(f - 118.75, 2) + 0.031 * Math.exp(2.2 * rp));
+
+  // t₃: 频率相关修正
+  const t3 = 0.0114 / (1 + 0.14 * Math.pow(rp, -2.6)) * f *
+             (-0.0247 + 0.0001 * f + 1.61e-6 * f * f) /
+             (1 - 0.0169 * f + 4.1e-5 * f * f + 3.2e-7 * f * f * f);
+
+  return 6.1 / (1 + 0.17 * Math.pow(rp, -1.1)) * (1 + t1 + t2 + t3);
+}
+
+/**
+ * 水蒸气等效高度 h_w (km) — 频率相关
+ * ITU-R P.676-13 Annex 2 Section 2.2, Eq. (33)
+ *
+ * h_w 在 22.235 GHz 附近显著增大（水蒸气吸收线效应）
+ *
+ * @param {number} f   频率 (GHz)
+ * @param {number} rp  气压比
+ * @returns {number} h_w (km)
+ */
+function calcEquivHeightWaterVapor(f, rp) {
+  // σ_w — Eq. (33a)
+  const sigmaW = 1.013 / (1 + Math.exp(-8.6 * (rp - 0.57)));
+
+  return 1.66 * (1
+    + 1.39 * sigmaW / (Math.pow(f - 22.235, 2) + 2.56 * sigmaW)
+    + 3.37 * sigmaW / (Math.pow(f - 183.31, 2) + 4.69 * sigmaW)
+    + 1.58 * sigmaW / (Math.pow(f - 325.1, 2) + 2.89 * sigmaW)
+  );
+}
+
+/**
+ * 计算大气衰减 — ITU-R P.676-13 (12/2022) Annex 2 完整算法
  *
  * 参考文献:
- *   ITU-R P.676-13 (12/2022)
- *   "Attenuation by atmospheric gases and related effects"
- *   Annex 2, Section 2.2 — Slant path gaseous attenuation
+ *   [1] ITU-R P.676-13, "Attenuation by atmospheric gases and related effects"
+ *       Annex 2: Approximate estimation of gaseous attenuation (1-350 GHz)
+ *   [2] ITU-R P.835-6, "Reference standard atmospheres"
  *
- * 天顶方向大气衰减:
- *   A_zenith = γ_o × h_o + γ_w × h_w          (Eq. 37)
+ * 算法流程:
+ *   1) 比衰减: γ_o(f) — Eq.(22), γ_w(f) — Eq.(23)
+ *      精确建模 22.235GHz 水蒸气吸收线 和 60GHz 氧气吸收复合体
+ *   2) 等效高度: h_o(f) — Eq.(32), h_w(f) — Eq.(33)
+ *      h_o, h_w 均为频率的函数，在吸收线附近有显著变化
+ *   3) 天顶衰减: A_o = γ_o × h_o, A_w = γ_w × h_w  — Eq.(37)
+ *   4) 倾斜路径:
+ *      θ ≥ 10°: A(θ) = A_zenith / sin(θ)           — Eq.(38)
+ *      θ < 10°: 地球曲率修正                         — Eq.(39)
+ *        A(θ) = A_o/√(sin²θ+2h_o/R_e) + A_w/√(sin²θ+2h_w/R_e)
+ *        R_e = 8500 km (等效地球半径)
  *
- * 倾斜路径衰减:
- *   仰角 θ ≥ 10°:
- *     A(θ) = A_zenith / sin(θ)                (Eq. 38)
- *   仰角 θ < 10°（考虑地球曲率修正）:
- *     A(θ) = (γ_o·h_o)/√(sin²θ + 2·h_o/R_e)
- *          + (γ_w·h_w)/√(sin²θ + 2·h_w/R_e)  (Eq. 39)
- *   其中:
- *     h_o = 6.0 km   — 干燥空气(氧气)等效高度
- *     h_w = 2.1 km   — 水蒸气等效高度
- *     R_e = 8500 km  — 等效地球半径
- *
- * @param {number} frequencyGHz  - 频率 (GHz)
- * @param {number} elevationDeg  - 仰角 (度)
+ * @param {number} frequencyGHz  频率 (GHz)
+ * @param {number} elevationDeg  仰角 (度)
  * @returns {number} 大气衰减 (dB)
  */
 function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg) {
-  const { oxygenZenith, waterVaporZenith } = getZenithAttenuation(frequencyGHz);
-  const zenithTotal = oxygenZenith + waterVaporZenith;
-
-  // 未提供仰角时返回天顶衰减（向后兼容）
-  if (elevationDeg === undefined || elevationDeg === null || elevationDeg >= 90) {
-    return zenithTotal;
+  // 输入防护: 防止 NaN 传播
+  if (!isFinite(frequencyGHz) || frequencyGHz <= 0) return 0;
+  if (elevationDeg !== undefined && elevationDeg !== null && !isFinite(elevationDeg)) {
+    elevationDeg = undefined; // 回退到天顶衰减
   }
 
-  // 最低限制为 0°
+  // 标准大气参数 (ITU-R P.835-6)
+  const rp  = 1.0;    // P/1013, 标准大气压
+  const rt  = 1.0;    // 288/(273+15), 标准温度
+  const rho = 7.5;    // 水蒸气密度 (g/m³)
+
+  // 比衰减 (dB/km) — Section 2.1
+  const gammaO = calcSpecificAttenOxygen(frequencyGHz, rp, rt);
+  const gammaW = calcSpecificAttenWaterVapor(frequencyGHz, rp, rt, rho);
+
+  // 等效高度 (km) — Section 2.2, Eq.(32)/(33)
+  const ho = calcEquivHeightOxygen(frequencyGHz, rp);
+  const hw = calcEquivHeightWaterVapor(frequencyGHz, rp);
+
+  // 天顶方向衰减 — Eq.(37)
+  const Ao = gammaO * ho;
+  const Aw = gammaW * hw;
+
+  if (elevationDeg === undefined || elevationDeg === null || elevationDeg >= 90) {
+    return Ao + Aw;
+  }
   if (elevationDeg < 0) elevationDeg = 0;
 
-  // ITU-R P.676-13 等效高度参数
-  const h_o = 6.0;    // 干燥空气等效高度 (km)
-  const h_w = 2.1;    // 水蒸气等效高度 (km)
-  const R_e = 8500;   // 等效地球半径 (km)
-
   const sinEl = Math.sin(elevationDeg * Math.PI / 180);
+  const Re = 8500; // 等效地球半径 (km)
 
   if (elevationDeg >= 10) {
-    // 仰角 ≥ 10°: 余割法则 — ITU-R P.676-13 Eq. (38)
-    return zenithTotal / sinEl;
+    // Eq.(38): 余割法则
+    return (Ao + Aw) / sinEl;
   }
 
-  // 仰角 < 10°: 分别对氧气和水蒸气应用地球曲率修正
-  // ITU-R P.676-13 Eq. (39)
-  const oxygenSlant     = oxygenZenith     / Math.sqrt(sinEl * sinEl + 2 * h_o / R_e);
-  const waterVaporSlant  = waterVaporZenith / Math.sqrt(sinEl * sinEl + 2 * h_w / R_e);
+  // Eq.(39): θ < 10° 地球曲率修正
+  const oxygenSlant     = Ao / Math.sqrt(sinEl * sinEl + 2 * ho / Re);
+  const waterVaporSlant = Aw / Math.sqrt(sinEl * sinEl + 2 * hw / Re);
   return oxygenSlant + waterVaporSlant;
 }
 
