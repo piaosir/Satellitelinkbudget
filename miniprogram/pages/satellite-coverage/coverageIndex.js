@@ -472,6 +472,47 @@ const coverageIndex = {
     ]
   },
 
+  // 亚太6C
+  'APSTAR 6C': {
+    displayName: '亚太6C',
+    position: 134,
+    folder: '亚太6C',
+    beams: [
+      { band: 'C', beam: '亚太波束', type: 'EIRP', file: 'APSTAR 6C_C_亚太波束_EIRP.json' },
+      { band: 'C', beam: '亚太波束', type: 'GT', file: 'APSTAR 6C_C_亚太波束_GT.json' },
+      { band: 'Ku', beam: '亚太波束', type: 'EIRP', file: 'APSTAR 6C_Ku_亚太波束_EIRP.json' },
+      { band: 'Ku', beam: '亚太波束', type: 'GT', file: 'APSTAR 6C_Ku_亚太波束_GT.json' }
+    ]
+  },
+
+  // 亚太7
+  'APSTAR 7': {
+    displayName: '亚太7',
+    position: 76.5,
+    folder: '亚太7',
+    beams: [
+      { band: 'C', beam: '亚太波束', type: 'EIRP', file: 'APSTAR 7_C_亚太波束_EIRP.json' },
+      { band: 'C', beam: '亚太波束', type: 'GT', file: 'APSTAR 7_C_亚太波束_GT.json' },
+      { band: 'Ku', beam: 'Africa Beam', type: 'EIRP', file: 'APSTAR 7_Ku_Africa Beam_EIRP.json' },
+      { band: 'Ku', beam: 'Africa Beam', type: 'GT', file: 'APSTAR 7_Ku_Africa Beam_GT.json' },
+      { band: 'Ku', beam: 'China Beam', type: 'EIRP', file: 'APSTAR 7_Ku_China Beam_EIRP.json' },
+      { band: 'Ku', beam: 'China Beam', type: 'GT', file: 'APSTAR 7_Ku_China Beam_GT.json' }
+    ]
+  },
+
+  // 亚太9
+  'APSTAR 9': {
+    displayName: '亚太9',
+    position: 142,
+    folder: '亚太9',
+    beams: [
+      { band: 'C', beam: '亚太波束', type: 'EIRP', file: 'APSTAR 9_C_亚太波束_EIRP.json' },
+      { band: 'C', beam: '亚太波束', type: 'GT', file: 'APSTAR 9_C_亚太波束_GT.json' },
+      { band: 'Ku', beam: 'West Beam', type: 'EIRP', file: 'APSTAR 9_Ku_West Beam_EIRP.json' },
+      { band: 'Ku', beam: 'West Beam', type: 'GT', file: 'APSTAR 9_Ku_West Beam_GT.json' }
+    ]
+  },
+
   // 中星12
   'CHINASAT 12': {
     displayName: '中星12',

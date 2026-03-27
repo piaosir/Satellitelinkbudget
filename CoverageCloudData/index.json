@@ -314,6 +314,10 @@
   "中星9C/HAIYU": "coverage/中星9C/HAIYU.json",
   "中星9C/QUANGUO_BEAM6": "coverage/中星9C/QUANGUO_BEAM6.json",
   "中星9C/XIBU": "coverage/中星9C/XIBU.json",
+  "亚太6C/APSTAR 6C_C_亚太波束_EIRP": "coverage/亚太6C/APSTAR 6C_C_亚太波束_EIRP.json",
+  "亚太6C/APSTAR 6C_C_亚太波束_GT": "coverage/亚太6C/APSTAR 6C_C_亚太波束_GT.json",
+  "亚太6C/APSTAR 6C_Ku_亚太波束_EIRP": "coverage/亚太6C/APSTAR 6C_Ku_亚太波束_EIRP.json",
+  "亚太6C/APSTAR 6C_Ku_亚太波束_GT": "coverage/亚太6C/APSTAR 6C_Ku_亚太波束_GT.json",
   "亚太6D/APSTAR 6D_Ku_Beam01a_EIRP": "coverage/亚太6D/APSTAR 6D_Ku_Beam01a_EIRP.json",
   "亚太6D/APSTAR 6D_Ku_Beam01a_GT": "coverage/亚太6D/APSTAR 6D_Ku_Beam01a_GT.json",
   "亚太6D/APSTAR 6D_Ku_Beam01b_EIRP": "coverage/亚太6D/APSTAR 6D_Ku_Beam01b_EIRP.json",
@@ -511,5 +515,15 @@
   "亚太6D/APSTAR 6D_Ku_Beam89_EIRP": "coverage/亚太6D/APSTAR 6D_Ku_Beam89_EIRP.json",
   "亚太6D/APSTAR 6D_Ku_Beam89_GT": "coverage/亚太6D/APSTAR 6D_Ku_Beam89_GT.json",
   "亚太6D/APSTAR 6D_Ku_Beam90_EIRP": "coverage/亚太6D/APSTAR 6D_Ku_Beam90_EIRP.json",
-  "亚太6D/APSTAR 6D_Ku_Beam90_GT": "coverage/亚太6D/APSTAR 6D_Ku_Beam90_GT.json"
+  "亚太6D/APSTAR 6D_Ku_Beam90_GT": "coverage/亚太6D/APSTAR 6D_Ku_Beam90_GT.json",
+  "亚太7/APSTAR 7_C_亚太波束_EIRP": "coverage/亚太7/APSTAR 7_C_亚太波束_EIRP.json",
+  "亚太7/APSTAR 7_C_亚太波束_GT": "coverage/亚太7/APSTAR 7_C_亚太波束_GT.json",
+  "亚太7/APSTAR 7_Ku_Africa Beam_EIRP": "coverage/亚太7/APSTAR 7_Ku_Africa Beam_EIRP.json",
+  "亚太7/APSTAR 7_Ku_Africa Beam_GT": "coverage/亚太7/APSTAR 7_Ku_Africa Beam_GT.json",
+  "亚太7/APSTAR 7_Ku_China Beam_EIRP": "coverage/亚太7/APSTAR 7_Ku_China Beam_EIRP.json",
+  "亚太7/APSTAR 7_Ku_China Beam_GT": "coverage/亚太7/APSTAR 7_Ku_China Beam_GT.json",
+  "亚太9/APSTAR 9_C_亚太波束_EIRP": "coverage/亚太9/APSTAR 9_C_亚太波束_EIRP.json",
+  "亚太9/APSTAR 9_C_亚太波束_GT": "coverage/亚太9/APSTAR 9_C_亚太波束_GT.json",
+  "亚太9/APSTAR 9_Ku_West Beam_EIRP": "coverage/亚太9/APSTAR 9_Ku_West Beam_EIRP.json",
+  "亚太9/APSTAR 9_Ku_West Beam_GT": "coverage/亚太9/APSTAR 9_Ku_West Beam_GT.json"
 }
