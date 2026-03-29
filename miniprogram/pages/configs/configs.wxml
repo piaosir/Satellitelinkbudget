@@ -1,5 +1,5 @@
 <!--configs.wxml-->
-<page-meta page-style="{{isDragging ? 'overflow: hidden;' : ''}}"></page-meta>
+<page-meta page-style="{{isDragging ? 'overflow:hidden;position:fixed;width:100%;top:-' + dragScrollTop + 'px;' : ''}}"></page-meta>
 <wxs module="utils">
   function includes(arr, val) {
     if (!arr || !arr.length) return false;

@@ -137,6 +137,7 @@ Page({
     dragGhostWidth: 0,
     dragItemHeight: 0,
     dragConfig: null,
+    dragScrollTop: 0,
     isCloudReady: false, // 云开发是否就绪
     // 导航栏相关数据
     statusBarHeight: 20,
@@ -352,9 +353,25 @@ Page({
     
     wx.vibrateShort({ type: 'heavy' });
     
-    // 测量所有列表项位置
-    wx.createSelectorQuery().selectAll('.config-card-wrapper').boundingClientRect(rects => {
+    // 记录屏幕高度，用于边缘自动滚动
+    const windowInfo = wx.getWindowInfo();
+    this._windowHeight = windowInfo.windowHeight;
+    this._autoScrollTimer = null;
+    this._autoScrollSpeed = 0;
+    
+    // 合并滚动位置和列表项位置的查询，避免异步回调时序问题（iOS上两个exec可能乱序）
+    const query = wx.createSelectorQuery();
+    query.selectViewport().scrollOffset();
+    query.selectAll('.config-card-wrapper').boundingClientRect();
+    query.exec(results => {
+      const scrollRes = results[0];
+      const rects = results[1];
+      
       if (!rects || rects.length === 0) return;
+      
+      const scrollTop = scrollRes.scrollTop || 0;
+      this._savedScrollTop = scrollTop;
+      this._dragInitScrollTop = scrollTop; // 初始滚动位置，拖拽期间不变
       
       const itemRect = rects[index];
       const itemHeight = itemRect.height;
@@ -367,6 +384,7 @@ Page({
       this._isDraggingMode = true;
       
       this.setData({
+        dragScrollTop: scrollTop,
         isDragging: true,
         dragOrigIndex: index,
         dragTargetIndex: index,
@@ -376,29 +394,34 @@ Page({
         dragItemHeight: itemHeight,
         dragConfig: this.data.configs[index],
       });
-    }).exec();
+    });
   },
 
   // 配置卡片滑动移动
   onConfigTouchMove(e) {
-    // 拖拽排序模式 - 幽灵跟手 + 计算目标位置
+    // 拖拽排序模式 - 幽灵跟手 + 计算目标位置 + 边缘自动滚动
     if (this._isDraggingMode && this.data.isDragging) {
       const touch = e.touches[0];
       const currentY = touch.clientY;
+      this._lastTouchY = currentY;
       
-      // 幽灵跟随手指移动
-      const ghostTop = currentY - this._dragTouchOffsetY;
+      // 边缘自动滚动检测
+      const edgeZone = 80; // 边缘区域大小(px)
+      const maxSpeed = 8; // 最大滚动速度(px/帧)
       
-      // 根据手指位置计算目标插入位置
-      const deltaSlots = Math.round((currentY - this._dragStartTouchY) / this._dragItemHeight);
-      let targetIndex = this._dragOrigIndex + deltaSlots;
-      targetIndex = Math.max(0, Math.min(this.data.configs.length - 1, targetIndex));
-      
-      const updateData = { dragGhostTop: ghostTop };
-      if (targetIndex !== this.data.dragTargetIndex) {
-        updateData.dragTargetIndex = targetIndex;
+      if (currentY < edgeZone) {
+        // 接近顶部 - 向上滚动
+        this._autoScrollSpeed = -maxSpeed * (1 - currentY / edgeZone);
+        this._startAutoScroll();
+      } else if (currentY > this._windowHeight - edgeZone) {
+        // 接近底部 - 向下滚动
+        this._autoScrollSpeed = maxSpeed * (1 - (this._windowHeight - currentY) / edgeZone);
+        this._startAutoScroll();
+      } else {
+        this._stopAutoScroll();
       }
-      this.setData(updateData);
+      
+      this._updateDragPosition(currentY);
       return;
     }
 
@@ -442,6 +465,7 @@ Page({
     // 拖拽排序模式结束
     if (this._isDraggingMode && this.data.isDragging) {
       this._isDraggingMode = false;
+      this._stopAutoScroll();
       
       const origIndex = this.data.dragOrigIndex;
       const targetIndex = this.data.dragTargetIndex;
@@ -451,13 +475,21 @@ Page({
       const [movedItem] = configs.splice(origIndex, 1);
       configs.splice(targetIndex, 0, movedItem);
       
+      // 恢复滚动位置（使用拖拽结束时的滚动位置）
+      const finalScrollTop = this.data.dragScrollTop || 0;
+      
       this.setData({
         configs,
         isDragging: false,
         dragOrigIndex: -1,
         dragTargetIndex: -1,
         dragConfig: null,
+        dragScrollTop: 0,
       });
+      
+      if (finalScrollTop > 0) {
+        wx.pageScrollTo({ scrollTop: finalScrollTop, duration: 0 });
+      }
       
       // 保存自定义排序
       this.saveConfigOrder();
@@ -511,6 +543,67 @@ Page({
     this.setData({ configs: configs });
   },
 
+  // 更新拖拽位置（幽灵 + 目标索引）
+  _updateDragPosition(touchY) {
+    const ghostTop = touchY - this._dragTouchOffsetY;
+    
+    // scrollDelta: 拖拽期间自动滚动累计的偏移量
+    const scrollDelta = (this.data.dragScrollTop || 0) - (this._dragInitScrollTop || 0);
+    
+    // 将屏幕触摸坐标转换为文档坐标来计算目标索引
+    const docY = touchY + scrollDelta;
+    const docStartY = this._dragStartTouchY;
+    
+    const deltaSlots = Math.round((docY - docStartY) / this._dragItemHeight);
+    let targetIndex = this._dragOrigIndex + deltaSlots;
+    targetIndex = Math.max(0, Math.min(this.data.configs.length - 1, targetIndex));
+    
+    const updateData = { dragGhostTop: ghostTop };
+    if (targetIndex !== this.data.dragTargetIndex) {
+      updateData.dragTargetIndex = targetIndex;
+    }
+    this.setData(updateData);
+  },
+
+  // 开始自动滚动
+  _startAutoScroll() {
+    if (this._autoScrollTimer) return;
+    
+    // 计算最大可滚动距离
+    const totalItems = this.data.configs.length;
+    const listHeight = totalItems * this._dragItemHeight;
+    const contentPadding = this.data.contentPaddingTop || 0;
+    const maxScroll = Math.max(0, listHeight + contentPadding - this._windowHeight + 50);
+    
+    this._autoScrollTimer = setInterval(() => {
+      if (!this._isDraggingMode || !this.data.isDragging) {
+        this._stopAutoScroll();
+        return;
+      }
+      
+      let newScrollTop = this.data.dragScrollTop + this._autoScrollSpeed;
+      newScrollTop = Math.max(0, Math.min(maxScroll, newScrollTop));
+      
+      if (newScrollTop !== this.data.dragScrollTop) {
+        this.setData({ dragScrollTop: newScrollTop });
+        
+        // 用最近一次触摸位置更新拖拽状态
+        if (this._lastTouchY !== undefined) {
+          this._updateDragPosition(this._lastTouchY);
+        }
+      }
+    }, 16);
+  },
+
+  // 停止自动滚动
+  _stopAutoScroll() {
+    if (this._autoScrollTimer) {
+      clearInterval(this._autoScrollTimer);
+      this._autoScrollTimer = null;
+    }
+    this._autoScrollSpeed = 0;
+  },
+
   // 保存配置排序到本地
   saveConfigOrder() {
     const order = this.data.configs.map(c => c._id);
@@ -531,9 +624,9 @@ Page({
       order.forEach((id, idx) => { orderMap[id] = idx; });
       
       return [...configs].sort((a, b) => {
-        const oa = orderMap[a._id] !== undefined ? orderMap[a._id] : 999999;
-        const ob = orderMap[b._id] !== undefined ? orderMap[b._id] : 999999;
-        if (oa === 999999 && ob === 999999) return 0;
+        const oa = orderMap[a._id] !== undefined ? orderMap[a._id] : -1;
+        const ob = orderMap[b._id] !== undefined ? orderMap[b._id] : -1;
+        if (oa === -1 && ob === -1) return 0;
         return oa - ob;
       });
     } catch (e) {
