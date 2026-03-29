@@ -1,4 +1,5 @@
 <!--configs.wxml-->
+<page-meta page-style="{{isDragging ? 'overflow: hidden;' : ''}}"></page-meta>
 <wxs module="utils">
   function includes(arr, val) {
     if (!arr || !arr.length) return false;
@@ -8,6 +9,21 @@
     return false;
   }
   module.exports = { includes: includes };
+</wxs>
+<wxs module="dragUtil">
+  function itemStyle(isDragging, origIdx, targetIdx, index, itemH) {
+    if (!isDragging || origIdx < 0) return '';
+    if (index === origIdx) return 'opacity:0;pointer-events:none;';
+    var shift = 0;
+    if (targetIdx > origIdx) {
+      if (index > origIdx && index <= targetIdx) shift = -itemH;
+    } else if (targetIdx < origIdx) {
+      if (index >= targetIdx && index < origIdx) shift = itemH;
+    }
+    if (shift !== 0) return 'transform:translateY(' + shift + 'px);transition:transform 0.15s ease;';
+    return 'transition:transform 0.15s ease;';
+  }
+  module.exports = { itemStyle: itemStyle };
 </wxs>
 <view class="container">
   <!-- 悬浮顶部操作栏 - 左对齐 -->
@@ -23,10 +39,10 @@
       <text class="float-btn-text">导入</text>
     </view>
     
-    <!-- 刷新按钮 -->
-    <view class="float-btn float-btn-with-text" bindtap="loadConfigs" wx:if="{{!selectMode}}">
-      <view class="float-icon icon-refresh"></view>
-      <text class="float-btn-text">刷新</text>
+    <!-- 筛选按钮 -->
+    <view class="float-btn float-btn-with-text {{filterActive ? 'active' : ''}}" bindtap="toggleFilterPanel" wx:if="{{!selectMode}}">
+      <view class="float-icon icon-filter"></view>
+      <text class="float-btn-text">筛选</text>
     </view>
     
     <!-- 多选按钮 -->
@@ -53,11 +69,14 @@
     <!-- 配置列表 -->
     <view class="config-list" wx:if="{{configs.length > 0}}">
       <view class="config-card-wrapper {{utils.includes(selectedConfigs, item._id) ? 'selected' : ''}}" wx:for="{{configs}}" wx:key="_id"
+        style="{{dragUtil.itemStyle(isDragging, dragOrigIndex, dragTargetIndex, index, dragItemHeight)}}"
         bindtouchstart="{{selectMode ? '' : 'onConfigTouchStart'}}"
         bindtouchmove="{{selectMode ? '' : 'onConfigTouchMove'}}"
         bindtouchend="{{selectMode ? '' : 'onConfigTouchEnd'}}"
+        bindlongpress="{{selectMode ? '' : 'onConfigLongPress'}}"
         bindtap="{{selectMode ? 'toggleConfigSelection' : ''}}"
-        data-id="{{item._id}}">
+        data-id="{{item._id}}"
+        data-index="{{index}}">
         <!-- 滑动显示的删除按钮背景 -->
         <view class="config-delete-bg" wx:if="{{!selectMode}}">
           <view class="config-action-delete" data-id="{{item._id}}" data-local="{{item.isLocal}}" bindtap="deleteConfig">删除</view>
@@ -100,6 +119,37 @@
       <button class="btn-action" bindtap="goToCalculate">
         返回主界面
       </button>
+    </view>
+  </view>
+
+  <!-- 筛选面板 -->
+  <view class="filter-panel-mask {{showFilterPanel ? 'show' : ''}}" bindtap="hideFilterPanel"></view>
+  <view class="filter-panel {{showFilterPanel ? 'show' : ''}}">
+    <view class="filter-panel-header">
+      <text class="filter-panel-title">筛选配置</text>
+      <view class="filter-panel-close" bindtap="hideFilterPanel">×</view>
+    </view>
+    <view class="filter-panel-content">
+      <!-- 卫星名称筛选 -->
+      <view class="filter-group">
+        <text class="filter-group-label">卫星名称</text>
+        <view class="filter-options">
+          <view class="filter-tag {{filterSatellite === '' ? 'active' : ''}}" bindtap="selectFilterSatellite" data-value="">全部</view>
+          <view class="filter-tag {{filterSatellite === item ? 'active' : ''}}" wx:for="{{satelliteList}}" wx:key="index" bindtap="selectFilterSatellite" data-value="{{item}}">{{item}}</view>
+        </view>
+      </view>
+      <!-- 频段筛选 -->
+      <view class="filter-group">
+        <text class="filter-group-label">频段</text>
+        <view class="filter-options">
+          <view class="filter-tag {{filterBand === '' ? 'active' : ''}}" bindtap="selectFilterBand" data-value="">全部</view>
+          <view class="filter-tag {{filterBand === item ? 'active' : ''}}" wx:for="{{bandList}}" wx:key="index" bindtap="selectFilterBand" data-value="{{item}}">{{item}}</view>
+        </view>
+      </view>
+    </view>
+    <view class="filter-panel-footer">
+      <view class="filter-btn reset" bindtap="resetFilter">重置</view>
+      <view class="filter-btn confirm" bindtap="applyFilter">确定</view>
     </view>
   </view>
 
@@ -280,6 +330,25 @@
         <view class="batch-import-btn cancel" bindtap="hideBatchImportPanel">取消</view>
         <view class="batch-import-btn confirm" bindtap="confirmBatchImport">全部导入</view>
       </view>
+    </view>
+  </view>
+
+  <!-- 拖拽触摸遮罩 - 全屏捕获触摸事件防止页面滚动/下拉刷新 -->
+  <view class="drag-touch-overlay" wx:if="{{isDragging}}"
+    catchtouchmove="onConfigTouchMove"
+    catchtouchend="onConfigTouchEnd">
+  </view>
+
+  <!-- 拖拽幽灵元素 - 跟随手指移动 -->
+  <view class="drag-ghost" wx:if="{{isDragging && dragConfig}}"
+    style="top:{{dragGhostTop}}px; left:{{dragGhostLeft}}px; width:{{dragGhostWidth}}px;">
+    <view class="drag-ghost-name">{{dragConfig.configName}}</view>
+    <view class="drag-ghost-meta">
+      <text>{{dragConfig.satelliteParams.satelliteName}}</text>
+      <text class="config-sep">·</text>
+      <text>{{dragConfig.satelliteParams.frequencyBand}}</text>
+      <text class="config-sep">·</text>
+      <text>{{dragConfig.createTimeFormatted}}</text>
     </view>
   </view>
 </view>

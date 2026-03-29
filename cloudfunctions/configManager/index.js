@@ -241,7 +241,7 @@ async function updateConfig(openid, data) {
 
 // 获取用户的配置列表
 async function listConfigs(openid, data) {
-  const { page = 1, pageSize = 20 } = data || {};
+  const { page = 1, pageSize = 1000 } = data || {};
   
   const skip = (page - 1) * pageSize;
   

@@ -1,6 +1,6 @@
 {
   "navigationStyle": "custom",
   "navigationBarTitleText": "",
-  "enablePullDownRefresh": true,
+  "enablePullDownRefresh": false,
   "usingComponents": {}
 }

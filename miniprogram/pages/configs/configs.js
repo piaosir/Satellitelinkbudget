@@ -126,8 +126,17 @@ Page({
     loading: false,
     currentShareConfig: null, // 当前要分享的配置
     page: 1,
-    pageSize: 20,
-    hasMore: true,
+    pageSize: 1000,
+    hasMore: false,
+    // 拖拽排序相关
+    isDragging: false,
+    dragOrigIndex: -1,
+    dragTargetIndex: -1,
+    dragGhostTop: 0,
+    dragGhostLeft: 0,
+    dragGhostWidth: 0,
+    dragItemHeight: 0,
+    dragConfig: null,
     isCloudReady: false, // 云开发是否就绪
     // 导航栏相关数据
     statusBarHeight: 20,
@@ -148,7 +157,15 @@ Page({
     lastBatchQRFileID: null, // 上次生成的二维码文件ID（用于删除旧文件）
     // 批量导入相关
     showBatchImportPanel: false,
-    batchImportData: null // 待导入的批量配置数据
+    batchImportData: null, // 待导入的批量配置数据
+    // 筛选相关
+    showFilterPanel: false,
+    filterSatellite: '', // 当前选中的卫星名称筛选
+    filterBand: '', // 当前选中的频段筛选
+    filterActive: false, // 筛选是否激活
+    satelliteList: [], // 可选的卫星名称列表
+    bandList: [], // 可选的频段列表
+    allConfigs: [] // 完整配置列表（筛选前）
   },
 
   onLoad(options) {
@@ -326,8 +343,65 @@ Page({
     this._configStartOffsetX = config ? (config.offsetX || 0) : 0;
   },
 
+  // 长按配置卡片 - 进入拖拽排序模式
+  onConfigLongPress(e) {
+    if (this.data.selectMode || this.data.isDragging) return;
+    
+    const index = e.currentTarget.dataset.index;
+    const touch = e.touches[0];
+    
+    wx.vibrateShort({ type: 'heavy' });
+    
+    // 测量所有列表项位置
+    wx.createSelectorQuery().selectAll('.config-card-wrapper').boundingClientRect(rects => {
+      if (!rects || rects.length === 0) return;
+      
+      const itemRect = rects[index];
+      const itemHeight = itemRect.height;
+      
+      // 手指到卡片顶部的偏移，用于跟手计算
+      this._dragTouchOffsetY = touch.clientY - itemRect.top;
+      this._dragStartTouchY = touch.clientY;
+      this._dragOrigIndex = index;
+      this._dragItemHeight = itemHeight;
+      this._isDraggingMode = true;
+      
+      this.setData({
+        isDragging: true,
+        dragOrigIndex: index,
+        dragTargetIndex: index,
+        dragGhostTop: itemRect.top,
+        dragGhostLeft: itemRect.left,
+        dragGhostWidth: itemRect.width,
+        dragItemHeight: itemHeight,
+        dragConfig: this.data.configs[index],
+      });
+    }).exec();
+  },
+
   // 配置卡片滑动移动
   onConfigTouchMove(e) {
+    // 拖拽排序模式 - 幽灵跟手 + 计算目标位置
+    if (this._isDraggingMode && this.data.isDragging) {
+      const touch = e.touches[0];
+      const currentY = touch.clientY;
+      
+      // 幽灵跟随手指移动
+      const ghostTop = currentY - this._dragTouchOffsetY;
+      
+      // 根据手指位置计算目标插入位置
+      const deltaSlots = Math.round((currentY - this._dragStartTouchY) / this._dragItemHeight);
+      let targetIndex = this._dragOrigIndex + deltaSlots;
+      targetIndex = Math.max(0, Math.min(this.data.configs.length - 1, targetIndex));
+      
+      const updateData = { dragGhostTop: ghostTop };
+      if (targetIndex !== this.data.dragTargetIndex) {
+        updateData.dragTargetIndex = targetIndex;
+      }
+      this.setData(updateData);
+      return;
+    }
+
     const touch = e.touches[0];
     const deltaX = touch.clientX - this._configTouchStartX;
     const deltaY = touch.clientY - this._configTouchStartY;
@@ -365,6 +439,31 @@ Page({
 
   // 配置卡片滑动结束
   onConfigTouchEnd(e) {
+    // 拖拽排序模式结束
+    if (this._isDraggingMode && this.data.isDragging) {
+      this._isDraggingMode = false;
+      
+      const origIndex = this.data.dragOrigIndex;
+      const targetIndex = this.data.dragTargetIndex;
+      
+      // 重新排序数组：将拖拽项从原位置移动到目标位置
+      const configs = [...this.data.configs];
+      const [movedItem] = configs.splice(origIndex, 1);
+      configs.splice(targetIndex, 0, movedItem);
+      
+      this.setData({
+        configs,
+        isDragging: false,
+        dragOrigIndex: -1,
+        dragTargetIndex: -1,
+        dragConfig: null,
+      });
+      
+      // 保存自定义排序
+      this.saveConfigOrder();
+      return;
+    }
+
     const index = this.data.configs.findIndex(c => c._id === this._configTouchId);
     if (index === -1) return;
     
@@ -412,6 +511,36 @@ Page({
     this.setData({ configs: configs });
   },
 
+  // 保存配置排序到本地
+  saveConfigOrder() {
+    const order = this.data.configs.map(c => c._id);
+    try {
+      wx.setStorageSync('configOrder', order);
+    } catch (e) {
+      console.error('保存排序失败:', e);
+    }
+  },
+
+  // 对配置列表应用保存的排序
+  applyConfigOrder(configs) {
+    try {
+      const order = wx.getStorageSync('configOrder');
+      if (!order || !order.length) return configs;
+      
+      const orderMap = {};
+      order.forEach((id, idx) => { orderMap[id] = idx; });
+      
+      return [...configs].sort((a, b) => {
+        const oa = orderMap[a._id] !== undefined ? orderMap[a._id] : 999999;
+        const ob = orderMap[b._id] !== undefined ? orderMap[b._id] : 999999;
+        if (oa === 999999 && ob === 999999) return 0;
+        return oa - ob;
+      });
+    } catch (e) {
+      return configs;
+    }
+  },
+
   // 加载配置列表（优先云端，失败则本地）
   async loadConfigs() {
     if (this.data.loading) return;
@@ -450,12 +579,14 @@ Page({
         const localConfigs = this.getLocalConfigs();
         
         // 合并显示：云端配置在前，本地配置在后
-        const allConfigs = [...cloudConfigs, ...localConfigs];
+        const allConfigs = this.applyConfigOrder([...cloudConfigs, ...localConfigs]);
         
+        this.updateFilterLists(allConfigs);
         this.setData({
-          configs: allConfigs,
+          allConfigs: allConfigs,
+          configs: this.getFilteredConfigs(allConfigs),
           page: 1,
-          hasMore: cloudConfigs.length < res.result.total
+          hasMore: false
         });
         
         if (allConfigs.length === 0) {
@@ -506,10 +637,12 @@ Page({
   // 从本地加载配置（备用方案，更新UI）
   loadLocalConfigs() {
     try {
-      const formattedConfigs = this.getLocalConfigs();
+      const formattedConfigs = this.applyConfigOrder(this.getLocalConfigs());
       
+      this.updateFilterLists(formattedConfigs);
       this.setData({
-        configs: formattedConfigs
+        allConfigs: formattedConfigs,
+        configs: this.getFilteredConfigs(formattedConfigs)
       });
       
       if (formattedConfigs.length === 0) {
@@ -521,6 +654,76 @@ Page({
     } catch (error) {
       console.error('加载本地配置失败:', error);
     }
+  },
+
+  // 从配置列表中提取卫星名称和频段列表
+  updateFilterLists(configs) {
+    const satelliteSet = new Set();
+    const bandSet = new Set();
+    configs.forEach(item => {
+      const name = item.satelliteParams && item.satelliteParams.satelliteName;
+      const band = item.satelliteParams && item.satelliteParams.frequencyBand;
+      if (name) satelliteSet.add(name);
+      if (band) bandSet.add(band);
+    });
+    this.setData({
+      satelliteList: Array.from(satelliteSet).sort(),
+      bandList: Array.from(bandSet).sort()
+    });
+  },
+
+  // 根据当前筛选条件过滤配置
+  getFilteredConfigs(configs) {
+    const { filterSatellite, filterBand } = this.data;
+    if (!filterSatellite && !filterBand) return configs;
+    return configs.filter(item => {
+      const name = item.satelliteParams && item.satelliteParams.satelliteName;
+      const band = item.satelliteParams && item.satelliteParams.frequencyBand;
+      if (filterSatellite && name !== filterSatellite) return false;
+      if (filterBand && band !== filterBand) return false;
+      return true;
+    });
+  },
+
+  // 显示/隐藏筛选面板
+  toggleFilterPanel() {
+    this.setData({ showFilterPanel: !this.data.showFilterPanel });
+  },
+
+  hideFilterPanel() {
+    this.setData({ showFilterPanel: false });
+  },
+
+  // 选择卫星筛选
+  selectFilterSatellite(e) {
+    this.setData({ filterSatellite: e.currentTarget.dataset.value });
+  },
+
+  // 选择频段筛选
+  selectFilterBand(e) {
+    this.setData({ filterBand: e.currentTarget.dataset.value });
+  },
+
+  // 重置筛选
+  resetFilter() {
+    this.setData({
+      filterSatellite: '',
+      filterBand: '',
+      filterActive: false,
+      configs: this.data.allConfigs,
+      showFilterPanel: false
+    });
+  },
+
+  // 应用筛选
+  applyFilter() {
+    const { filterSatellite, filterBand, allConfigs } = this.data;
+    const active = !!(filterSatellite || filterBand);
+    this.setData({
+      filterActive: active,
+      configs: this.getFilteredConfigs(allConfigs),
+      showFilterPanel: false
+    });
   },
 
   // 保存当前配置
