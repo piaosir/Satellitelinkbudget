@@ -29,17 +29,24 @@ const MODULATION_OPTIONS = [
 
 // 工作频段选项及其对应的默认上下行频率
 const FREQUENCY_BAND_OPTIONS = [
-  { value: 'L', label: 'L频段', uplinkFreq: 1.6, downlinkFreq: 1.5 },
-  { value: 'S', label: 'S频段', uplinkFreq: 2.1, downlinkFreq: 2.3 },
-  { value: 'C', label: 'C频段', uplinkFreq: 6.15, downlinkFreq: 3.95 },
-  { value: 'X', label: 'X频段', uplinkFreq: 8.0, downlinkFreq: 7.25 },
-  { value: 'Ku-BSS', label: 'Ku-BSS频段', uplinkFreq: 17.5, downlinkFreq: 11.9 },
-  { value: 'ExtC', label: '扩展C频段', uplinkFreq: 6.545, downlinkFreq: 3.54 },
-  { value: 'ExtKu', label: '扩展Ku频段', uplinkFreq: 13.868, downlinkFreq: 11.58 },
-  { value: 'Ku', label: 'Ku频段', uplinkFreq: 14.25, downlinkFreq: 12.5 },
-  { value: 'Ka', label: 'Ka频段', uplinkFreq: 29.50, downlinkFreq: 19.45 },
-  { value: 'Q', label: 'Q频段', uplinkFreq: 30.0, downlinkFreq: 42.5 },
-  { value: 'V', label: 'V频段', uplinkFreq: 52.0, downlinkFreq: 20.0 }
+  { value: 'L', label: 'L', uplinkFreq: 1.6, downlinkFreq: 1.5 },
+  { value: 'S', label: 'S', uplinkFreq: 2.1, downlinkFreq: 2.3 },
+
+  
+
+  { value: 'X', label: 'X', uplinkFreq: 8.0, downlinkFreq: 7.25 },
+
+  
+
+  { value: 'ExtC', label: '扩展C', uplinkFreq: 6.545, downlinkFreq: 3.54 },
+  { value: 'C', label: 'C', uplinkFreq: 6.15, downlinkFreq: 3.95 },
+  { value: 'ExtKu', label: '扩展Ku', uplinkFreq: 13.85, downlinkFreq: 11.55 },
+
+  { value: 'Ku', label: 'Ku', uplinkFreq: 14.25, downlinkFreq: 12.5 },
+  { value: 'Ku-BSS', label: 'Ku-BSS', uplinkFreq: 17.5, downlinkFreq: 11.9 },
+  { value: 'Ka', label: 'Ka', uplinkFreq: 29.50, downlinkFreq: 19.45 },
+  { value: 'Q', label: 'Q', uplinkFreq: 30.0, downlinkFreq: 42.5 },
+  { value: 'V', label: 'V', uplinkFreq: 52.0, downlinkFreq: 20.0 }
 ];
 
 // 极化方式选项

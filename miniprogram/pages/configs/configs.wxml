@@ -333,6 +333,31 @@
     </view>
   </view>
 
+  <!-- 覆盖配置选择面板 -->
+  <view class="overwrite-picker-mask {{showOverwritePicker ? 'show' : ''}}" bindtap="hideOverwritePicker"></view>
+  <view class="overwrite-picker-panel {{showOverwritePicker ? 'show' : ''}}">
+    <view class="overwrite-picker-header">
+      <text class="overwrite-picker-title">选择要覆盖的配置</text>
+      <view class="overwrite-picker-close" bindtap="hideOverwritePicker">×</view>
+    </view>
+    <scroll-view class="overwrite-picker-list" scroll-y>
+      <view class="overwrite-picker-item" wx:for="{{configs}}" wx:key="_id" bindtap="onOverwritePickerSelect" data-index="{{index}}">
+        <view class="overwrite-picker-name">
+          <text class="overwrite-picker-tag {{item.isLocal ? 'local' : 'cloud'}}">{{item.isLocal ? '本地' : '云端'}}</text>
+          <text>{{item.configName}}</text>
+        </view>
+        <view class="overwrite-picker-meta">
+          <text>{{item.satelliteParams.satelliteName}}</text>
+          <text class="sep">·</text>
+          <text>{{item.satelliteParams.frequencyBand}}</text>
+          <text class="sep">·</text>
+          <text>{{item.createTimeFormatted}}</text>
+        </view>
+      </view>
+    </scroll-view>
+    <view class="overwrite-picker-cancel" bindtap="hideOverwritePicker">取消</view>
+  </view>
+
   <!-- 拖拽触摸遮罩 - 全屏捕获触摸事件防止页面滚动/下拉刷新 -->
   <view class="drag-touch-overlay" wx:if="{{isDragging}}"
     catchtouchmove="onConfigTouchMove"

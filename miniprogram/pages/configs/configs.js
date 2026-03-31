@@ -159,6 +159,7 @@ Page({
     // 批量导入相关
     showBatchImportPanel: false,
     batchImportData: null, // 待导入的批量配置数据
+    showOverwritePicker: false, // 覆盖配置选择面板
     // 筛选相关
     showFilterPanel: false,
     filterSatellite: '', // 当前选中的卫星名称筛选
@@ -917,22 +918,19 @@ Page({
       return;
     }
     
-    // 生成配置名称列表
-    const configNames = configs.map(c => {
-      const prefix = c.isLocal ? '[本地] ' : '[云端] ';
-      return prefix + c.configName;
-    });
-    
-    wx.showActionSheet({
-      itemList: configNames.slice(0, 6), // 最多显示6个选项
-      success: (res) => {
-        const selectedConfig = configs[res.tapIndex];
-        this.confirmOverwriteConfig(selectedConfig);
-      },
-      fail: () => {
-        wx.navigateBack();
-      }
-    });
+    this.setData({ showOverwritePicker: true });
+  },
+
+  hideOverwritePicker() {
+    this.setData({ showOverwritePicker: false });
+    wx.navigateBack();
+  },
+
+  onOverwritePickerSelect(e) {
+    const index = e.currentTarget.dataset.index;
+    const selectedConfig = this.data.configs[index];
+    this.setData({ showOverwritePicker: false });
+    this.confirmOverwriteConfig(selectedConfig);
   },
 
   // 确认覆盖配置
