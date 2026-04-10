@@ -1158,6 +1158,8 @@ Page({
     if (city) {
       // 找到城市，更新经纬度和海拔
       this.updateCityInfo(city, type);
+      // 自动更新降雨率
+      this.promptRainRateEstimation(city.lon, city.lat, type);
     } else {
       // 自定义输入，只更新名称
       this.setData({
