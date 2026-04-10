@@ -1,6 +1,6 @@
 // index.js
 const app = getApp();
-const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS } = require('../../utils/constants');
+const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE } = require('../../utils/constants');
 const { validateAllParams } = require('../../utils/validator');
 const { formatResultsForDisplay } = require('../../utils/formatter');
 const { calculateLinkBudget } = require('../../utils/linkCalculator');
@@ -169,6 +169,10 @@ Page({
     frequencyBandIndex: 7, // 默认Ku
     modulationOptions: MODULATION_OPTIONS,
     modulationIndex: 1, // 默认QPSK
+    dvbStandardOptions: DVB_STANDARD_OPTIONS,
+    dvbStandardIndex: 0, // 默认"自定义"
+    currentModcodList: [],
+    modcodPickerIndex: 0,
     upcOptions: [
       { label: '是', value: '是' },
       { label: '否', value: '否' },
@@ -440,6 +444,25 @@ Page({
           linkParams: linkParams
         });
         
+        // 同步更新DVB标准选择器索引和ModCod列表
+        {
+          const dvbStandard = linkParams.dvbStandard || 'custom';
+          const dvbIdx = DVB_STANDARD_OPTIONS.findIndex(opt => opt.value === dvbStandard);
+          let modcodList = [];
+          if (dvbStandard === 'DVB-S') {
+            modcodList = DVBS_MODCOD_TABLE;
+          } else if (dvbStandard === 'DVB-S2') {
+            modcodList = DVBS2_MODCOD_TABLE;
+          }
+          const modcodIdx = (linkParams.modcodIndex >= 0 && linkParams.modcodIndex < modcodList.length)
+            ? linkParams.modcodIndex : 0;
+          this.setData({
+            dvbStandardIndex: dvbIdx >= 0 ? dvbIdx : 0,
+            currentModcodList: modcodList,
+            modcodPickerIndex: modcodIdx
+          });
+        }
+
         // 同步更新调制方式选择器索引
         if (linkParams.modulation) {
           const modIndex = MODULATION_OPTIONS.findIndex(opt => opt.value === linkParams.modulation);
@@ -479,21 +502,17 @@ Page({
           });
         }
         
-        // 同步更新计算模式和功放功率
-        if (linkParams.calcMode) {
-          this.setData({ calcMode: linkParams.calcMode });
-        }
-        if (linkParams.inputPaPower !== undefined && linkParams.inputPaPower !== '') {
-          this.setData({ inputPaPower: linkParams.inputPaPower });
-        }
+        // 同步更新计算模式和功放功率（旧配置无此字段时重置为默认值）
+        this.setData({
+          calcMode: linkParams.calcMode || 'reverse',
+          inputPaPower: (linkParams.inputPaPower !== undefined && linkParams.inputPaPower !== '') ? linkParams.inputPaPower : ''
+        });
         
-        // 同步恢复速率计算模式和符号率
-        if (linkParams.rateCalcMode) {
-          this.setData({ rateCalcMode: linkParams.rateCalcMode });
-        }
-        if (linkParams.symbolRate !== undefined && linkParams.symbolRate !== '' && linkParams.symbolRate !== '--') {
-          this.setData({ 'realtimeParams.symbolRate': linkParams.symbolRate });
-        }
+        // 同步恢复速率计算模式和符号率（旧配置无此字段时重置为默认值）
+        this.setData({
+          rateCalcMode: linkParams.rateCalcMode || 'infoRate',
+          'realtimeParams.symbolRate': (linkParams.symbolRate !== undefined && linkParams.symbolRate !== '' && linkParams.symbolRate !== '--') ? linkParams.symbolRate : '--'
+        });
       }
       
       // 从全局数据恢复计算结果
@@ -999,6 +1018,86 @@ Page({
       });
     }
     
+    // 更新实时参数
+    this.updateRealtimeParams();
+  },
+
+  // DVB标准选择变化 — 立即切换标准相关参数并选中第一个MODCOD
+  onDvbStandardChange(e) {
+    const index = parseInt(e.detail.value);
+    const standard = DVB_STANDARD_OPTIONS[index].value;
+    let modcodList = [];
+    const updateData = {
+      dvbStandardIndex: index,
+      'linkParams.dvbStandard': standard,
+      modcodPickerIndex: 0
+    };
+
+    if (standard === 'DVB-S') {
+      modcodList = DVBS_MODCOD_TABLE;
+    } else if (standard === 'DVB-S2') {
+      modcodList = DVBS2_MODCOD_TABLE;
+    }
+
+    updateData.currentModcodList = modcodList;
+
+    // 非自定义模式：自动选中第一个MODCOD并填充全部参数
+    if (standard !== 'custom' && modcodList.length > 0) {
+      const firstModcod = modcodList[0];
+      const modIdx = MODULATION_OPTIONS.findIndex(opt => opt.value === firstModcod.modulation);
+
+      updateData['linkParams.modcodIndex'] = 0;
+      updateData['linkParams.modulation'] = firstModcod.modulation;
+      updateData['linkParams.fec'] = firstModcod.fec;
+      updateData['linkParams.rsCode'] = firstModcod.rsCode;
+      updateData['linkParams.bandwidthFactor'] = firstModcod.bandwidthFactor;
+      updateData['linkParams.ebno'] = firstModcod.threshold.toFixed(2);
+      updateData.modulationIndex = modIdx >= 0 ? modIdx : 1;
+      updateData.noiseRatioMode = firstModcod.noiseRatioMode;
+
+      app.globalData.noiseRatioMode = firstModcod.noiseRatioMode;
+      try {
+        wx.setStorageSync('noiseRatioMode', firstModcod.noiseRatioMode);
+      } catch (err) {
+        console.error('保存噪声比模式失败:', err);
+      }
+    } else {
+      updateData['linkParams.modcodIndex'] = -1;
+    }
+
+    this.setData(updateData);
+    this.updateRealtimeParams();
+  },
+
+  // MODCOD选择变化 — 自动填充各参数
+  onModcodChange(e) {
+    const index = parseInt(e.detail.value);
+    const modcod = this.data.currentModcodList[index];
+    if (!modcod) return;
+
+    // 查找调制方式在MODULATION_OPTIONS中的索引
+    const modIndex = MODULATION_OPTIONS.findIndex(opt => opt.value === modcod.modulation);
+
+    this.setData({
+      modcodPickerIndex: index,
+      'linkParams.modcodIndex': index,
+      'linkParams.modulation': modcod.modulation,
+      'linkParams.fec': modcod.fec,
+      'linkParams.rsCode': modcod.rsCode,
+      'linkParams.bandwidthFactor': modcod.bandwidthFactor,
+      'linkParams.ebno': modcod.threshold.toFixed(2),
+      modulationIndex: modIndex >= 0 ? modIndex : 1,
+      noiseRatioMode: modcod.noiseRatioMode
+    });
+
+    // 保存噪声比模式
+    app.globalData.noiseRatioMode = modcod.noiseRatioMode;
+    try {
+      wx.setStorageSync('noiseRatioMode', modcod.noiseRatioMode);
+    } catch (err) {
+      console.error('保存噪声比模式失败:', err);
+    }
+
     // 更新实时参数
     this.updateRealtimeParams();
   },

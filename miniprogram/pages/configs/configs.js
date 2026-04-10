@@ -1568,7 +1568,7 @@ Page({
     }
   },
 
-  // 分享Word文档
+  // 分享Word参数设置文档
   async shareWord() {
     const { currentShareConfig, exportLang } = this.data;
     if (!currentShareConfig || !currentShareConfig.configId) {
@@ -1577,7 +1577,7 @@ Page({
     }
 
     this.hideSharePanel();
-    wx.showLoading({ title: '生成Word中...', mask: true });
+    wx.showLoading({ title: '生成参数文档...', mask: true });
 
     try {
       const configsToExport = await this.getConfigsData([currentShareConfig.configId]);
@@ -1594,7 +1594,7 @@ Page({
         name: 'generateReport',
         data: {
           configs: configsToExport,
-          format: 'word',
+          format: 'word-params',
           lang: exportLang,
           oldFileID: lastWordFileID
         }
@@ -1634,20 +1634,131 @@ Page({
           console.error('打开文档失败:', err);
           wx.showModal({
             title: '导出成功',
-            content: `Word文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
+            content: `参数文档已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
             showCancel: false
           });
         }
       });
     } catch (error) {
-      console.error('分享Word失败:', error);
+      console.error('分享参数文档失败:', error);
       wx.hideLoading();
       wx.showModal({
         title: '分享失败',
-        content: error.message || '无法生成Word文件，请稍后重试',
+        content: error.message || '无法生成参数文档，请稍后重试',
         showCancel: false
       });
     }
+  },
+
+  // 一键复制参数设置
+  async copyParamsText() {
+    const { currentShareConfig } = this.data;
+    if (!currentShareConfig || !currentShareConfig.configId) {
+      wx.showToast({ title: '配置信息异常', icon: 'none' });
+      return;
+    }
+
+    wx.showLoading({ title: '读取参数...', mask: true });
+
+    try {
+      const configsToExport = await this.getConfigsData([currentShareConfig.configId]);
+      if (configsToExport.length === 0) {
+        wx.hideLoading();
+        wx.showToast({ title: '没有可复制的数据', icon: 'none' });
+        return;
+      }
+
+      const text = this.formatConfigParamsText(configsToExport[0]);
+
+      wx.setClipboardData({
+        data: text,
+        success: () => {
+          wx.hideLoading();
+          this.hideSharePanel();
+          wx.showToast({ title: '参数已复制', icon: 'success' });
+        },
+        fail: () => {
+          wx.hideLoading();
+          wx.showToast({ title: '复制失败', icon: 'none' });
+        }
+      });
+    } catch (error) {
+      console.error('复制参数失败:', error);
+      wx.hideLoading();
+      wx.showToast({ title: '复制失败', icon: 'none' });
+    }
+  },
+
+  // 格式化配置参数为纯文本
+  // 获取配置中第一条有效链路的参数
+  _getFirstLinkParams(config) {
+    const links = config.linkParams || {};
+    const linkNums = Object.keys(links).filter(k => typeof links[k] === 'object');
+    return linkNums.length > 0 ? links[linkNums[0]] : {};
+  },
+
+  formatConfigParamsText(config) {
+    const sat = config.satelliteParams || {};
+    const lp = this._getFirstLinkParams(config);
+    const v = (val) => (val !== undefined && val !== null && val !== '') ? String(val) : '--';
+    const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : '自定义';
+    const isForward = lp.calcMode === 'forward';
+    const lastLabel = isForward ? '功放功率' : '链路余量';
+    const lastValue = isForward ? (v(lp.inputPaPower) + 'W') : (v(lp.margin) + 'dB');
+
+    // 每个section用两列表格展示
+    const sections = [
+      { title: '卫星参数', rows: [
+        ['卫星', v(sat.satelliteName), '轨位', v(sat.orbitPosition) + '°E'],
+        ['频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
+        ['转发器BW', v(sat.transponderBandwidth) + 'MHz', '离轴角', v(sat.deltaTheta) + '°'],
+        ['BOi', v(sat.BOi) + 'dB', 'BOo', v(sat.BOo) + 'dB'],
+      ]},
+      { title: '干扰因子(dB)', rows: [
+        ['上行C/ACI', v(sat.aciUplinkFactor), '上行C/ASI', v(sat.adjUplinkFactor)],
+        ['上行C/XPI', v(sat.xpolUplinkFactor), 'HPA C/IM', v(sat.hpaIntermodFactor)],
+        ['下行C/ACI', v(sat.aciDownlinkFactor), '下行C/ASI', v(sat.adjDownlinkFactor)],
+        ['下行C/XPI', v(sat.xpolDownlinkFactor), 'Xpdr C/IM', v(sat.xpdrIntermodFactor)],
+      ]},
+      { title: '上行站', rows: [
+        ['站名', v(lp.earthStationLocation), '极化', v(lp.uplinkPolarization)],
+        ['口径', v(lp.antennaDiameter) + 'm', '效率', v(lp.antennaEfficiency) + '%'],
+        ['经度', v(lp.longitude) + '°E', '纬度', v(lp.latitude) + '°N'],
+        ['频率', v(lp.centerFrequency) + 'GHz', 'G/T', v(lp.G_Ts) + 'dB/K'],
+        ['海拔', v(lp.altitude) + 'm', '雨率', v(lp.rainRate) + 'mm/h'],
+        ['PA回退', v(lp.paBackoff) + 'dB', '馈损', v(lp.feederLoss) + 'dB'],
+        ['UPC', v(lp.uplinkPowerControl), '可用度', v(lp.uplinkAvailability) + '%'],
+      ]},
+      { title: '接收站', rows: [
+        ['站名', v(lp.rxEarthStationLocation), '极化', v(lp.downlinkPolarization)],
+        ['口径', v(lp.rxAntennaDiameter) + 'm', '效率', v(lp.rxAntennaEfficiency) + '%'],
+        ['经度', v(lp.rxLongitude) + '°E', '纬度', v(lp.rxLatitude) + '°N'],
+        ['频率', v(lp.rxCenterFrequency) + 'GHz', 'EIRP', v(lp.rxEIRP) + 'dBW'],
+        ['海拔', v(lp.rxAltitude) + 'm', '雨率', v(lp.rxRainRate) + 'mm/h'],
+        ['天线噪温', v(lp.rxAntennaNoiseTemp) + 'K', '接收机噪温', v(lp.rxReceiverNoiseTemp) + 'K'],
+        ['馈损', v(lp.rxFeederLoss) + 'dB', '可用度', v(lp.rxDownlinkAvailability) + '%'],
+      ]},
+      { title: '载波', rows: [
+        ['标准', dvbLabel, '调制', v(lp.modulation)],
+        ['速率', v(lp.infoRate) + 'kbps', 'FEC', v(lp.fec)],
+        ['RS', v(lp.rsCode), '1+α', v(lp.bandwidthFactor)],
+        ['BER', '1E-' + v(lp.ber), 'Eb/N0门限', v(lp.ebno) + 'dB'],
+        [lastLabel, lastValue],
+      ]},
+    ];
+
+    const lines = [(config.configName || '卫星链路配置')];
+    for (const sec of sections) {
+      lines.push('┌ ' + sec.title);
+      for (const r of sec.rows) {
+        if (r.length === 4) {
+          lines.push('  ' + r[0] + ': ' + r[1] + '  /  ' + r[2] + ': ' + r[3]);
+        } else {
+          lines.push('  ' + r[0] + ': ' + r[1]);
+        }
+      }
+    }
+    return lines.join('\n');
   },
 
   // 隐藏分享面板

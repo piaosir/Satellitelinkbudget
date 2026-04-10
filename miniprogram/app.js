@@ -43,6 +43,8 @@ App({
       linkParams: {},
       // 计算结果
       calculationResults: {},
+      // 标记的参数行
+      markedParams: [],
       // 标记的结果行（用于报告生成）
       highlightedRows: [],
       // 噪声比模式：'ebno' 或 'esno'
@@ -189,6 +191,8 @@ App({
       rxDownlinkAvailability: 99.90,
 
       // 载波参数
+      dvbStandard: 'custom',
+      modcodIndex: -1,
       infoRate: 2048,
       modulation: 'QPSK',
       fec: '3/4',
@@ -197,7 +201,13 @@ App({
       bandwidthFactor: 1.20,
       ber: 7,
       ebno: 5.50,
-      margin: 3.00
+      margin: 3.00,
+
+      // 计算模式与速率模式
+      calcMode: 'reverse',
+      inputPaPower: '',
+      rateCalcMode: 'infoRate',
+      symbolRate: '--'
     };
   },
 

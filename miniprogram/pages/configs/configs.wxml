@@ -233,12 +233,21 @@
           </view>
         </button>
         
-        <!-- Word文档 -->
+        <!-- Word参数文档 -->
         <view class="share-option-btn" bindtap="shareWord">
           <view class="share-option-icon icon-word"></view>
           <view class="share-option-info">
-            <text class="share-option-text">Word文档</text>
-            <text class="share-option-desc">生成Word文件，可转发或保存</text>
+            <text class="share-option-text">参数文档(Word)</text>
+            <text class="share-option-desc">生成参数设置文档，可转发或保存</text>
+          </view>
+        </view>
+
+        <!-- 一键复制参数 -->
+        <view class="share-option-btn" bindtap="copyParamsText">
+          <view class="share-option-icon icon-copy"></view>
+          <view class="share-option-info">
+            <text class="share-option-text">复制参数设置</text>
+            <text class="share-option-desc">一键复制全部参数到剪贴板</text>
           </view>
         </view>
       </view>

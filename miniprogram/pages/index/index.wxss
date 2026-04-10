@@ -1341,6 +1341,23 @@ page {
   border-top: 1rpx solid #f3f4f6;
 }
 
+/* MODCOD快速选择行 */
+.modcod-row {
+  display: flex;
+  gap: 12rpx;
+  margin-bottom: 12rpx;
+  align-items: flex-end;
+}
+
+.modcod-item {
+  flex: 0 0 auto;
+  min-width: 160rpx;
+}
+
+.modcod-item-wide {
+  flex: 1;
+}
+
 /* 水平排列模式 */
 .station-result-row {
   display: flex;

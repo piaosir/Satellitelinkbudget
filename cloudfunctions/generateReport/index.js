@@ -2,7 +2,7 @@
 const cloud = require('wx-server-sdk');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = require('docx');
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, TableLayoutType, VerticalAlign, ShadingType } = require('docx');
 const path = require('path');
 const fs = require('fs');
 
@@ -961,6 +961,157 @@ async function generateWord(configs, lang) {
   return buffer;
 }
 
+// 生成 Word 参数设置文档（仅包含输入参数，不含计算结果）
+// 获取配置中第一条有效链路参数
+function getFirstLinkParams(config) {
+  const links = config.linkParams || {};
+  const nums = Object.keys(links).filter(k => typeof links[k] === 'object');
+  return nums.length > 0 ? links[nums[0]] : {};
+}
+
+// 生成 Word 参数设置文档（表格样式，与主页面排版一致）
+async function generateWordParams(configs, lang) {
+  const isZh = (lang !== 'en');
+  const children = [];
+  const FONT = 'FangSong';
+  const SZ = 21; // 五号字 = 10.5pt
+  const SZ_TITLE = 28;
+
+  // 统一黑色细线边框
+  const cellBorders = {
+    top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+    bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+    left: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+    right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+  };
+
+  // 普通单元格（无底色）
+  function cell(text, width, opts = {}) {
+    return new TableCell({
+      children: [new Paragraph({
+        children: [new TextRun({ text: String(text), font: FONT, size: SZ, bold: !!opts.bold })],
+        spacing: { line: 240 },
+        alignment: opts.center ? AlignmentType.CENTER : AlignmentType.LEFT,
+      })],
+      width: width ? { size: width, type: WidthType.PERCENTAGE } : undefined,
+      borders: cellBorders,
+      verticalAlign: VerticalAlign.CENTER,
+    });
+  }
+
+  // 分节标题行（黑字加粗，无底色，合并整行）
+  function sectionRow(text, cols) {
+    return new TableRow({
+      children: [
+        new TableCell({
+          children: [new Paragraph({
+            children: [new TextRun({ text, font: FONT, size: SZ, bold: true })],
+            spacing: { line: 240 },
+          })],
+          columnSpan: cols,
+          borders: cellBorders,
+          verticalAlign: VerticalAlign.CENTER,
+        }),
+      ]
+    });
+  }
+
+  // 参数行（4列：参数名加粗，值普通）
+  function paramRow(label1, val1, label2, val2) {
+    const cells = [
+      cell(label1, 22, { bold: true }),
+      cell(val1, 28),
+    ];
+    if (label2 !== undefined) {
+      cells.push(cell(label2, 22, { bold: true }));
+      cells.push(cell(val2, 28));
+    } else {
+      cells.push(new TableCell({
+        children: [new Paragraph({ children: [], spacing: { line: 240 } })],
+        columnSpan: 2,
+        borders: cellBorders,
+      }));
+    }
+    return new TableRow({ children: cells });
+  }
+
+  const v = (val) => (val !== undefined && val !== null && val !== '') ? String(val) : '--';
+
+  for (const config of configs) {
+    const sat = config.satelliteParams || {};
+    const lp = getFirstLinkParams(config);
+    const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : (isZh ? '自定义' : 'Custom');
+
+    // 文档标题
+    children.push(new Paragraph({
+      children: [new TextRun({ text: config.configName || (isZh ? '卫星链路参数设置' : 'Link Parameters'), font: FONT, size: SZ_TITLE, bold: true })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 160, line: 240 },
+    }));
+
+    const rows = [];
+    const C = 4;
+
+    // 卫星参数
+    rows.push(sectionRow(isZh ? '卫星参数' : 'Satellite Parameters', C));
+    rows.push(paramRow(isZh ? '卫星名称' : 'Satellite', v(sat.satelliteName), isZh ? '轨道位置(°E)' : 'Orbit(°E)', v(sat.orbitPosition)));
+    rows.push(paramRow(isZh ? '工作频段' : 'Band', v(sat.frequencyBand), isZh ? 'SFD(dBW/m²)' : 'SFD(dBW/m²)', v(sat.sfdRef)));
+    rows.push(paramRow(isZh ? '转发器带宽(MHz)' : 'Xpdr BW(MHz)', v(sat.transponderBandwidth), isZh ? '邻星离轴角(°)' : 'Isolation(°)', v(sat.deltaTheta)));
+    rows.push(paramRow(isZh ? '输入回退(dB)' : 'BOi(dB)', v(sat.BOi), isZh ? '输出回退(dB)' : 'BOo(dB)', v(sat.BOo)));
+
+    // 干扰因子
+    rows.push(sectionRow(isZh ? '干扰因子(dB)' : 'Interference Factors(dB)', C));
+    rows.push(paramRow(isZh ? '上行C/ACI' : 'UL C/ACI', v(sat.aciUplinkFactor), isZh ? '上行C/ASI' : 'UL C/ASI', v(sat.adjUplinkFactor)));
+    rows.push(paramRow(isZh ? '上行C/XPI' : 'UL C/XPI', v(sat.xpolUplinkFactor), isZh ? 'HPA C/IM' : 'HPA C/IM', v(sat.hpaIntermodFactor)));
+    rows.push(paramRow(isZh ? '下行C/ACI' : 'DL C/ACI', v(sat.aciDownlinkFactor), isZh ? '下行C/ASI' : 'DL C/ASI', v(sat.adjDownlinkFactor)));
+    rows.push(paramRow(isZh ? '下行C/XPI' : 'DL C/XPI', v(sat.xpolDownlinkFactor), isZh ? 'Xpdr C/IM' : 'Xpdr C/IM', v(sat.xpdrIntermodFactor)));
+
+    // 上行站参数
+    rows.push(sectionRow(isZh ? '上行站参数' : 'Uplink Station', C));
+    rows.push(paramRow(isZh ? '发信站' : 'Station', v(lp.earthStationLocation), isZh ? '极化方式' : 'Polarization', v(lp.uplinkPolarization)));
+    rows.push(paramRow(isZh ? '天线口径(m)' : 'Ant Dia(m)', v(lp.antennaDiameter), isZh ? '天线效率(%)' : 'Efficiency(%)', v(lp.antennaEfficiency)));
+    rows.push(paramRow(isZh ? '经度(°E)' : 'Lon(°E)', v(lp.longitude), isZh ? '纬度(°N)' : 'Lat(°N)', v(lp.latitude)));
+    rows.push(paramRow(isZh ? '上行频率(GHz)' : 'UL Freq(GHz)', v(lp.centerFrequency), isZh ? '卫星G/T(dB/K)' : 'G/T(dB/K)', v(lp.G_Ts)));
+    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.altitude), isZh ? '降雨率(mm/h)' : 'Rain(mm/h)', v(lp.rainRate)));
+    rows.push(paramRow(isZh ? '功放回退(dB)' : 'PA BO(dB)', v(lp.paBackoff), isZh ? '馈线损耗(dB)' : 'Feeder(dB)', v(lp.feederLoss)));
+    rows.push(paramRow(isZh ? 'UPC' : 'UPC', v(lp.uplinkPowerControl), isZh ? '可用度(%)' : 'Avail(%)', v(lp.uplinkAvailability)));
+
+    // 接收站参数
+    rows.push(sectionRow(isZh ? '接收站参数' : 'Downlink Station', C));
+    rows.push(paramRow(isZh ? '收信站' : 'Station', v(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Polarization', v(lp.downlinkPolarization)));
+    rows.push(paramRow(isZh ? '天线口径(m)' : 'Ant Dia(m)', v(lp.rxAntennaDiameter), isZh ? '天线效率(%)' : 'Efficiency(%)', v(lp.rxAntennaEfficiency)));
+    rows.push(paramRow(isZh ? '经度(°E)' : 'Lon(°E)', v(lp.rxLongitude), isZh ? '纬度(°N)' : 'Lat(°N)', v(lp.rxLatitude)));
+    rows.push(paramRow(isZh ? '下行频率(GHz)' : 'DL Freq(GHz)', v(lp.rxCenterFrequency), isZh ? '卫星EIRP(dBW)' : 'EIRP(dBW)', v(lp.rxEIRP)));
+    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.rxAltitude), isZh ? '降雨率(mm/h)' : 'Rain(mm/h)', v(lp.rxRainRate)));
+    rows.push(paramRow(isZh ? '天线噪温(K)' : 'Ant Temp(K)', v(lp.rxAntennaNoiseTemp), isZh ? '接收机噪温(K)' : 'Rx Temp(K)', v(lp.rxReceiverNoiseTemp)));
+    rows.push(paramRow(isZh ? '馈线损耗(dB)' : 'Feeder(dB)', v(lp.rxFeederLoss), isZh ? '可用度(%)' : 'Avail(%)', v(lp.rxDownlinkAvailability)));
+
+    // 载波参数
+    rows.push(sectionRow(isZh ? '载波参数' : 'Carrier Parameters', C));
+    rows.push(paramRow(isZh ? 'DVB标准' : 'DVB Std', dvbLabel, isZh ? '调制方式' : 'Modulation', v(lp.modulation)));
+    rows.push(paramRow(isZh ? '信息速率(kbps)' : 'Info Rate(kbps)', v(lp.infoRate), isZh ? 'FEC编码' : 'FEC', v(lp.fec)));
+    rows.push(paramRow(isZh ? 'RS编码' : 'RS Code', v(lp.rsCode), isZh ? '滚降系数(1+α)' : 'Roll-off(1+α)', v(lp.bandwidthFactor)));
+    rows.push(paramRow(isZh ? '误码率(1×10⁻ⁿ)' : 'BER(1E-n)', v(lp.ber), isZh ? 'Eb/N₀门限(dB)' : 'Eb/N₀(dB)', v(lp.ebno)));
+    const isForward = lp.calcMode === 'forward';
+    const lastLabel = isForward ? (isZh ? '功放功率(W)' : 'PA Power(W)') : (isZh ? '链路余量(dB)' : 'Margin(dB)');
+    const lastVal = isForward ? v(lp.inputPaPower) : v(lp.margin);
+    rows.push(paramRow(lastLabel, lastVal));
+
+    const table = new Table({
+      rows,
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      layout: TableLayoutType.FIXED,
+    });
+
+    children.push(table);
+  }
+
+  const doc = new Document({
+    sections: [{ properties: {}, children }]
+  });
+  return await Packer.toBuffer(doc);
+}
+
 // 删除指定的云存储文件
 async function deleteCloudFile(fileID) {
   if (!fileID) return false;
@@ -984,10 +1135,10 @@ exports.main = async (event, context) => {
     };
   }
   
-  if (!['excel', 'pdf', 'word'].includes(format)) {
+  if (!['excel', 'pdf', 'word', 'word-params'].includes(format)) {
     return {
       success: false,
-      error: '无效的导出格式，请使用 excel、pdf 或 word'
+      error: '无效的导出格式，请使用 excel、pdf、word 或 word-params'
     };
   }
   
@@ -1011,6 +1162,10 @@ exports.main = async (event, context) => {
       buffer = await generatePDF(configs, lang);
       fileName = `reports/LinkBudgetReport_${timestamp}.pdf`;
       contentType = 'application/pdf';
+    } else if (format === 'word-params') {
+      buffer = await generateWordParams(configs, lang);
+      fileName = `reports/LinkParams_${timestamp}.docx`;
+      contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     } else {
       buffer = await generateWord(configs, lang);
       fileName = `reports/LinkBudgetReport_${timestamp}.docx`;

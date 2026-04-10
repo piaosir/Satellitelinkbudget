@@ -111,6 +111,59 @@ const P838_TABLE = {
   100: { kH: 1.12, kV: 1.06, alphaH: 0.743, alphaV: 0.744 }
 };
 
+// DVB标准选项
+const DVB_STANDARD_OPTIONS = [
+  { value: 'custom', label: '自定义' },
+  { value: 'DVB-S', label: 'DVB-S' },
+  { value: 'DVB-S2', label: 'DVB-S2' }
+];
+
+// DVB-S MODCOD预设表 (Eb/N₀, RS=188/204, 1+α=1.35)
+const DVBS_MODCOD_TABLE = [
+  { label: 'QPSK 1/2', modulation: 'QPSK', fec: '1/2', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 4.5 },
+  { label: 'QPSK 2/3', modulation: 'QPSK', fec: '2/3', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 5.0 },
+  { label: 'QPSK 3/4', modulation: 'QPSK', fec: '3/4', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 5.5 },
+  { label: 'QPSK 5/6', modulation: 'QPSK', fec: '5/6', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 6.0 },
+  { label: 'QPSK 7/8', modulation: 'QPSK', fec: '7/8', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 6.4 },
+  { label: '8PSK 2/3', modulation: '8PSK', fec: '2/3', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 6.9 },
+  { label: '8PSK 5/6', modulation: '8PSK', fec: '5/6', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 8.9 },
+  { label: '8PSK 8/9', modulation: '8PSK', fec: '8/9', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 9.4 },
+  { label: '16QAM 3/4', modulation: '16QAM', fec: '3/4', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 9.0 },
+  { label: '16QAM 7/8', modulation: '16QAM', fec: '7/8', rsCode: '188/204', bandwidthFactor: 1.35, noiseRatioMode: 'ebno', threshold: 10.7 }
+];
+
+// DVB-S2 MODCOD预设表 (Es/N₀, RS=0.9, 1+α=1.05)
+const DVBS2_MODCOD_TABLE = [
+  { label: 'QPSK 1/4', modulation: 'QPSK', fec: '1/4', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: -1.20 },
+  { label: 'QPSK 1/3', modulation: 'QPSK', fec: '1/3', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: -0.70 },
+  { label: 'QPSK 2/5', modulation: 'QPSK', fec: '2/5', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 0.00 },
+  { label: 'QPSK 1/2', modulation: 'QPSK', fec: '1/2', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 1.00 },
+  { label: 'QPSK 3/5', modulation: 'QPSK', fec: '3/5', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 2.23 },
+  { label: 'QPSK 2/3', modulation: 'QPSK', fec: '2/3', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 3.10 },
+  { label: 'QPSK 3/4', modulation: 'QPSK', fec: '3/4', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 4.03 },
+  { label: 'QPSK 4/5', modulation: 'QPSK', fec: '4/5', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 4.68 },
+  { label: 'QPSK 5/6', modulation: 'QPSK', fec: '5/6', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 5.18 },
+  { label: 'QPSK 8/9', modulation: 'QPSK', fec: '8/9', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 6.20 },
+  { label: 'QPSK 9/10', modulation: 'QPSK', fec: '9/10', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 6.42 },
+  { label: '8PSK 3/5', modulation: '8PSK', fec: '3/5', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 5.50 },
+  { label: '8PSK 2/3', modulation: '8PSK', fec: '2/3', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 6.62 },
+  { label: '8PSK 3/4', modulation: '8PSK', fec: '3/4', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 7.91 },
+  { label: '8PSK 5/6', modulation: '8PSK', fec: '5/6', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 9.35 },
+  { label: '8PSK 8/9', modulation: '8PSK', fec: '8/9', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 10.69 },
+  { label: '8PSK 9/10', modulation: '8PSK', fec: '9/10', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 10.98 },
+  { label: '16APSK 2/3', modulation: '16APSK', fec: '2/3', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 8.97 },
+  { label: '16APSK 3/4', modulation: '16APSK', fec: '3/4', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 10.21 },
+  { label: '16APSK 4/5', modulation: '16APSK', fec: '4/5', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 11.03 },
+  { label: '16APSK 5/6', modulation: '16APSK', fec: '5/6', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 11.61 },
+  { label: '16APSK 8/9', modulation: '16APSK', fec: '8/9', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 12.89 },
+  { label: '16APSK 9/10', modulation: '16APSK', fec: '9/10', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 13.13 },
+  { label: '32APSK 3/4', modulation: '32APSK', fec: '3/4', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 12.73 },
+  { label: '32APSK 4/5', modulation: '32APSK', fec: '4/5', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 13.64 },
+  { label: '32APSK 5/6', modulation: '32APSK', fec: '5/6', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 14.28 },
+  { label: '32APSK 8/9', modulation: '32APSK', fec: '8/9', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 15.69 },
+  { label: '32APSK 9/10', modulation: '32APSK', fec: '9/10', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 16.05 }
+];
+
 // 物理常量
 const CONSTANTS = {
   LIGHT_SPEED: 299792.458, // 光速 km/s
@@ -184,6 +237,9 @@ module.exports = {
   TRANSPONDER_STATUS_OPTIONS,
   UPC_OPTIONS,
   FEC_OPTIONS,
+  DVB_STANDARD_OPTIONS,
+  DVBS_MODCOD_TABLE,
+  DVBS2_MODCOD_TABLE,
   P838_TABLE,
   CONSTANTS,
   RESULT_LABELS

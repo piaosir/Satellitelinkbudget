@@ -1201,6 +1201,34 @@
       基带参数
     </view>
     <view class="collapse-content {{carrierParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+      <!-- MODCOD快速选择行 -->
+      <view class="modcod-row">
+        <view class="modcod-item">
+          <text class="form-label">标准</text>
+          <picker mode="selector" 
+                  range="{{dvbStandardOptions}}" 
+                  range-key="label"
+                  value="{{dvbStandardIndex}}"
+                  bindchange="onDvbStandardChange">
+            <view class="form-picker">
+              {{dvbStandardOptions[dvbStandardIndex].label || '自定义'}}
+            </view>
+          </picker>
+        </view>
+        <view class="modcod-item modcod-item-wide" wx:if="{{linkParams.dvbStandard !== 'custom'}}">
+          <text class="form-label">MODCOD</text>
+          <picker mode="selector" 
+                  range="{{currentModcodList}}" 
+                  range-key="label"
+                  value="{{modcodPickerIndex}}"
+                  bindchange="onModcodChange">
+            <view class="form-picker">
+              {{currentModcodList[modcodPickerIndex].label || '请选择'}}
+            </view>
+          </picker>
+        </view>
+      </view>
+
       <!-- 第一行：核心参数 4列 -->
       <view class="grid-4">
         <view class="form-group">

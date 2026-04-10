@@ -1427,6 +1427,12 @@ function performCalculations(satParams, inputs) {
   results.uplinkAvailabilityResult = uplinkAvailability.toFixed(2);
   results.downlinkAvailabilityResult = rxdownlinkAvailability.toFixed(2);
   results.systemAvailabilityResult = systemAvailability;
+  // 预计中断时长（基于系统可用度，按年计算）
+  const systemUnavailability = (100 - parseFloat(systemAvailability)) / 100;
+  const interruptionMinutes = systemUnavailability * 365.25 * 24 * 60;
+  const interruptionHours = interruptionMinutes / 60;
+  results.interruptionMinutes = interruptionMinutes.toFixed(2);
+  results.interruptionHours = interruptionHours.toFixed(2);
   
   // C/T和C/N
   results.uplinkCTResult = uplinkCT.toFixed(2);
