@@ -973,62 +973,94 @@ function getFirstLinkParams(config) {
 async function generateWordParams(configs, lang) {
   const isZh = (lang !== 'en');
   const children = [];
-  const FONT = 'FangSong';
-  const SZ = 21; // 五号字 = 10.5pt
-  const SZ_TITLE = 28;
+  const FONT = isZh ? 'SimSun' : 'Arial';
+  const FONT_TITLE = isZh ? 'SimHei' : 'Arial';
+  const SZ = 18;       // 9pt
+  const SZ_SEC = 19;   // 分节标题略大
+  const SZ_TITLE = 26; // 文档标题
 
-  // 统一黑色细线边框
+  // 深色主题色（深蓝灰，严肃科技感）
+  const C_SECTION_BG = 'D6DCE4';  // 分节行底色
+  const C_LABEL_BG = 'F2F4F7';    // 标签列底色
+  const C_BORDER = '8D9AAF';      // 边框色（蓝灰）
+  const C_SECTION_TEXT = '1F3864'; // 分节标题文字色（深蓝）
+
   const cellBorders = {
-    top: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
-    bottom: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
-    left: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
-    right: { style: BorderStyle.SINGLE, size: 1, color: '000000' },
+    top: { style: BorderStyle.SINGLE, size: 1, color: C_BORDER },
+    bottom: { style: BorderStyle.SINGLE, size: 1, color: C_BORDER },
+    left: { style: BorderStyle.SINGLE, size: 1, color: C_BORDER },
+    right: { style: BorderStyle.SINGLE, size: 1, color: C_BORDER },
   };
 
-  // 普通单元格（无底色）
-  function cell(text, width, opts = {}) {
+  // A4纵向: 11906 DXA, 页边距各567, 可用宽度 = 11906 - 567*2 = 10772
+  const PAGE_W = 11906;
+  const PAGE_M = 567;
+  const TBL_W = PAGE_W - PAGE_M * 2; // 10772
+  // 4列: 标签2400 + 值3000 + 标签2400 + 值2972 = 10772
+  const W_LABEL = 2400;
+  const W_VAL = 3000;
+  const W_LABEL2 = 2400;
+  const W_VAL2 = TBL_W - W_LABEL - W_VAL - W_LABEL2; // 2972
+
+  // 标签单元格（浅灰底 + 加粗）
+  function labelCell(text, w) {
     return new TableCell({
       children: [new Paragraph({
-        children: [new TextRun({ text: String(text), font: FONT, size: SZ, bold: !!opts.bold })],
-        spacing: { line: 240 },
-        alignment: opts.center ? AlignmentType.CENTER : AlignmentType.LEFT,
+        children: [new TextRun({ text: String(text), font: FONT, size: SZ, bold: true })],
+        spacing: { line: 260 },
       })],
-      width: width ? { size: width, type: WidthType.PERCENTAGE } : undefined,
+      width: { size: w, type: WidthType.DXA },
+      borders: cellBorders,
+      verticalAlign: VerticalAlign.CENTER,
+      shading: { type: ShadingType.SOLID, color: C_LABEL_BG, fill: C_LABEL_BG },
+    });
+  }
+
+  // 值单元格（白底）
+  function valCell(text, w) {
+    return new TableCell({
+      children: [new Paragraph({
+        children: [new TextRun({ text: String(text), font: FONT, size: SZ })],
+        spacing: { line: 260 },
+      })],
+      width: { size: w, type: WidthType.DXA },
       borders: cellBorders,
       verticalAlign: VerticalAlign.CENTER,
     });
   }
 
-  // 分节标题行（黑字加粗，无底色，合并整行）
+  // 分节标题行（深蓝灰底 + 深蓝字）
   function sectionRow(text, cols) {
     return new TableRow({
       children: [
         new TableCell({
           children: [new Paragraph({
-            children: [new TextRun({ text, font: FONT, size: SZ, bold: true })],
-            spacing: { line: 240 },
+            children: [new TextRun({ text, font: FONT_TITLE, size: SZ_SEC, bold: true, color: C_SECTION_TEXT })],
+            spacing: { line: 260 },
           })],
           columnSpan: cols,
           borders: cellBorders,
           verticalAlign: VerticalAlign.CENTER,
+          shading: { type: ShadingType.SOLID, color: C_SECTION_BG, fill: C_SECTION_BG },
         }),
       ]
     });
   }
 
-  // 参数行（4列：参数名加粗，值普通）
+  // 参数行（4列固定DXA宽度）
   function paramRow(label1, val1, label2, val2) {
     const cells = [
-      cell(label1, 22, { bold: true }),
-      cell(val1, 28),
+      labelCell(label1, W_LABEL),
+      valCell(val1, W_VAL),
     ];
     if (label2 !== undefined) {
-      cells.push(cell(label2, 22, { bold: true }));
-      cells.push(cell(val2, 28));
+      cells.push(labelCell(label2, W_LABEL2));
+      cells.push(valCell(val2, W_VAL2));
     } else {
       cells.push(new TableCell({
-        children: [new Paragraph({ children: [], spacing: { line: 240 } })],
+        children: [new Paragraph({ children: [], spacing: { line: 260 } })],
         columnSpan: 2,
+        width: { size: W_LABEL2 + W_VAL2, type: WidthType.DXA },
         borders: cellBorders,
       }));
     }
@@ -1041,65 +1073,71 @@ async function generateWordParams(configs, lang) {
     const sat = config.satelliteParams || {};
     const lp = getFirstLinkParams(config);
     const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : (isZh ? '自定义' : 'Custom');
+    const isForward = lp.calcMode === 'forward';
 
     // 文档标题
     children.push(new Paragraph({
-      children: [new TextRun({ text: config.configName || (isZh ? '卫星链路参数设置' : 'Link Parameters'), font: FONT, size: SZ_TITLE, bold: true })],
+      children: [new TextRun({ text: config.configName || (isZh ? '卫星链路参数设置' : 'Link Parameters'), font: FONT_TITLE, size: SZ_TITLE, bold: true, color: C_SECTION_TEXT })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 80, line: 276 },
+    }));
+    // 副标题（生成时间）
+    children.push(new Paragraph({
+      children: [new TextRun({ text: new Date().toISOString().slice(0, 10), font: FONT, size: 16, color: '808080' })],
       alignment: AlignmentType.CENTER,
       spacing: { after: 160, line: 240 },
     }));
 
     const rows = [];
-    const C = 4;
+    const COL = 4;
 
     // 卫星参数
-    rows.push(sectionRow(isZh ? '卫星参数' : 'Satellite Parameters', C));
+    rows.push(sectionRow(isZh ? '卫星参数' : 'Satellite Parameters', COL));
     rows.push(paramRow(isZh ? '卫星名称' : 'Satellite', v(sat.satelliteName), isZh ? '轨道位置(°E)' : 'Orbit(°E)', v(sat.orbitPosition)));
     rows.push(paramRow(isZh ? '工作频段' : 'Band', v(sat.frequencyBand), isZh ? 'SFD(dBW/m²)' : 'SFD(dBW/m²)', v(sat.sfdRef)));
-    rows.push(paramRow(isZh ? '转发器带宽(MHz)' : 'Xpdr BW(MHz)', v(sat.transponderBandwidth), isZh ? '邻星离轴角(°)' : 'Isolation(°)', v(sat.deltaTheta)));
+    rows.push(paramRow(isZh ? '转发器BW(MHz)' : 'Xpdr BW(MHz)', v(sat.transponderBandwidth), isZh ? '离轴角(°)' : 'Isolation(°)', v(sat.deltaTheta)));
     rows.push(paramRow(isZh ? '输入回退(dB)' : 'BOi(dB)', v(sat.BOi), isZh ? '输出回退(dB)' : 'BOo(dB)', v(sat.BOo)));
 
     // 干扰因子
-    rows.push(sectionRow(isZh ? '干扰因子(dB)' : 'Interference Factors(dB)', C));
+    rows.push(sectionRow(isZh ? '干扰因子(dB)' : 'Interference(dB)', COL));
     rows.push(paramRow(isZh ? '上行C/ACI' : 'UL C/ACI', v(sat.aciUplinkFactor), isZh ? '上行C/ASI' : 'UL C/ASI', v(sat.adjUplinkFactor)));
-    rows.push(paramRow(isZh ? '上行C/XPI' : 'UL C/XPI', v(sat.xpolUplinkFactor), isZh ? 'HPA C/IM' : 'HPA C/IM', v(sat.hpaIntermodFactor)));
+    rows.push(paramRow(isZh ? '上行C/XPI' : 'UL C/XPI', v(sat.xpolUplinkFactor), 'HPA C/IM', v(sat.hpaIntermodFactor)));
     rows.push(paramRow(isZh ? '下行C/ACI' : 'DL C/ACI', v(sat.aciDownlinkFactor), isZh ? '下行C/ASI' : 'DL C/ASI', v(sat.adjDownlinkFactor)));
-    rows.push(paramRow(isZh ? '下行C/XPI' : 'DL C/XPI', v(sat.xpolDownlinkFactor), isZh ? 'Xpdr C/IM' : 'Xpdr C/IM', v(sat.xpdrIntermodFactor)));
+    rows.push(paramRow(isZh ? '下行C/XPI' : 'DL C/XPI', v(sat.xpolDownlinkFactor), 'Xpdr C/IM', v(sat.xpdrIntermodFactor)));
 
     // 上行站参数
-    rows.push(sectionRow(isZh ? '上行站参数' : 'Uplink Station', C));
-    rows.push(paramRow(isZh ? '发信站' : 'Station', v(lp.earthStationLocation), isZh ? '极化方式' : 'Polarization', v(lp.uplinkPolarization)));
-    rows.push(paramRow(isZh ? '天线口径(m)' : 'Ant Dia(m)', v(lp.antennaDiameter), isZh ? '天线效率(%)' : 'Efficiency(%)', v(lp.antennaEfficiency)));
+    rows.push(sectionRow(isZh ? '上行站参数' : 'Uplink Station', COL));
+    rows.push(paramRow(isZh ? '发信站' : 'Station', v(lp.earthStationLocation), isZh ? '极化' : 'Pol', v(lp.uplinkPolarization)));
+    rows.push(paramRow(isZh ? '口径(m)' : 'Dia(m)', v(lp.antennaDiameter), isZh ? '效率(%)' : 'Eff(%)', v(lp.antennaEfficiency)));
     rows.push(paramRow(isZh ? '经度(°E)' : 'Lon(°E)', v(lp.longitude), isZh ? '纬度(°N)' : 'Lat(°N)', v(lp.latitude)));
-    rows.push(paramRow(isZh ? '上行频率(GHz)' : 'UL Freq(GHz)', v(lp.centerFrequency), isZh ? '卫星G/T(dB/K)' : 'G/T(dB/K)', v(lp.G_Ts)));
-    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.altitude), isZh ? '降雨率(mm/h)' : 'Rain(mm/h)', v(lp.rainRate)));
-    rows.push(paramRow(isZh ? '功放回退(dB)' : 'PA BO(dB)', v(lp.paBackoff), isZh ? '馈线损耗(dB)' : 'Feeder(dB)', v(lp.feederLoss)));
-    rows.push(paramRow(isZh ? 'UPC' : 'UPC', v(lp.uplinkPowerControl), isZh ? '可用度(%)' : 'Avail(%)', v(lp.uplinkAvailability)));
+    rows.push(paramRow(isZh ? '频率(GHz)' : 'Freq(GHz)', v(lp.centerFrequency), 'G/T(dB/K)', v(lp.G_Ts)));
+    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.altitude), isZh ? '雨率(mm/h)' : 'Rain(mm/h)', v(lp.rainRate)));
+    rows.push(paramRow(isZh ? 'PA回退(dB)' : 'PA BO(dB)', v(lp.paBackoff), isZh ? '馈损(dB)' : 'Feeder(dB)', v(lp.feederLoss)));
+    rows.push(paramRow('UPC', v(lp.uplinkPowerControl), isZh ? '可用度(%)' : 'Avail(%)', v(lp.uplinkAvailability)));
 
     // 接收站参数
-    rows.push(sectionRow(isZh ? '接收站参数' : 'Downlink Station', C));
-    rows.push(paramRow(isZh ? '收信站' : 'Station', v(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Polarization', v(lp.downlinkPolarization)));
-    rows.push(paramRow(isZh ? '天线口径(m)' : 'Ant Dia(m)', v(lp.rxAntennaDiameter), isZh ? '天线效率(%)' : 'Efficiency(%)', v(lp.rxAntennaEfficiency)));
+    rows.push(sectionRow(isZh ? '接收站参数' : 'Downlink Station', COL));
+    rows.push(paramRow(isZh ? '收信站' : 'Station', v(lp.rxEarthStationLocation), isZh ? '极化' : 'Pol', v(lp.downlinkPolarization)));
+    rows.push(paramRow(isZh ? '口径(m)' : 'Dia(m)', v(lp.rxAntennaDiameter), isZh ? '效率(%)' : 'Eff(%)', v(lp.rxAntennaEfficiency)));
     rows.push(paramRow(isZh ? '经度(°E)' : 'Lon(°E)', v(lp.rxLongitude), isZh ? '纬度(°N)' : 'Lat(°N)', v(lp.rxLatitude)));
-    rows.push(paramRow(isZh ? '下行频率(GHz)' : 'DL Freq(GHz)', v(lp.rxCenterFrequency), isZh ? '卫星EIRP(dBW)' : 'EIRP(dBW)', v(lp.rxEIRP)));
-    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.rxAltitude), isZh ? '降雨率(mm/h)' : 'Rain(mm/h)', v(lp.rxRainRate)));
-    rows.push(paramRow(isZh ? '天线噪温(K)' : 'Ant Temp(K)', v(lp.rxAntennaNoiseTemp), isZh ? '接收机噪温(K)' : 'Rx Temp(K)', v(lp.rxReceiverNoiseTemp)));
-    rows.push(paramRow(isZh ? '馈线损耗(dB)' : 'Feeder(dB)', v(lp.rxFeederLoss), isZh ? '可用度(%)' : 'Avail(%)', v(lp.rxDownlinkAvailability)));
+    rows.push(paramRow(isZh ? '频率(GHz)' : 'Freq(GHz)', v(lp.rxCenterFrequency), 'EIRP(dBW)', v(lp.rxEIRP)));
+    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.rxAltitude), isZh ? '雨率(mm/h)' : 'Rain(mm/h)', v(lp.rxRainRate)));
+    rows.push(paramRow(isZh ? '天线噪温(K)' : 'AntT(K)', v(lp.rxAntennaNoiseTemp), isZh ? '接收机噪温(K)' : 'RxT(K)', v(lp.rxReceiverNoiseTemp)));
+    rows.push(paramRow(isZh ? '馈损(dB)' : 'Feeder(dB)', v(lp.rxFeederLoss), isZh ? '可用度(%)' : 'Avail(%)', v(lp.rxDownlinkAvailability)));
 
     // 载波参数
-    rows.push(sectionRow(isZh ? '载波参数' : 'Carrier Parameters', C));
-    rows.push(paramRow(isZh ? 'DVB标准' : 'DVB Std', dvbLabel, isZh ? '调制方式' : 'Modulation', v(lp.modulation)));
-    rows.push(paramRow(isZh ? '信息速率(kbps)' : 'Info Rate(kbps)', v(lp.infoRate), isZh ? 'FEC编码' : 'FEC', v(lp.fec)));
-    rows.push(paramRow(isZh ? 'RS编码' : 'RS Code', v(lp.rsCode), isZh ? '滚降系数(1+α)' : 'Roll-off(1+α)', v(lp.bandwidthFactor)));
-    rows.push(paramRow(isZh ? '误码率(1×10⁻ⁿ)' : 'BER(1E-n)', v(lp.ber), isZh ? 'Eb/N₀门限(dB)' : 'Eb/N₀(dB)', v(lp.ebno)));
-    const isForward = lp.calcMode === 'forward';
-    const lastLabel = isForward ? (isZh ? '功放功率(W)' : 'PA Power(W)') : (isZh ? '链路余量(dB)' : 'Margin(dB)');
+    rows.push(sectionRow(isZh ? '载波参数' : 'Carrier Parameters', COL));
+    rows.push(paramRow(isZh ? 'DVB标准' : 'DVB Std', dvbLabel, isZh ? '调制' : 'Mod', v(lp.modulation)));
+    rows.push(paramRow(isZh ? '速率(kbps)' : 'Rate(kbps)', v(lp.infoRate), 'FEC', v(lp.fec)));
+    rows.push(paramRow('RS', v(lp.rsCode), '1+α', v(lp.bandwidthFactor)));
+    rows.push(paramRow('BER', '1E-' + v(lp.ber), 'Eb/N₀(dB)', v(lp.ebno)));
+    const lastLabel = isForward ? (isZh ? '功放功率(W)' : 'PA(W)') : (isZh ? '余量(dB)' : 'Margin(dB)');
     const lastVal = isForward ? v(lp.inputPaPower) : v(lp.margin);
     rows.push(paramRow(lastLabel, lastVal));
 
     const table = new Table({
       rows,
-      width: { size: 100, type: WidthType.PERCENTAGE },
+      width: { size: TBL_W, type: WidthType.DXA },
       layout: TableLayoutType.FIXED,
     });
 
@@ -1107,7 +1145,15 @@ async function generateWordParams(configs, lang) {
   }
 
   const doc = new Document({
-    sections: [{ properties: {}, children }]
+    sections: [{
+      properties: {
+        page: {
+          size: { width: PAGE_W, height: 16838 },
+          margin: { top: PAGE_M, bottom: PAGE_M, left: PAGE_M, right: PAGE_M },
+        },
+      },
+      children,
+    }]
   });
   return await Packer.toBuffer(doc);
 }
