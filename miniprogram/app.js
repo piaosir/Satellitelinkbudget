@@ -1,4 +1,6 @@
 // app.js
+const { setFullPrecisionData } = require('./utils/rainRate');
+
 App({
   onLaunch: function (options) {
     // 保存启动参数（用于分享码跳转）
@@ -60,6 +62,71 @@ App({
     for (let i = 1; i <= 8; i++) {
       this.globalData.linkParams[i] = this.getDefaultLinkParams();
     }
+
+    // 后台静默下载 ITU-R P.837 全精度降雨率数据
+    this._loadP837Data();
+  },
+
+  // ===== P.837 降雨率数据加载 =====
+  // 云存储文件路径 (上传 p837_r001_v1.bin 后填入 fileID)
+  P837_CLOUD_FILE: 'cloud://cloud1-8gjv5ekx41d6fb76.636c-cloud1-8gjv5ekx41d6fb76-1385987144/R001/p837_r001_v2.bin',
+  P837_LOCAL_PATH: wx.env.USER_DATA_PATH + '/p837_r001_v2.bin',
+  P837_VERSION_KEY: 'p837_data_version',
+  P837_CURRENT_VERSION: 'v2',
+  P837_EXPECTED_SIZE: 1441 * 2881 * 2, // 8,303,042 bytes (uint16)
+
+  _loadP837Data() {
+    const fs = wx.getFileSystemManager();
+    const savedVersion = wx.getStorageSync(this.P837_VERSION_KEY);
+
+    // 优先尝试加载本地缓存
+    if (savedVersion === this.P837_CURRENT_VERSION) {
+      try {
+        const arrayBuffer = fs.readFileSync(this.P837_LOCAL_PATH);
+        if (arrayBuffer && arrayBuffer.byteLength === this.P837_EXPECTED_SIZE) {
+          setFullPrecisionData(arrayBuffer);
+          console.log('[P.837] 从本地缓存加载成功');
+          return;
+        }
+      } catch (e) {
+        console.warn('[P.837] 本地缓存读取失败，重新下载:', e.message);
+      }
+    }
+
+    // 后台下载
+    this._downloadP837Data(fs);
+  },
+
+  _downloadP837Data(fs) {
+    console.log('[P.837] 开始后台下载全精度数据...');
+    wx.cloud.downloadFile({
+      fileID: this.P837_CLOUD_FILE,
+      success: (res) => {
+        if (res.statusCode === 200 && res.tempFilePath) {
+          try {
+            // 读取临时文件
+            const arrayBuffer = fs.readFileSync(res.tempFilePath);
+            if (arrayBuffer.byteLength !== this.P837_EXPECTED_SIZE) {
+              console.warn('[P.837] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              return;
+            }
+
+            // 持久化到用户目录
+            fs.writeFileSync(this.P837_LOCAL_PATH, arrayBuffer);
+            wx.setStorageSync(this.P837_VERSION_KEY, this.P837_CURRENT_VERSION);
+
+            // 注入到 rainRate 模块
+            setFullPrecisionData(arrayBuffer);
+            console.log('[P.837] 下载并缓存成功');
+          } catch (e) {
+            console.error('[P.837] 保存失败:', e.message);
+          }
+        }
+      },
+      fail: (err) => {
+        console.warn('[P.837] 下载失败(将使用0.5°近似数据):', err.errMsg);
+      }
+    });
   },
 
   // 获取默认卫星参数 - 完全对齐 index.html

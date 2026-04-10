@@ -929,8 +929,8 @@ Page({
     const lonChanged = String(curLon) !== String(last.lon);
     const latChanged = String(curLat) !== String(last.lat);
 
-    // 经度和纬度必须同时变化才触发
-    if (lonChanged && latChanged) {
+    // 任一坐标变化即触发降雨率更新
+    if (lonChanged || latChanged) {
       this._lastRainCheckCoords[type] = { lon: curLon, lat: curLat };
       this.checkRainRateEstimation(type);
     }
@@ -961,31 +961,9 @@ Page({
   promptRainRateEstimation(lon, lat, type) {
     const cityInfo = getNearestCityInfo(lat, lon);
     const field = type === 'uplink' ? 'rainRate' : 'rxRainRate';
-    const currentRate = parseFloat(this.data.linkParams[field]) || 0;
     
-    // 如果已有降雨率且与估算值接近，不提示
-    if (currentRate > 0 && Math.abs(currentRate - cityInfo.rainRate) < 5) {
-      return;
-    }
-    
-    wx.showModal({
-      title: '降雨率估算',
-      content: `建议降雨率: ${cityInfo.rainRate} mm/h\n\n是否填充？`,
-      confirmText: '填充',
-      cancelText: '保持当前',
-      success: (res) => {
-        if (res.confirm) {
-          this.setData({
-            [`linkParams.${field}`]: cityInfo.rainRate
-          });
-          
-          wx.showToast({
-            title: `已设置降雨率 ${cityInfo.rainRate} mm/h`,
-            icon: 'success',
-            duration: 2000
-          });
-        }
-      }
+    this.setData({
+      [`linkParams.${field}`]: cityInfo.rainRate
     });
   },
 
