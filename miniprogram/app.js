@@ -75,11 +75,14 @@ App({
       BOi: 6,
       BOo: 3,
       deltaTheta: 2.5,
+      aciUplinkFactor: 30,
       adjUplinkFactor: 25,
-      adjDownlinkFactor: 25,
       xpolUplinkFactor: 26,
+      hpaIntermodFactor: 24,
+      aciDownlinkFactor: 30,
+      adjDownlinkFactor: 25,
       xpolDownlinkFactor: 26,
-      intermodFactor: 21
+      xpdrIntermodFactor: 21
     };
   },
 

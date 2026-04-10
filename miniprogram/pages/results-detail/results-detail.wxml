@@ -513,12 +513,12 @@
     </view>
 
     <!-- ===================== C/T和C/N ===================== -->
-    <view id="sec-ctcn" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行C/T','邻星上行C/T','极化上行C/T','下行C/T','邻星下行C/T','极化下行C/T','互调噪声C/T','总C/T','载波门限C/T','载波总C/T','载波总C/N','门限C/N','链路余量','载波上行C/T','载波下行C/T'], searchKeyword, results, ['uplinkCTResult','adjUplinkCTResult','xpolUplinkCTResult','downlinkCTResult','adjDownlinkCTResult','xpolDownlinkCTResult','intermodCTResult','totalCTResult','totalCTRainResult','carrierThresholdCT','carrierTotalCT','carrierTotalCN','thresholdCN','linkmargin','actualUplinkCT','actualDownlinkCT'])}}">
+    <view id="sec-ctcn" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行C/T','上行ACI C/T','上行ASI C/T','上行XPI C/T','HPA IM C/T','下行C/T','下行ACI C/T','下行ASI C/T','下行XPI C/T','Xpdr IM C/T','总C/T','载波门限C/T','载波总C/T','载波总C/N','门限C/N','链路余量','载波上行C/T','载波下行C/T'], searchKeyword, results, ['uplinkCTResult','aciUplinkCTResult','adjUplinkCTResult','xpolUplinkCTResult','hpaIntermodCTResult','downlinkCTResult','aciDownlinkCTResult','adjDownlinkCTResult','xpolDownlinkCTResult','xpdrIntermodCTResult','totalCTResult','totalCTRainResult','carrierThresholdCT','carrierTotalCT','carrierTotalCN','thresholdCN','linkmargin','actualUplinkCT','actualDownlinkCT'])}}">
       <view class="section-header" bindtap="toggleSection" data-section="ctcn">
         <view class="section-title-row">
           <view class="section-dot dot-red"></view>
           <text class="section-title">载干比(C/T)和载噪比(C/N)</text>
-          <text class="section-count">16项</text>
+          <text class="section-count">19项</text>
         </view>
         <text class="section-arrow {{expandedSections.ctcn ? 'expanded' : ''}}">›</text>
       </view>
@@ -528,29 +528,41 @@
             <text class="detail-label">上行C/T</text>
             <text class="detail-value">{{results.uplinkCTResult}} dB/K</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'adjUplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('邻星上行C/T', searchKeyword, results.adjUplinkCTResult)}}" bindtap="toggleHighlight" data-param="adjUplinkCTResult">
-            <text class="detail-label">邻星上行C/T</text>
+          <view class="detail-item {{filter.includes(markedParams, 'aciUplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行ACI C/T', searchKeyword, results.aciUplinkCTResult)}}" bindtap="toggleHighlight" data-param="aciUplinkCTResult">
+            <text class="detail-label">上行ACI C/T</text>
+            <text class="detail-value">{{results.aciUplinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'adjUplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行ASI C/T', searchKeyword, results.adjUplinkCTResult)}}" bindtap="toggleHighlight" data-param="adjUplinkCTResult">
+            <text class="detail-label">上行ASI C/T</text>
             <text class="detail-value">{{results.adjUplinkCTResult}} dB/K</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'xpolUplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('极化上行C/T', searchKeyword, results.xpolUplinkCTResult)}}" bindtap="toggleHighlight" data-param="xpolUplinkCTResult">
-            <text class="detail-label">极化上行C/T</text>
+          <view class="detail-item {{filter.includes(markedParams, 'xpolUplinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行XPI C/T', searchKeyword, results.xpolUplinkCTResult)}}" bindtap="toggleHighlight" data-param="xpolUplinkCTResult">
+            <text class="detail-label">上行XPI C/T</text>
             <text class="detail-value">{{results.xpolUplinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'hpaIntermodCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('HPA IM C/T', searchKeyword, results.hpaIntermodCTResult)}}" bindtap="toggleHighlight" data-param="hpaIntermodCTResult">
+            <text class="detail-label">HPA IM C/T</text>
+            <text class="detail-value">{{results.hpaIntermodCTResult}} dB/K</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'downlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行C/T', searchKeyword, results.downlinkCTResult)}}" bindtap="toggleHighlight" data-param="downlinkCTResult">
             <text class="detail-label">下行C/T</text>
             <text class="detail-value">{{results.downlinkCTResult}} dB/K</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'adjDownlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('邻星下行C/T', searchKeyword, results.adjDownlinkCTResult)}}" bindtap="toggleHighlight" data-param="adjDownlinkCTResult">
-            <text class="detail-label">邻星下行C/T</text>
+          <view class="detail-item {{filter.includes(markedParams, 'aciDownlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行ACI C/T', searchKeyword, results.aciDownlinkCTResult)}}" bindtap="toggleHighlight" data-param="aciDownlinkCTResult">
+            <text class="detail-label">下行ACI C/T</text>
+            <text class="detail-value">{{results.aciDownlinkCTResult}} dB/K</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'adjDownlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行ASI C/T', searchKeyword, results.adjDownlinkCTResult)}}" bindtap="toggleHighlight" data-param="adjDownlinkCTResult">
+            <text class="detail-label">下行ASI C/T</text>
             <text class="detail-value">{{results.adjDownlinkCTResult}} dB/K</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'xpolDownlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('极化下行C/T', searchKeyword, results.xpolDownlinkCTResult)}}" bindtap="toggleHighlight" data-param="xpolDownlinkCTResult">
-            <text class="detail-label">极化下行C/T</text>
+          <view class="detail-item {{filter.includes(markedParams, 'xpolDownlinkCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行XPI C/T', searchKeyword, results.xpolDownlinkCTResult)}}" bindtap="toggleHighlight" data-param="xpolDownlinkCTResult">
+            <text class="detail-label">下行XPI C/T</text>
             <text class="detail-value">{{results.xpolDownlinkCTResult}} dB/K</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'intermodCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('互调噪声C/T', searchKeyword, results.intermodCTResult)}}" bindtap="toggleHighlight" data-param="intermodCTResult">
-            <text class="detail-label">互调噪声C/T</text>
-            <text class="detail-value">{{results.intermodCTResult}} dB/K</text>
+          <view class="detail-item {{filter.includes(markedParams, 'xpdrIntermodCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('Xpdr IM C/T', searchKeyword, results.xpdrIntermodCTResult)}}" bindtap="toggleHighlight" data-param="xpdrIntermodCTResult">
+            <text class="detail-label">Xpdr IM C/T</text>
+            <text class="detail-value">{{results.xpdrIntermodCTResult}} dB/K</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'totalCTResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('总C/T', searchKeyword, results.totalCTResult)}}" bindtap="toggleHighlight" data-param="totalCTResult">
             <text class="detail-label">总C/T(晴天)</text>

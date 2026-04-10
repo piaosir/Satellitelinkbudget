@@ -339,6 +339,9 @@ function performCalculations(satParams, inputs) {
   const deltaTheta = satParams.deltaTheta !== undefined && satParams.deltaTheta !== '' && satParams.deltaTheta !== null
     ? parseFloat(satParams.deltaTheta) 
     : 3; // 度 - 角度偏差
+  const aciUplinkFactor = satParams.aciUplinkFactor !== undefined && satParams.aciUplinkFactor !== '' && satParams.aciUplinkFactor !== null
+    ? parseFloat(satParams.aciUplinkFactor) 
+    : 30; // dB
   const adjUplinkFactor = satParams.adjUplinkFactor !== undefined && satParams.adjUplinkFactor !== '' && satParams.adjUplinkFactor !== null
     ? parseFloat(satParams.adjUplinkFactor) 
     : 25; // dB
@@ -347,13 +350,19 @@ function performCalculations(satParams, inputs) {
     : 25; // dB
   const xpolUplinkFactor = satParams.xpolUplinkFactor !== undefined && satParams.xpolUplinkFactor !== '' && satParams.xpolUplinkFactor !== null
     ? parseFloat(satParams.xpolUplinkFactor) 
-    : 30; // dB
+    : 26; // dB
   const xpolDownlinkFactor = satParams.xpolDownlinkFactor !== undefined && satParams.xpolDownlinkFactor !== '' && satParams.xpolDownlinkFactor !== null
     ? parseFloat(satParams.xpolDownlinkFactor) 
+    : 26; // dB
+  const hpaIntermodFactor = satParams.hpaIntermodFactor !== undefined && satParams.hpaIntermodFactor !== '' && satParams.hpaIntermodFactor !== null
+    ? parseFloat(satParams.hpaIntermodFactor) 
+    : 24; // dB
+  const aciDownlinkFactor = satParams.aciDownlinkFactor !== undefined && satParams.aciDownlinkFactor !== '' && satParams.aciDownlinkFactor !== null
+    ? parseFloat(satParams.aciDownlinkFactor) 
     : 30; // dB
-  const intermodFactor = satParams.intermodFactor !== undefined && satParams.intermodFactor !== '' && satParams.intermodFactor !== null
-    ? parseFloat(satParams.intermodFactor) 
-    : 22; // dB
+  const xpdrIntermodFactor = satParams.xpdrIntermodFactor !== undefined && satParams.xpdrIntermodFactor !== '' && satParams.xpdrIntermodFactor !== null
+    ? parseFloat(satParams.xpdrIntermodFactor) 
+    : 21; // dB
   
   // UPC参数
   const uplinkPowerControl = inputs.uplinkPowerControl || '否';
@@ -627,41 +636,50 @@ function performCalculations(satParams, inputs) {
   
   // 各项C/T值计算
   const uplinkCT = SFDs - antennaGain - BOi + G_Ts;
+  const aciUplinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
+                      CONSTANTS.BOLTZMANN + aciUplinkFactor;
   const adjUplinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                       CONSTANTS.BOLTZMANN + adjUplinkFactor;
   const xpolUplinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                        CONSTANTS.BOLTZMANN + xpolUplinkFactor;
+  const hpaIntermodCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
+                        CONSTANTS.BOLTZMANN + hpaIntermodFactor;
   const downlinkCT = EIRPs - BOo - downlinkFSL - downlinkCloudAttenuation - 
                      downlinkAtmosphericAttenuation + gOverTe - downlinkMiscLoss;
+  const aciDownlinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
+                        CONSTANTS.BOLTZMANN + aciDownlinkFactor;
   const adjDownlinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                         CONSTANTS.BOLTZMANN + adjDownlinkFactor;
   const xpolDownlinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                          CONSTANTS.BOLTZMANN + xpolDownlinkFactor;
-  const intermodCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
-                     CONSTANTS.BOLTZMANN + intermodFactor;
+  const xpdrIntermodCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
+                         CONSTANTS.BOLTZMANN + xpdrIntermodFactor;
   
   // 计算总C/T（对数运算）
   // 先计算上行总C/T
   const uplinkTotalCTLinear = 1 / (
     Math.pow(10, -uplinkCT / 10) +
+    Math.pow(10, -aciUplinkCT / 10) +
     Math.pow(10, -adjUplinkCT / 10) +
-    Math.pow(10, -xpolUplinkCT / 10)
+    Math.pow(10, -xpolUplinkCT / 10) +
+    Math.pow(10, -hpaIntermodCT / 10)
   );
   const uplinkTotalCT = 10 * Math.log10(uplinkTotalCTLinear);
   
-  // 再计算下行总C/T
+  // 再计算下行总C/T（含Xpdr互调）
   const downlinkTotalCTLinear = 1 / (
     Math.pow(10, -downlinkCT / 10) +
+    Math.pow(10, -aciDownlinkCT / 10) +
     Math.pow(10, -adjDownlinkCT / 10) +
-    Math.pow(10, -xpolDownlinkCT / 10) 
+    Math.pow(10, -xpolDownlinkCT / 10) +
+    Math.pow(10, -xpdrIntermodCT / 10)
   );
   const downlinkTotalCT = 10 * Math.log10(downlinkTotalCTLinear);
   
   // 最后合并上下行得到总C/T
   const totalCTLinear = 1 / (
     Math.pow(10, -uplinkTotalCT / 10) +
-    Math.pow(10, -downlinkTotalCT / 10) +
-    Math.pow(10, -intermodCT / 10)
+    Math.pow(10, -downlinkTotalCT / 10)
   );
   const totalCT = 10 * Math.log10(totalCTLinear);
   
@@ -708,24 +726,27 @@ function performCalculations(satParams, inputs) {
   // 先计算上行总C/T（上行部分不变）
   const rainUplinkTotalCTLinear = 1 / (
     Math.pow(10, -uplinkCT / 10) +
+    Math.pow(10, -aciUplinkCT / 10) +
     Math.pow(10, -adjUplinkCT / 10) +
-    Math.pow(10, -xpolUplinkCT / 10)
+    Math.pow(10, -xpolUplinkCT / 10) +
+    Math.pow(10, -hpaIntermodCT / 10)
   );
   const rainUplinkTotalCT = 10 * Math.log10(rainUplinkTotalCTLinear);
   
-  // 再计算下行总C/T（考虑下行降雨衰减和G/T恶化）
+  // 再计算下行总C/T（考虑下行降雨衰减和G/T恶化，含Xpdr互调）
   const rainDownlinkTotalCTLinear = 1 / (
     Math.pow(10, -(downlinkCT - downlinkRainAttenuation - gOverTdegradation) / 10) +
+    Math.pow(10, -aciDownlinkCT / 10) +
     Math.pow(10, -adjDownlinkCT / 10) +
-    Math.pow(10, -xpolDownlinkCT / 10) 
+    Math.pow(10, -xpolDownlinkCT / 10) +
+    Math.pow(10, -xpdrIntermodCT / 10)
   );
   const rainDownlinkTotalCT = 10 * Math.log10(rainDownlinkTotalCTLinear);
   
-  // 最后合并上下行得到下行雨卫星总C/T
+  // 合并上下行得到下行雨卫星总C/T
   const totalInterferenceLinear = 1 / (
     Math.pow(10, -rainUplinkTotalCT / 10) +
-    Math.pow(10, -rainDownlinkTotalCT / 10) +
-    Math.pow(10, -intermodCT / 10)
+    Math.pow(10, -rainDownlinkTotalCT / 10)
   );
   
   // 下行雨卫星总C/T
@@ -765,12 +786,15 @@ function performCalculations(satParams, inputs) {
   
   // 下行功率计算
   const totalInterference = Math.pow(10, -uplinkCT / 10) +
+    Math.pow(10, -aciUplinkCT / 10) +
     Math.pow(10, -adjUplinkCT / 10) +
     Math.pow(10, -xpolUplinkCT / 10) +
+    Math.pow(10, -hpaIntermodCT / 10) +
     Math.pow(10, -downlinkCT / 10) +
+    Math.pow(10, -aciDownlinkCT / 10) +
     Math.pow(10, -adjDownlinkCT / 10) +
     Math.pow(10, -xpolDownlinkCT / 10) +
-    Math.pow(10, -intermodCT / 10);
+    Math.pow(10, -xpdrIntermodCT / 10);
   const interferenceTerm = 10 * Math.log10(totalInterferenceLinear);
   
   // 下行功率计算（使用精细化损耗替代0.6dB）
@@ -1406,12 +1430,15 @@ function performCalculations(satParams, inputs) {
   
   // C/T和C/N
   results.uplinkCTResult = uplinkCT.toFixed(2);
+  results.aciUplinkCTResult = aciUplinkCT.toFixed(2);
   results.adjUplinkCTResult = adjUplinkCT.toFixed(2);
   results.xpolUplinkCTResult = xpolUplinkCT.toFixed(2);
+  results.hpaIntermodCTResult = hpaIntermodCT.toFixed(2);
   results.downlinkCTResult = downlinkCT.toFixed(2);
+  results.aciDownlinkCTResult = aciDownlinkCT.toFixed(2);
   results.adjDownlinkCTResult = adjDownlinkCT.toFixed(2);
   results.xpolDownlinkCTResult = xpolDownlinkCT.toFixed(2);
-  results.intermodCTResult = intermodCT.toFixed(2);
+  results.xpdrIntermodCTResult = xpdrIntermodCT.toFixed(2);
   results.totalCTResult = totalCT.toFixed(2);
   results.totalCTRainResult = totalCTRain.toFixed(2);
   results.carrierThresholdCT = carrierThreshold.toFixed(2);

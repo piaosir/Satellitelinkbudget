@@ -579,6 +579,17 @@
         </view>
 
         <view class="form-group">
+          <text class="form-label">邻星离轴角(°)</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="0" 
+                 value="{{satelliteParams.deltaTheta}}"
+                 data-field="deltaTheta"
+                 adjust-position="{{isNotIOS ? '' : false}}"
+                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
+
+        <view class="form-group">
           <text class="form-label">输入回退(dB)</text>
           <input class="form-input" 
                  type="text"
@@ -588,35 +599,35 @@
                  adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
+
+        <view class="form-group">
+          <text class="form-label">输出回退(dB)</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="3" 
+                 value="{{satelliteParams.BOo}}"
+                 data-field="BOo"
+                 adjust-position="{{isNotIOS ? '' : false}}"
+                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
       </view>
 
-      <!-- 第三行：输出回退（部分收起时隐藏以下内容） -->
+      <!-- 部分收起时隐藏以下内容 -->
       <view wx:if="{{satelliteParamsExpandState === 'full'}}">
         <view class="grid-4">
           <view class="form-group">
-            <text class="form-label">输出回退(dB)</text>
+            <text class="form-label">上行C/ACI(dB)</text>
             <input class="form-input" 
                    type="text"
-                   placeholder="3" 
-                   value="{{satelliteParams.BOo}}"
-                   data-field="BOo"
+                   placeholder="30" 
+                   value="{{satelliteParams.aciUplinkFactor}}"
+                   data-field="aciUplinkFactor"
                    adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
 
           <view class="form-group">
-            <text class="form-label">邻星离轴角(°)</text>
-            <input class="form-input" 
-                   type="text"
-                   placeholder="0" 
-                   value="{{satelliteParams.deltaTheta}}"
-                   data-field="deltaTheta"
-                   adjust-position="{{isNotIOS ? '' : false}}"
-                   bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-          </view>
-
-          <view class="form-group">
-            <text class="form-label">邻星上行C/I(dB)</text>
+            <text class="form-label">上行C/ASI(dB)</text>
             <input class="form-input" 
                    type="text"
                    placeholder="25" 
@@ -627,7 +638,18 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">邻星下行C/I(dB)</text>
+            <text class="form-label">下行C/ACI(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="30" 
+                   value="{{satelliteParams.aciDownlinkFactor}}"
+                   data-field="aciDownlinkFactor"
+                   adjust-position="{{isNotIOS ? '' : false}}"
+                   bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+          </view>
+
+          <view class="form-group">
+            <text class="form-label">下行C/ASI(dB)</text>
             <input class="form-input" 
                    type="text"
                    placeholder="25" 
@@ -640,10 +662,10 @@
 
         <view class="grid-4">
           <view class="form-group">
-            <text class="form-label">极化上行C/I(dB)</text>
+            <text class="form-label">上行C/XPI(dB)</text>
             <input class="form-input" 
                    type="text"
-                   placeholder="30" 
+                   placeholder="26" 
                    value="{{satelliteParams.xpolUplinkFactor}}"
                    data-field="xpolUplinkFactor"
                    adjust-position="{{isNotIOS ? '' : false}}"
@@ -651,10 +673,21 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">极化下行C/I(dB)</text>
+            <text class="form-label">HPA C/IM(dB)</text>
             <input class="form-input" 
                    type="text"
-                   placeholder="30" 
+                   placeholder="24" 
+                   value="{{satelliteParams.hpaIntermodFactor}}"
+                   data-field="hpaIntermodFactor"
+                   adjust-position="{{isNotIOS ? '' : false}}"
+                   bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+          </view>
+
+          <view class="form-group">
+            <text class="form-label">下行C/XPI(dB)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="26" 
                    value="{{satelliteParams.xpolDownlinkFactor}}"
                    data-field="xpolDownlinkFactor"
                    adjust-position="{{isNotIOS ? '' : false}}"
@@ -662,18 +695,14 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">互调噪声C/I(dB)</text>
+            <text class="form-label">Xpdr C/IM(dB)</text>
             <input class="form-input" 
                    type="text"
-                   placeholder="22" 
-                   value="{{satelliteParams.intermodFactor}}"
-                   data-field="intermodFactor"
+                   placeholder="21" 
+                   value="{{satelliteParams.xpdrIntermodFactor}}"
+                   data-field="xpdrIntermodFactor"
                    adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-          </view>
-
-          <view class="form-group">
-            <!-- 空白占位 -->
           </view>
         </view>
       </view>
@@ -1954,17 +1983,29 @@
           <text class="result-label">上行C/T</text>
           <text class="result-value">{{results.uplinkCTResult}} dB/K</text>
         </view>
+        <view class="result-item {{markedParams.indexOf('aciUplinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="aciUplinkCTResult">
+          <text class="result-label">上行ACI C/T</text>
+          <text class="result-value">{{results.aciUplinkCTResult}} dB/K</text>
+        </view>
         <view class="result-item {{markedParams.indexOf('adjUplinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="adjUplinkCTResult">
-          <text class="result-label">邻星上行C/T</text>
+          <text class="result-label">上行ASI C/T</text>
           <text class="result-value">{{results.adjUplinkCTResult}} dB/K</text>
         </view>
         <view class="result-item {{markedParams.indexOf('xpolUplinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="xpolUplinkCTResult">
-          <text class="result-label">极化上行C/T</text>
+          <text class="result-label">上行XPI C/T</text>
           <text class="result-value">{{results.xpolUplinkCTResult}} dB/K</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('hpaIntermodCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="hpaIntermodCTResult">
+          <text class="result-label">HPA IM C/T</text>
+          <text class="result-value">{{results.hpaIntermodCTResult}} dB/K</text>
         </view>
         <view class="result-item {{markedParams.indexOf('downlinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
@@ -1972,23 +2013,29 @@
           <text class="result-label">下行C/T</text>
           <text class="result-value">{{results.downlinkCTResult}} dB/K</text>
         </view>
+        <view class="result-item {{markedParams.indexOf('aciDownlinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="aciDownlinkCTResult">
+          <text class="result-label">下行ACI C/T</text>
+          <text class="result-value">{{results.aciDownlinkCTResult}} dB/K</text>
+        </view>
         <view class="result-item {{markedParams.indexOf('adjDownlinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="adjDownlinkCTResult">
-          <text class="result-label">邻星下行C/T</text>
+          <text class="result-label">下行ASI C/T</text>
           <text class="result-value">{{results.adjDownlinkCTResult}} dB/K</text>
         </view>
         <view class="result-item {{markedParams.indexOf('xpolDownlinkCTResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="xpolDownlinkCTResult">
-          <text class="result-label">极化下行C/T</text>
+          <text class="result-label">下行XPI C/T</text>
           <text class="result-value">{{results.xpolDownlinkCTResult}} dB/K</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('intermodCTResult') > -1 ? 'result-item-marked' : ''}}" 
+        <view class="result-item {{markedParams.indexOf('xpdrIntermodCTResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
-              data-param="intermodCTResult">
-          <text class="result-label">互调噪声C/T</text>
-          <text class="result-value">{{results.intermodCTResult}} dB/K</text>
+              data-param="xpdrIntermodCTResult">
+          <text class="result-label">Xpdr IM C/T</text>
+          <text class="result-value">{{results.xpdrIntermodCTResult}} dB/K</text>
         </view>
         <view class="result-item {{markedParams.indexOf('totalCTResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
