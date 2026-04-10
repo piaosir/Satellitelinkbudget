@@ -387,6 +387,7 @@ const CITIES_DATA = [
   { name: "果洛", py: "gl", lat: 34.471, lon: 100.244, alt: 3719.0 },
   { name: "玉树", py: "ysh", lat: 33.004, lon: 97.007, alt: 3681.0 },
   { name: "海西", py: "hax", lat: 37.377, lon: 97.371, alt: 2817.0 },
+  { name: "格尔木", py: "gem", lat: 36.420, lon: 94.900, alt: 2808.0 },
   
   // 宁夏回族自治区 (5个)
   { name: "银川", py: "yc", lat: 38.487, lon: 106.232, alt: 1112.0 },
