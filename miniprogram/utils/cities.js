@@ -2,7 +2,38 @@
 // 城市数据 - 覆盖中国所有地级市及主要国际城市
 
 // 中国地级市总数
-const CHINA_CITIES_COUNT = 337;
+const CHINA_CITIES_COUNT = 349;
+
+// 城市显示优先级顺序（打开下拉时默认排序）
+const PRIORITY_ORDER = [
+  // 第1层：直辖市 + 港澳台
+  '北京', '上海', '天津', '重庆', '香港', '澳门', '台北',
+  // 第2层：一线城市 + 各省省会
+  '深圳',
+  '石家庄', '太原', '呼和浩特',
+  '沈阳', '长春', '哈尔滨',
+  '济南', '南京', '杭州', '合肥', '福州', '南昌',
+  '郑州', '武汉', '长沙',
+  '广州', '南宁', '海口',
+  '成都', '贵阳', '昆明', '拉萨',
+  '西安', '兰州', '西宁',
+  '银川',      // 宁夏省会 / 中星27信关站
+  '乌鲁木齐',  // 新疆省会 / 中星26关口站
+  // 第3层：卫通信关站 / 航天重要城市
+  '怀来',    // 中星16 Ka信关站
+  '喀什',    // 中星26关口站
+  '大理',    // 中星26关口站
+  '格尔木',  // 中星27信关站
+  '西昌',    // 卫星发射中心
+  '文昌',    // 卫星发射中心
+  '敦煌',    // 深空测控站
+  // 第4层：亚太地区各国首都
+  '东京', '首尔', '乌兰巴托',
+  '曼谷', '新加坡', '吉隆坡', '雅加达', '马尼拉', '河内',
+  '金边', '万象', '内比都',
+  '新德里', '达卡', '科伦坡', '加德满都', '伊斯兰堡',
+  '堪培拉', '阿布扎比'
+];
 
 const CITIES_DATA = [
   // ========== 中国地级市 (337个) ==========
@@ -156,7 +187,7 @@ const CITIES_DATA = [
   
   // 浙江省 (11个)
   { name: "杭州", py: "haz", lat: 30.274, lon: 120.155, alt: 19.0 },
-  { name: "宁波", py: "nb", lat: 29.868, lon: 121.544, alt: 150.0 },
+  { name: "宁波", py: "nb", lat: 29.868, lon: 121.544, alt: 4.0 },
   { name: "温州", py: "wz", lat: 27.994, lon: 120.699, alt: 22.0 },
   { name: "嘉兴", py: "jx", lat: 30.746, lon: 120.755, alt: 5.0 },
   { name: "湖州", py: "huz", lat: 30.893, lon: 120.088, alt: 14.0 },
@@ -378,7 +409,7 @@ const CITIES_DATA = [
   { name: "临夏", py: "lix", lat: 35.601, lon: 103.210, alt: 1917.0 },
   { name: "甘南", py: "gan", lat: 34.983, lon: 102.911, alt: 2910.0 },
   
-  // 青海省 (8个)
+  // 青海省 (9个)
   { name: "西宁", py: "xn", lat: 36.623, lon: 101.779, alt: 2275.0 },
   { name: "海东", py: "had", lat: 36.502, lon: 102.103, alt: 1978.0 },
   { name: "海北", py: "hab", lat: 36.954, lon: 100.901, alt: 2868.0 },
@@ -412,13 +443,13 @@ const CITIES_DATA = [
   { name: "塔城", py: "tac", lat: 46.746, lon: 82.980, alt: 534.0 },
   { name: "阿勒泰", py: "alt", lat: 47.848, lon: 88.141, alt: 735.0 },
   
-  // 其他重要城市/地点
-  { name: "怀来", py: "hl", lat: 40.415, lon: 115.517, alt: 535.0 },
-  { name: "西昌", py: "xc", lat: 27.892, lon: 102.265, alt: 1590.0 },
-  { name: "文昌", py: "wc", lat: 19.613, lon: 110.750, alt: 34.0 },
-  { name: "敦煌", py: "dh", lat: 40.142, lon: 94.662, alt: 1140.0 },
+  // 卫通信关站 / 航天重要城市
+  { name: "怀来", py: "hl", lat: 40.415, lon: 115.517, alt: 535.0 },   // 中星16 Ka信关站
+  { name: "西昌", py: "xc", lat: 27.892, lon: 102.265, alt: 1590.0 },  // 卫星发射中心
+  { name: "文昌", py: "wc", lat: 19.613, lon: 110.750, alt: 34.0 },    // 卫星发射中心
+  { name: "敦煌", py: "dh", lat: 40.142, lon: 94.662, alt: 1140.0 },   // 深空测控站
   
-  // ========== 国际主要城市 (24个) ==========
+  // ========== 国际主要城市 (33个) ==========
   
   // 东亚
   { name: "东京", py: "dj", lat: 35.689, lon: 139.692, alt: 40.0 },
@@ -427,7 +458,7 @@ const CITIES_DATA = [
   // 东南亚
   { name: "曼谷", py: "mg", lat: 13.756, lon: 100.502, alt: 2.0 },
   { name: "新加坡", py: "xjp", lat: 1.352, lon: 103.819, alt: 15.0 },
-  { name: "吉隆坡", py: "jlp", lat: 3.139, lon: 101.687, alt: 22.0 },
+  { name: "吉隆坡", py: "jlp", lat: 3.139, lon: 101.687, alt: 66.0 },
   { name: "雅加达", py: "yjd", lat: -6.208, lon: 106.845, alt: 8.0 },
   { name: "马尼拉", py: "mnl", lat: 14.599, lon: 120.984, alt: 16.0 },
   { name: "河内", py: "hn", lat: 21.028, lon: 105.854, alt: 16.0 },
@@ -460,7 +491,20 @@ const CITIES_DATA = [
   { name: "圣保罗", py: "sbl", lat: -23.550, lon: -46.633, alt: 760.0 },
   
   // 大洋洲
-  { name: "悉尼", py: "xn", lat: -33.868, lon: 151.209, alt: 6.0 }
+  { name: "悉尼", py: "xn", lat: -33.868, lon: 151.209, alt: 6.0 },
+  { name: "堪培拉", py: "kpl", lat: -35.281, lon: 149.130, alt: 577.0 },
+
+  // 新增亚太地区首都
+  { name: "乌兰巴托", py: "wlbt", lat: 47.921, lon: 106.906, alt: 1350.0 },
+  { name: "金边", py: "jb", lat: 11.556, lon: 104.928, alt: 12.0 },
+  { name: "万象", py: "wx", lat: 17.976, lon: 102.633, alt: 174.0 },
+  { name: "内比都", py: "nbd", lat: 19.763, lon: 96.079, alt: 104.0 },
+  { name: "达卡", py: "dk", lat: 23.810, lon: 90.413, alt: 8.0 },
+  { name: "科伦坡", py: "klb", lat: 6.927, lon: 79.861, alt: 7.0 },
+  { name: "加德满都", py: "jdmd", lat: 27.717, lon: 85.324, alt: 1400.0 },
+
+  // 中东
+  { name: "阿布扎比", py: "abzb", lat: 24.454, lon: 54.377, alt: 27.0 }
 ];
 
 /**
@@ -489,6 +533,26 @@ function getInternationalCities() {
  */
 function getCityByName(name) {
   return CITIES_DATA.find(city => city.name === name);
+}
+
+// 缓存排序后的显示顺序城市列表
+let _displayOrderCache = null;
+
+/**
+ * 获取按优先级排序的城市列表（用于下拉默认显示）
+ */
+function getDisplayOrderCities() {
+  if (_displayOrderCache) return _displayOrderCache;
+  const priorityMap = new Map();
+  PRIORITY_ORDER.forEach((name, i) => priorityMap.set(name, i));
+  const defaultPriority = PRIORITY_ORDER.length;
+  _displayOrderCache = [...CITIES_DATA].sort((a, b) => {
+    const pa = priorityMap.has(a.name) ? priorityMap.get(a.name) : defaultPriority;
+    const pb = priorityMap.has(b.name) ? priorityMap.get(b.name) : defaultPriority;
+    if (pa !== pb) return pa - pb;
+    return 0;
+  });
+  return _displayOrderCache;
 }
 
 // 省份映射表（城市索引范围）
@@ -524,9 +588,9 @@ const PROVINCE_MAPPING = {
   '西藏': { start: 286, count: 7, aliases: ['西藏自治区'] },
   '陕西': { start: 293, count: 10, aliases: ['陕西省'] },
   '甘肃': { start: 303, count: 14, aliases: ['甘肃省'] },
-  '青海': { start: 317, count: 8, aliases: ['青海省'] },
-  '宁夏': { start: 325, count: 5, aliases: ['宁夏回族自治区', '宁夏自治区'] },
-  '新疆': { start: 330, count: 14, aliases: ['新疆维吾尔自治区', '新疆自治区'] }
+  '青海': { start: 317, count: 9, aliases: ['青海省'] },
+  '宁夏': { start: 326, count: 5, aliases: ['宁夏回族自治区', '宁夏自治区'] },
+  '新疆': { start: 331, count: 14, aliases: ['新疆维吾尔自治区', '新疆自治区'] }
 };
 
 // 获取所有省份列表
@@ -584,7 +648,7 @@ function searchCities(keyword, options = {}) {
   const { includeProvince = true, includePinyin = true, fuzzy = true } = options;
   
   if (!keyword || keyword.trim() === '') {
-    return CITIES_DATA;
+    return getDisplayOrderCities();
   }
   
   const trimmedKeyword = keyword.trim();
@@ -699,9 +763,11 @@ function getCitiesStats() {
 module.exports = {
   CITIES_DATA,
   CHINA_CITIES_COUNT,
+  PRIORITY_ORDER,
   PROVINCE_MAPPING,
   PROVINCES,
   getAllCities,
+  getDisplayOrderCities,
   getChinaCities,
   getInternationalCities,
   getCityByName,

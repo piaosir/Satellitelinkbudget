@@ -4,7 +4,7 @@ const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OP
 const { validateAllParams } = require('../../utils/validator');
 const { formatResultsForDisplay } = require('../../utils/formatter');
 const { calculateLinkBudget } = require('../../utils/linkCalculator');
-const { getAllCities, searchCities, getCityByName } = require('../../utils/cities');
+const { getAllCities, getDisplayOrderCities, searchCities, getCityByName } = require('../../utils/cities');
 const { estimateRainRate, getNearestCityInfo } = require('../../utils/rainRate');
 const { calculateSunOutage, BAND_PARAMS } = require('../../utils/sunOutageCalculator');
 
@@ -191,8 +191,8 @@ Page({
     // 城市选择器相关
     showUplinkCityDropdown: false,
     showDownlinkCityDropdown: false,
-    filteredCities: getAllCities(),
-    filteredCitiesRx: getAllCities(),
+    filteredCities: getDisplayOrderCities(),
+    filteredCitiesRx: getDisplayOrderCities(),
     cityInputTimer: null,
     
     // 计算状态
@@ -1300,7 +1300,7 @@ Page({
       if (show) {
         // 重置过滤列表
         this.setData({
-          filteredCities: getAllCities()
+          filteredCities: getDisplayOrderCities()
         });
       }
     } else if (type === 'downlink') {
@@ -1312,7 +1312,7 @@ Page({
       if (show) {
         // 重置过滤列表
         this.setData({
-          filteredCitiesRx: getAllCities()
+          filteredCitiesRx: getDisplayOrderCities()
         });
       }
     }
