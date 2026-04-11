@@ -56,6 +56,7 @@ Page({
     
     // 卫星列表
     satellites: [
+      { "name": "CHINASAT 10R", "position": "110.5" },
       { "name": "CHINASAT 6D", "position": "125" },
       { "name": "CHINASAT 6C", "position": "130.5" },
       { "name": "CHINASAT 6E", "position": "115.5" },
@@ -63,7 +64,6 @@ Page({
       { "name": "CHINASAT 9B", "position": "101.4" },
       { "name": "CHINASAT 9C", "position": "92.2" },
       { "name": "CHINASAT 10", "position": "110.5" },
-      { "name": "CHINASAT 10R", "position": "110.5" },
       { "name": "CHINASAT 11", "position": "98" },
       { "name": "CHINASAT 12", "position": "87.5" },
       { "name": "CHINASAT 15", "position": "51.5" },
