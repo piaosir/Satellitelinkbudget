@@ -28,18 +28,18 @@ const TRANSLATIONS = {
     sectionSystemConfig: 'I. 系统配置',
     infoRate: '信息速率',
     modulation: '调制方式',
-    fecCode: 'FEC编码',
+    fecCode: 'FEC码率',
     symbolRate: '符号速率',
     allocBandwidth: '占用带宽',
-    uplinkFreq: '上行中心频率',
-    downlinkFreq: '下行中心频率',
+    uplinkFreq: '上行频率',
+    downlinkFreq: '下行频率',
     threshold: '门限',
     // 卫星参数
     sectionSatellite: 'II. 卫星参数',
     sfdRef: '卫星SFD',
     transponderBW: '转发器带宽',
-    inputBackoff: '输入回退',
-    outputBackoff: '输出回退',
+    inputBackoff: '转发器IBO',
+    outputBackoff: '转发器OBO',
     satelliteEIRP: 'EIRPs',
     satelliteSFD: '信号到星通量密度',
     satellitePSD: '卫星输出功率谱密度',
@@ -830,7 +830,7 @@ async function generateWord(configs, lang) {
       
       // 卫星参数段落
       const satParamsText = lang === 'zh'
-        ? `卫星参数：本链路使用${sat.satelliteName || ''}卫星，轨道位置${sat.orbitPosition || ''}°E，${sat.frequencyBand || ''}频段，频率：${r.uplinkFrequencyResult || ''}GHz（${r.uplinkPolarizationResult || ''}）/${r.downlinkFrequencyResult || ''}GHz（${r.downlinkPolarizationResult || ''}），转发器带宽${sat.transponderBandwidth || ''}MHz，卫星EIRP为${r.EIRPsResult || ''}dBW，卫星SFD为${r.SFDsResult || ''}dBW/m²，输入回退${sat.BOi || ''}dB，输出回退${sat.BOo || ''}dB。`
+        ? `卫星参数：本链路使用${sat.satelliteName || ''}卫星，轨道位置${sat.orbitPosition || ''}°E，${sat.frequencyBand || ''}频段，频率：${r.uplinkFrequencyResult || ''}GHz（${r.uplinkPolarizationResult || ''}）/${r.downlinkFrequencyResult || ''}GHz（${r.downlinkPolarizationResult || ''}），转发器带宽${sat.transponderBandwidth || ''}MHz，卫星EIRP为${r.EIRPsResult || ''}dBW，卫星SFD为${r.SFDsResult || ''}dBW/m²，转发器IBO ${sat.BOi || ''}dB，转发器OBO ${sat.BOo || ''}dB。`
         : `Satellite Parameters: This link uses ${sat.satelliteName || ''} satellite at ${sat.orbitPosition || ''}°E, ${sat.frequencyBand || ''} band, frequency: ${r.uplinkFrequencyResult || ''}GHz (${r.uplinkPolarizationResult || ''}) / ${r.downlinkFrequencyResult || ''}GHz (${r.downlinkPolarizationResult || ''}), transponder bandwidth ${sat.transponderBandwidth || ''}MHz, satellite EIRP ${r.EIRPsResult || ''}dBW, satellite SFD ${r.SFDsResult || ''}dBW/m², input backoff ${sat.BOi || ''}dB, output backoff ${sat.BOo || ''}dB.`;
       
       children.push(
@@ -849,7 +849,7 @@ async function generateWord(configs, lang) {
       
       // 载波参数段落
       const carrierParamsText = lang === 'zh'
-        ? `载波参数：信息速率${r.infoRateResult || ''}kbps，调制方式${r.modulationResult || ''}，FEC编码${r.fecResult || ''}，符号速率${r.symbolRateResult || ''}ksps，占用带宽${r.allocBandwidthResult || ''}kHz，功率带宽${r.PowerBWResult || ''}kHz，上行中心频率${r.uplinkFrequencyResult || ''}GHz，下行中心频率${r.downlinkFrequencyResult || ''}GHz，门限Eb/N0为${r.ebnoResult || ''}dB，门限Es/N0为${r.esnoResult || ''}dB。`
+        ? `载波参数：信息速率${r.infoRateResult || ''}kbps，调制方式${r.modulationResult || ''}，FEC码率${r.fecResult || ''}，符号速率${r.symbolRateResult || ''}ksps，占用带宽${r.allocBandwidthResult || ''}kHz，功率带宽${r.PowerBWResult || ''}kHz，上行频率${r.uplinkFrequencyResult || ''}GHz，下行频率${r.downlinkFrequencyResult || ''}GHz，门限Eb/N0为${r.ebnoResult || ''}dB，门限Es/N0为${r.esnoResult || ''}dB。`
         : `Carrier Parameters: Information rate ${r.infoRateResult || ''}kbps, modulation ${r.modulationResult || ''}, FEC code ${r.fecResult || ''}, symbol rate ${r.symbolRateResult || ''}ksps, allocated bandwidth ${r.allocBandwidthResult || ''}kHz, power bandwidth ${r.PowerBWResult || ''}kHz, uplink frequency ${r.uplinkFrequencyResult || ''}GHz, downlink frequency ${r.downlinkFrequencyResult || ''}GHz, threshold Eb/N0 ${r.ebnoResult || ''}dB, threshold Es/N0 ${r.esnoResult || ''}dB.`;
       
       children.push(
@@ -1096,7 +1096,7 @@ async function generateWordParams(configs, lang) {
     rows.push(paramRow(isZh ? '卫星名称' : 'Satellite', v(sat.satelliteName), isZh ? '轨道位置(°E)' : 'Orbit(°E)', v(sat.orbitPosition)));
     rows.push(paramRow(isZh ? '工作频段' : 'Band', v(sat.frequencyBand), isZh ? 'SFD(dBW/m²)' : 'SFD(dBW/m²)', v(sat.sfdRef)));
     rows.push(paramRow(isZh ? '转发器BW(MHz)' : 'Xpdr BW(MHz)', v(sat.transponderBandwidth), isZh ? '离轴角(°)' : 'Isolation(°)', v(sat.deltaTheta)));
-    rows.push(paramRow(isZh ? '输入回退(dB)' : 'BOi(dB)', v(sat.BOi), isZh ? '输出回退(dB)' : 'BOo(dB)', v(sat.BOo)));
+    rows.push(paramRow(isZh ? '转发器IBO(dB)' : 'BOi(dB)', v(sat.BOi), isZh ? '转发器OBO(dB)' : 'BOo(dB)', v(sat.BOo)));
 
     // 干扰因子
     rows.push(sectionRow(isZh ? '干扰因子(dB)' : 'Interference(dB)', COL));

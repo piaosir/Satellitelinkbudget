@@ -70,7 +70,7 @@ const UPC_OPTIONS = [
   { value: 'custom', label: '自定义' }
 ];
 
-// FEC编码率选项（已废弃，改用直接输入）
+// FEC码率选项（已废弃，改用直接输入）
 const FEC_OPTIONS = [
   { value: 0.5, label: '1/2' },
   { value: 0.66667, label: '2/3' },
@@ -186,8 +186,8 @@ const RESULT_LABELS = {
       { key: 'azimuthAngle', label: '对卫星方位角', unit: '度' },
       { key: 'polarizationAngle', label: '对卫星极化角', unit: '度' },
       { key: 'antennaEfficiency', label: '天线效率', unit: '%' },
-      { key: 'uplinkFrequency', label: '上行中心频率', unit: 'GHz' },
-      { key: 'downlinkFrequency', label: '下行中心频率', unit: 'GHz' },
+      { key: 'uplinkFrequency', label: '上行频率', unit: 'GHz' },
+      { key: 'downlinkFrequency', label: '下行频率', unit: 'GHz' },
       { key: 'uplinkAvailability', label: '上行可用度', unit: '%' },
       { key: 'downlinkAvailability', label: '下行可用度', unit: '%' },
       { key: 'systemAvailability', label: '系统可用度', unit: '%' }
@@ -203,8 +203,8 @@ const RESULT_LABELS = {
       { key: 'ber', label: '误码率', unit: '' },
       { key: 'ebno', label: 'Eb/N0', unit: 'dB' },
       { key: 'esno', label: 'Es/N0', unit: 'dB' },
-      { key: 'rsCode', label: 'RS编码率', unit: '' },
-      { key: 'fec', label: 'FEC编码率', unit: '' },
+      { key: 'rsCode', label: '帧效率', unit: '' },
+      { key: 'fec', label: 'FEC码率', unit: '' },
       { key: 'carrierRate', label: '载波速率', unit: 'kbps' },
       { key: 'symbolRate', label: '符号速率', unit: 'ksps' },
       { key: 'bandwidth', label: '分配带宽', unit: 'kHz' },

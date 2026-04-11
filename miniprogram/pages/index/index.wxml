@@ -540,7 +540,7 @@
         </view>
       </view>
 
-      <!-- 第二行：频段 + SFD + 转发器带宽 + 输入回退 -->
+      <!-- 第二行：频段 + SFD + 转发器带宽 + 转发器IBO -->
       <view class="grid-4">
         <view class="form-group">
           <text class="form-label">工作频段 *</text>
@@ -590,7 +590,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">输入回退(dB)</text>
+          <text class="form-label">转发器IBO(dB)</text>
           <input class="form-input" 
                  type="text"
                  placeholder="6" 
@@ -601,7 +601,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">输出回退(dB)</text>
+          <text class="form-label">转发器OBO(dB)</text>
           <input class="form-input" 
                  type="text"
                  placeholder="3" 
@@ -809,7 +809,7 @@
         <!-- 频率和极化 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">上行中心频率(GHz)</text>
+            <text class="form-label">上行频率(GHz)</text>
             <input class="form-input" 
                    type="text"
                    placeholder="14.25" 
@@ -1057,7 +1057,7 @@
         <!-- 频率和极化 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">下行中心频率(GHz)</text>
+            <text class="form-label">下行频率(GHz)</text>
             <input class="form-input" 
                    type="text"
                    placeholder="12.5" 
@@ -1259,7 +1259,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">FEC编码率</text>
+          <text class="form-label">FEC码率</text>
           <input class="form-input" 
                  type="text"
                  placeholder="3/4" 
@@ -1291,7 +1291,7 @@
       <!-- 第二行：扩展参数（完全展开时显示） -->
       <view class="grid-4" wx:if="{{carrierParamsExpandState === 'full'}}">
         <view class="form-group">
-          <text class="form-label">RS编码率</text>
+          <text class="form-label">帧效率</text>
           <input class="form-input" 
                  type="text"
                  placeholder="188/204" 
@@ -1813,13 +1813,13 @@
         <view class="result-item {{markedParams.indexOf('BOiResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="BOiResult">
-          <text class="result-label">输入回退</text>
+          <text class="result-label">转发器IBO</text>
           <text class="result-value">{{results.BOiResult}} dB</text>
         </view>
         <view class="result-item {{markedParams.indexOf('BOoResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="BOoResult">
-          <text class="result-label">输出回退</text>
+          <text class="result-label">转发器OBO</text>
           <text class="result-value">{{results.BOoResult}} dB</text>
         </view>
         <view class="result-item {{markedParams.indexOf('transponderBandwidthResult') > -1 ? 'result-item-marked' : ''}}" 
@@ -1852,13 +1852,13 @@
         <view class="result-item {{markedParams.indexOf('uplinkFrequencyResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="uplinkFrequencyResult">
-          <text class="result-label">上行中心频率</text>
+          <text class="result-label">上行频率</text>
           <text class="result-value">{{results.uplinkFrequencyResult}} GHz</text>
         </view>
         <view class="result-item {{markedParams.indexOf('downlinkFrequencyResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="downlinkFrequencyResult">
-          <text class="result-label">下行中心频率</text>
+          <text class="result-label">下行频率</text>
           <text class="result-value">{{results.downlinkFrequencyResult}} GHz</text>
         </view>
         <view class="result-item {{markedParams.indexOf('allocBandwidthResult') > -1 ? 'result-item-marked' : ''}}" 
@@ -1918,13 +1918,13 @@
         <view class="result-item {{markedParams.indexOf('rsCodeResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="rsCodeResult">
-          <text class="result-label">RS编码率</text>
+          <text class="result-label">帧效率</text>
           <text class="result-value">{{results.rsCodeResult}}</text>
         </view>
         <view class="result-item {{markedParams.indexOf('fecResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="fecResult">
-          <text class="result-label">FEC编码率</text>
+          <text class="result-label">FEC码率</text>
           <text class="result-value">{{results.fecResult}}</text>
         </view>
         <view class="result-item {{markedParams.indexOf('carrierRateResult') > -1 ? 'result-item-marked' : ''}}" 

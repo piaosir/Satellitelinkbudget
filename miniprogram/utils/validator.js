@@ -2,8 +2,8 @@
 // 参数验证工具函数
 
 /**
- * 解析FEC编码率字符串，支持任意形式的分数（如 11/55, 3/4, 188/204 等）和小数
- * @param {string|number} fec - FEC编码率
+ * 解析FEC码率字符串，支持任意形式的分数（如 11/55, 3/4, 188/204 等）和小数
+ * @param {string|number} fec - FEC码率
  * @returns {object} { value: number|null, original: string, isValid: boolean }
  */
 function parseFecValue(fec) {
@@ -41,15 +41,15 @@ function parseFecValue(fec) {
 }
 
 /**
- * 验证FEC编码率（支持任意形式的分数和小数格式）
- * @param {string|number} fec - FEC编码率
+ * 验证FEC码率（支持任意形式的分数和小数格式）
+ * @param {string|number} fec - FEC码率
  * @returns {object} { valid: boolean, message: string, value: number, original: string }
  */
 function validateFec(fec) {
   if (fec === '' || fec === null || fec === undefined) {
     return {
       valid: false,
-      message: 'FEC编码率不能为空',
+      message: 'FEC码率不能为空',
       value: null,
       original: ''
     };
@@ -64,7 +64,7 @@ function validateFec(fec) {
     if (parts.length !== 2) {
       return {
         valid: false,
-        message: 'FEC编码率分数格式错误，应为 a/b 格式（如 3/4 或 11/55）',
+        message: 'FEC码率分数格式错误，应为 a/b 格式（如 3/4 或 11/55）',
         value: null,
         original: fecStr
       };
@@ -78,7 +78,7 @@ function validateFec(fec) {
     if (isNaN(numerator) || isNaN(denominator)) {
       return {
         valid: false,
-        message: 'FEC编码率分数格式错误，分子和分母必须是数字',
+        message: 'FEC码率分数格式错误，分子和分母必须是数字',
         value: null,
         original: fecStr
       };
@@ -87,7 +87,7 @@ function validateFec(fec) {
     if (denominator === 0) {
       return {
         valid: false,
-        message: 'FEC编码率分数的分母不能为0',
+        message: 'FEC码率分数的分母不能为0',
         value: null,
         original: fecStr
       };
@@ -97,7 +97,7 @@ function validateFec(fec) {
     if (!parsed.isValid) {
       return {
         valid: false,
-        message: 'FEC编码率必须是数字或分数格式（如 0.75 或 3/4 或 11/55）',
+        message: 'FEC码率必须是数字或分数格式（如 0.75 或 3/4 或 11/55）',
         value: null,
         original: fecStr
       };
@@ -110,7 +110,7 @@ function validateFec(fec) {
   if (fecValue <= 0 || fecValue > 1) {
     return {
       valid: false,
-      message: 'FEC编码率必须在0到1之间',
+      message: 'FEC码率必须在0到1之间',
       value: null,
       original: fecStr
     };
@@ -238,7 +238,7 @@ function validateLinkParams(params) {
     errors.push(efficiencyResult.message);
   }
 
-  const uplinkFreqResult = validateRange(params.centerFrequency, 0, 100, '上行中心频率');
+  const uplinkFreqResult = validateRange(params.centerFrequency, 0, 100, '上行频率');
   if (!uplinkFreqResult.valid) {
     errors.push(uplinkFreqResult.message);
   }
@@ -259,7 +259,7 @@ function validateLinkParams(params) {
     errors.push('接收天线口径必须大于0');
   }
 
-  const downlinkFreqResult = validateRange(params.rxCenterFrequency, 0, 100, '下行中心频率');
+  const downlinkFreqResult = validateRange(params.rxCenterFrequency, 0, 100, '下行频率');
   if (!downlinkFreqResult.valid) {
     errors.push(downlinkFreqResult.message);
   }

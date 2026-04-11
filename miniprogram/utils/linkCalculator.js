@@ -4,8 +4,8 @@
 const validator = require('./validator.js');
 
 /**
- * 解析FEC编码率字符串，支持任意形式的分数和小数
- * @param {string|number} fecInput - FEC编码率输入（如 "3/4", "11/55", "0.75"）
+ * 解析FEC码率字符串，支持任意形式的分数和小数
+ * @param {string|number} fecInput - FEC码率输入（如 "3/4", "11/55", "0.75"）
  * @param {number} defaultValue - 默认值
  * @returns {number} 解析后的数值
  */
@@ -278,9 +278,9 @@ function performCalculations(satParams, inputs) {
   // ============ 通信参数 ============
   const infoRate = parseFloat(inputs.infoRate) || 2048; // kbps - 信息速率
   const modulation = inputs.modulation || "QPSK";
-  // FEC编码率：支持分数和小数格式，保留原始输入用于显示
+  // FEC码率：支持分数和小数格式，保留原始输入用于显示
   const fecOriginal = String(inputs.fec || '0.75').trim();
-  const fec = parseFecForCalculation(fecOriginal, 0.75); // FEC编码率（数值）
+  const fec = parseFecForCalculation(fecOriginal, 0.75); // FEC码率（数值）
   // RS编码码率：支持分数和小数格式，保留原始输入用于显示
   const rsCodeOriginal = String(inputs.rsCode || '188/204').trim();
   const rsCode = parseRsCodeForCalculation(rsCodeOriginal, 188/204); // RS码效率（数值）
@@ -407,10 +407,10 @@ function performCalculations(satParams, inputs) {
   // 转发器回退参数 - 从卫星参数中读取 (支持输入0)
   const BOi = satParams.BOi !== undefined && satParams.BOi !== '' && satParams.BOi !== null
     ? parseFloat(satParams.BOi) 
-    : 6; // 输入回退 (dB)
+    : 6; // 转发器IBO (dB)
   const BOo = satParams.BOo !== undefined && satParams.BOo !== '' && satParams.BOo !== null
     ? parseFloat(satParams.BOo) 
-    : 3; // 输出回退 (dB)
+    : 3; // 转发器OBO (dB)
   
   // SFDs计算
   const SFDs = SFDref - G_Ts;
@@ -1411,9 +1411,9 @@ function performCalculations(satParams, inputs) {
   results.berResult = `1×10${superscriptExp}`;
   results.ebnoResult = ebno.toFixed(2);
   results.esnoResult = esno.toFixed(2);
-  // RS编码率显示：保持原始输入格式（分数或小数）
+  // 帧效率显示：保持原始输入格式（分数或小数）
   results.rsCodeResult = rsCodeOriginal;
-  // FEC编码率显示：保持原始输入格式（分数或小数）
+  // FEC码率显示：保持原始输入格式（分数或小数）
   results.fecResult = fecOriginal;
   results.carrierRateResult = carrierRate.toFixed(2);
   results.ChipRateResult = ChipRate.toFixed(2);

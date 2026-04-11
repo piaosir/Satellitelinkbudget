@@ -1102,7 +1102,7 @@ Page({
     this.updateRealtimeParams();
   },
 
-  // FEC编码率输入处理（支持分数和小数，保持原始输入格式）
+  // FEC码率输入处理（支持分数和小数，保持原始输入格式）
   onFecInput(e) {
     let value = e.detail.value.trim();
     
@@ -1156,7 +1156,7 @@ Page({
       
       const modulationFactor = MODULATION_FACTORS[modulation] || 2;
       
-      // 获取FEC编码率、RS码效率、扩频增益（支持分数格式）
+      // 获取FEC码率、帧效率、扩频增益（支持分数格式）
       const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
       const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
       const m = parseFloat(this.data.linkParams.m) || 1.0;
