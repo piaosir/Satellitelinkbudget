@@ -80,12 +80,12 @@
   <scroll-view class="results-scroll" scroll-y scroll-with-animation scroll-top="{{scrollTop}}" style="height: {{scrollViewHeight}}px;">
 
     <!-- ===================== 发信站参数 ===================== -->
-    <view id="sec-tx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','地球站天线口径','地球站经度','地球站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','3dB波束宽度','地球站EIRP','发射天线增益','旁瓣发射增益','旁瓣EIRP','旁瓣功率谱密度','馈线损耗','星地距离','上行自由空间损耗','上行雨衰','上行云衰','上行大气衰减','功放建议功率','功放建议功率','地球站功率谱密度','国际电联旁瓣功率谱密度建议值','上行C/N'], searchKeyword, results, ['earthAntennaDiameterResult','earthLongitudeResult','earthLatitudeResult','uplinkPolarizationResult','elevationResult','azimuthResult','uplinkPolarizationAngleResult','earthAntennaEfficiencyResult','wavelengthResult','beamWidthResult','stationEIRPResult','txAntennaGainResult','txSidelobeGainResult','txSidelobeEIRPResult','txSidelobePSDResult','feederLossResult','slantRangeResult','uplinkFSLResult','uplinkRainAttenuation','uplinkCloudAttenuation','uplinkAtmosphericAttenuationResult','paRecommendationdBResult','paRecommendation','stationPSDResult','ituPsdLimitHz','uplinkCN'], [txLocation])}}">
+    <view id="sec-tx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','地球站天线口径','地球站经度','地球站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','3dB波束宽度','地球站EIRP','发射天线增益','旁瓣发射增益','旁瓣EIRP','旁瓣功率谱密度','馈线损耗','星地距离','上行自由空间损耗','上行雨衰','上行云衰','上行大气衰减','上行总衰减','功放建议功率','功放建议功率','地球站功率谱密度','国际电联旁瓣功率谱密度建议值','上行C/N'], searchKeyword, results, ['earthAntennaDiameterResult','earthLongitudeResult','earthLatitudeResult','uplinkPolarizationResult','elevationResult','azimuthResult','uplinkPolarizationAngleResult','earthAntennaEfficiencyResult','wavelengthResult','beamWidthResult','stationEIRPResult','txAntennaGainResult','txSidelobeGainResult','txSidelobeEIRPResult','txSidelobePSDResult','feederLossResult','slantRangeResult','uplinkFSLResult','uplinkRainAttenuation','uplinkCloudAttenuation','uplinkAtmosphericAttenuationResult','uplinkTotalAttenuationResult','paRecommendationdBResult','paRecommendation','stationPSDResult','ituPsdLimitHz','uplinkCN'], [txLocation])}}">
       <view class="section-header" bindtap="toggleSection" data-section="txStation">
         <view class="section-title-row">
           <view class="section-dot dot-blue"></view>
           <text class="section-title">发信站参数</text>
-          <text class="section-count">27项</text>
+          <text class="section-count">28项</text>
         </view>
         <text class="section-arrow {{expandedSections.txStation ? 'expanded' : ''}}">›</text>
       </view>
@@ -179,6 +179,10 @@
             <text class="detail-label">上行大气衰减@ITU-R P.676</text>
             <text class="detail-value">{{results.uplinkAtmosphericAttenuationResult}} dB</text>
           </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkTotalAttenuationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行总衰减', searchKeyword, results.uplinkTotalAttenuationResult)}}" bindtap="toggleHighlight" data-param="uplinkTotalAttenuationResult">
+            <text class="detail-label">上行总衰减</text>
+            <text class="detail-value">{{results.uplinkTotalAttenuationResult}} dB</text>
+          </view>
           <view class="detail-item {{filter.includes(markedParams, 'paRecommendationdBResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('功放建议功率', searchKeyword, results.paRecommendationdBResult)}}" bindtap="toggleHighlight" data-param="paRecommendationdBResult">
             <text class="detail-label">功放建议功率</text>
             <text class="detail-value">{{results.paRecommendationdBResult}} dBW</text>
@@ -204,12 +208,12 @@
     </view>
 
     <!-- ===================== 收信站参数 ===================== -->
-    <view id="sec-rx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','接收天线口径','接收站经度','接收站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','接收天线增益','接收旁瓣增益','卫星到地面的PFD','ITU PFD限制','接收3dB波束宽度','星地距离','下行自由空间损耗','下行雨衰','下行云衰','下行大气衰减','G/T','G/T劣化','下行C/N','天线噪声温度','接收机噪声温度','雨噪声温度','系统噪声温度','接收馈线损耗'], searchKeyword, results, ['rxAntennaDiameterResult','rxLongitudeResult','rxLatitudeResult','downlinkPolarizationResult','rxElevationResult','rxAzimuthResult','downlinkPolarizationAngleResult','rxAntennaEfficiencyResult','rxWavelengthResult','rxAntennaGainResult','rxSidelobeGainResult','satellitePFD','ituPfdLimitPerM2','theta3','rxSlantRangeResult','downlinkFSLResult','downlinkRainAttenuationResult','downlinkCloudAttenuation','downlinkAtmosphericAttenuationResult','gOverTeResult','gOverTdegradationResult','downlinkCN','antennaNoiseTempResult','receiverNoiseTempResult','rainNoiseTempResult','systemNoiseTempKResult','systemNoiseTempDbResult','rxFeederLossResult'], [rxLocation])}}">
+    <view id="sec-rx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','接收天线口径','接收站经度','接收站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','接收天线增益','接收旁瓣增益','卫星到地面的PFD','ITU PFD限制','接收3dB波束宽度','星地距离','下行自由空间损耗','下行雨衰','下行云衰','下行大气衰减','下行总衰减','G/T','G/T劣化','下行C/N','天线噪声温度','接收机噪声温度','雨噪声温度','系统噪声温度','接收馈线损耗'], searchKeyword, results, ['rxAntennaDiameterResult','rxLongitudeResult','rxLatitudeResult','downlinkPolarizationResult','rxElevationResult','rxAzimuthResult','downlinkPolarizationAngleResult','rxAntennaEfficiencyResult','rxWavelengthResult','rxAntennaGainResult','rxSidelobeGainResult','satellitePFD','ituPfdLimitPerM2','theta3','rxSlantRangeResult','downlinkFSLResult','downlinkRainAttenuationResult','downlinkCloudAttenuation','downlinkAtmosphericAttenuationResult','downlinkTotalAttenuationResult','gOverTeResult','gOverTdegradationResult','downlinkCN','antennaNoiseTempResult','receiverNoiseTempResult','rainNoiseTempResult','systemNoiseTempKResult','systemNoiseTempDbResult','rxFeederLossResult'], [rxLocation])}}">
       <view class="section-header" bindtap="toggleSection" data-section="rxStation">
         <view class="section-title-row">
           <view class="section-dot dot-green"></view>
           <text class="section-title">收信站参数</text>
-          <text class="section-count">29项</text>
+          <text class="section-count">30项</text>
         </view>
         <text class="section-arrow {{expandedSections.rxStation ? 'expanded' : ''}}">›</text>
       </view>
@@ -294,6 +298,10 @@
           <view class="detail-item {{filter.includes(markedParams, 'downlinkAtmosphericAttenuationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行大气衰减', searchKeyword, results.downlinkAtmosphericAttenuationResult)}}" bindtap="toggleHighlight" data-param="downlinkAtmosphericAttenuationResult">
             <text class="detail-label">下行大气衰减@ITU-R P.676</text>
             <text class="detail-value">{{results.downlinkAtmosphericAttenuationResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkTotalAttenuationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行总衰减', searchKeyword, results.downlinkTotalAttenuationResult)}}" bindtap="toggleHighlight" data-param="downlinkTotalAttenuationResult">
+            <text class="detail-label">下行总衰减</text>
+            <text class="detail-value">{{results.downlinkTotalAttenuationResult}} dB</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'gOverTeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('G/T', searchKeyword, results.gOverTeResult)}}" bindtap="toggleHighlight" data-param="gOverTeResult">
             <text class="detail-label">G/T</text>
@@ -613,7 +621,7 @@
     </view>
 
     <!-- ===================== 链路计算结果 ===================== -->
-    <view id="sec-link" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['带宽占用比','功率占用比','上行综合损耗','下行综合损耗','载波带宽','功率带宽','功放实际输出','功放建议功率','UPC','到达卫星的通量密度','每载波占卫星EIRP','上行雨天功率占比','下行雨天功率占比','下行雨卫星总C/T','转发器回退'], searchKeyword, results, ['bandwidthUsageRatio','powerUsageRatio','uplinkMiscLossResult','downlinkMiscLossResult','allocBandwidthResult','PowerBWResult','selectedPowerResult','selectedPowerWResult','paRecommendationdBResult','paRecommendation','UPCmarginResult','PFDcResult','eirpPerCarrier','uplinkPowerRatioResult','downlinkPowerRatioResult','downlinkComponentResult','RXtransponderCapacityResult','RXeirpPerCarrierResult','transponderBackoffResult'])}}">
+    <view id="sec-link" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['带宽占用比','功率占用比','上行链路其他损耗','下行链路其他损耗','载波带宽','功率带宽','功放实际输出','功放建议功率','UPC','到达卫星的通量密度','每载波占卫星EIRP','上行雨天功率占比','下行雨天功率占比','下行雨卫星总C/T','转发器回退'], searchKeyword, results, ['bandwidthUsageRatio','powerUsageRatio','uplinkMiscLossResult','downlinkMiscLossResult','allocBandwidthResult','PowerBWResult','selectedPowerResult','selectedPowerWResult','paRecommendationdBResult','paRecommendation','UPCmarginResult','PFDcResult','eirpPerCarrier','uplinkPowerRatioResult','downlinkPowerRatioResult','downlinkComponentResult','RXtransponderCapacityResult','RXeirpPerCarrierResult','transponderBackoffResult'])}}">
       <view class="section-header" bindtap="toggleSection" data-section="linkResult">
         <view class="section-title-row">
           <view class="section-dot dot-indigo"></view>
@@ -632,12 +640,12 @@
             <text class="detail-label">功率占用比</text>
             <text class="detail-value">{{results.powerUsageRatio}}%</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'uplinkMiscLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行综合损耗', searchKeyword, results.uplinkMiscLossResult)}}" bindtap="toggleHighlight" data-param="uplinkMiscLossResult">
-            <text class="detail-label">上行综合损耗</text>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkMiscLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行链路其他损耗', searchKeyword, results.uplinkMiscLossResult)}}" bindtap="toggleHighlight" data-param="uplinkMiscLossResult">
+            <text class="detail-label">上行链路其他损耗</text>
             <text class="detail-value">{{results.uplinkMiscLossResult}} dB</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'downlinkMiscLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行综合损耗', searchKeyword, results.downlinkMiscLossResult)}}" bindtap="toggleHighlight" data-param="downlinkMiscLossResult">
-            <text class="detail-label">下行综合损耗</text>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkMiscLossResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行链路其他损耗', searchKeyword, results.downlinkMiscLossResult)}}" bindtap="toggleHighlight" data-param="downlinkMiscLossResult">
+            <text class="detail-label">下行链路其他损耗</text>
             <text class="detail-value">{{results.downlinkMiscLossResult}} dB</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'allocBandwidthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波带宽', searchKeyword, results.allocBandwidthResult)}}" bindtap="toggleHighlight" data-param="allocBandwidthResult">

@@ -13,7 +13,7 @@
     circles="{{circles}}"
     markers="{{markers}}"
     polyline="{{polylines}}"
-    show-location="{{false}}"
+    show-location="{{showCurrentLocation}}"
     enable-zoom="{{true}}"
     enable-scroll="{{true}}"
     enable-rotate="{{true}}"
@@ -305,6 +305,13 @@
       <text class="search-popup-title">搜索位置</text>
       <text class="search-popup-close" bindtap="hideSearchPanel">✕</text>
     </view>
+    <!-- 显示当前位置开关 -->
+    <view class="search-toolbar">
+      <view class="search-toolbar-left" bindtap="toggleShowLocation">
+        <switch checked="{{showCurrentLocation}}" color="#2563eb" class="search-location-switch" />
+        <text class="search-toolbar-label">显示当前位置</text>
+      </view>
+    </view>
     <view class="search-popup-body">
       <!-- 搜索方式切换 -->
       <view class="search-mode-tabs">
@@ -393,7 +400,7 @@
       
       <!-- 操作按钮 -->
       <view class="search-actions">
-        <view class="search-btn search-btn-cancel" bindtap="hideSearchPanel">取消</view>
+        <view class="search-btn search-btn-clear" bindtap="clearAllSearchMarkers">清除所有标记</view>
         <view class="search-btn search-btn-mylocation" bindtap="goToMyLocation">我的位置</view>
         <view class="search-btn search-btn-confirm" bindtap="confirmSearch">定位</view>
       </view>

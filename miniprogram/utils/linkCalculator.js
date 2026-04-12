@@ -628,11 +628,12 @@ function performCalculations(satParams, inputs) {
   const txOffAxisGain = calculateITU465OffAxisGain(antennaDiameter, wavelength, antennaEfficiency, deltaTheta);
   const txSidelobeGain = txOffAxisGain; // 发信站旁瓣发射增益
   
-  // ============ 综合损耗计算（简化模型，基于频率）============
-  // 综合损耗包含：指向损耗、极化损耗、天线罩损耗、接头损耗、闪烁衰减等
-  // 使用基于频率的简化模型，避免复杂计算导致的NaN问题
-  const uplinkMiscLoss = calculateMiscLossByFrequency(uplinkFrequency);
-  const downlinkMiscLoss = calculateMiscLossByFrequency(downlinkFrequency);
+  // ============ 其他损耗（用户输入）============
+  const otherLoss = satParams.otherLoss !== undefined && satParams.otherLoss !== '' && satParams.otherLoss !== null
+    ? parseFloat(satParams.otherLoss)
+    : 0.3; // 其他损耗 (dB) 默认值0.3dB
+  const uplinkMiscLoss = otherLoss;
+  const downlinkMiscLoss = otherLoss;
   
   // 各项C/T值计算
   const uplinkCT = SFDs - antennaGain - BOi + G_Ts;
@@ -1344,6 +1345,7 @@ function performCalculations(satParams, inputs) {
   results.uplinkRainAttenuation = uplinkRainAttenuation.toFixed(2);
   results.uplinkCloudAttenuation = uplinkCloudAttenuation.toFixed(2);
   results.uplinkAtmosphericAttenuationResult = uplinkAtmosphericAttenuation.toFixed(2);
+  results.uplinkTotalAttenuationResult = (uplinkRainAttenuation + uplinkCloudAttenuation + uplinkAtmosphericAttenuation).toFixed(2); // 上行总衰减 = 雨衰+云衰+大气衰减
   results.uplinkCN = uplinkCN.toFixed(2);
   results.actualUplinkCT = actualUplinkCT.toFixed(2); // 载波上行C/T
   
@@ -1352,8 +1354,8 @@ function performCalculations(satParams, inputs) {
   results.polarizationLossResult = polarizationLoss.toFixed(2); // 极化失配损耗(dB)
   results.radomeLossResult = radomeLoss.toFixed(2); // 天线罩损耗(dB)
   results.connectorLossResult = connectorLoss.toFixed(2); // 接头损耗(dB)
-  results.uplinkMiscLossResult = uplinkMiscLoss.toFixed(3); // 上行综合杂散损耗(dB)
-  results.downlinkMiscLossResult = downlinkMiscLoss.toFixed(3); // 下行综合杂散损耗(dB)
+  results.uplinkMiscLossResult = uplinkMiscLoss.toFixed(3); // 上行链路其他损耗(dB) = 其他损耗
+  results.downlinkMiscLossResult = downlinkMiscLoss.toFixed(3); // 下行链路其他损耗(dB) = 其他损耗
   
   // 接收站结果
   results.rxAntennaDiameterResult = rxAntennaDiameter.toFixed(2);
@@ -1374,6 +1376,7 @@ function performCalculations(satParams, inputs) {
   results.downlinkRainAttenuationResult = downlinkRainAttenuation.toFixed(2);
   results.downlinkCloudAttenuation = downlinkCloudAttenuation.toFixed(2);
   results.downlinkAtmosphericAttenuationResult = downlinkAtmosphericAttenuation.toFixed(2);
+  results.downlinkTotalAttenuationResult = (downlinkRainAttenuation + downlinkCloudAttenuation + downlinkAtmosphericAttenuation).toFixed(2); // 下行总衰减 = 雨衰+云衰+大气衰减
   results.downlinkCN = downlinkCN.toFixed(2);
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
   results.satellitePFD = satellitePFD.toFixed(2);
@@ -1523,56 +1526,7 @@ function calculatePointingLoss(pointingError, beamWidth) {
   return Math.min(pointingLoss, 3); // 限制最大3dB，超过说明指向严重偏离
 }
 
-/**
- * 根据频率计算综合损耗（简化模型）
- * 综合损耗包含：指向损耗、极化损耗、天线罩损耗、接头损耗、闪烁衰减等
- * 使用线性插值，频率越高损耗越大
- * @param {number} frequencyGHz - 频率 (GHz)
- * @returns {number} 综合损耗 (dB)
- */
-function calculateMiscLossByFrequency(frequencyGHz) {
-  const MIN_LOSS = 0.05; // 最小综合损耗 dB
-  const MAX_LOSS = 1.8;  // 最大综合损耗 dB
-  
-  // 频率-损耗对照表（线性插值节点）
-  const freqLossTable = [
-    { freq: 0,  loss: 0.05 },
-    { freq: 4,  loss: 0.4 },
-    { freq: 6,  loss: 0.5 },
-    { freq: 12, loss: 0.8 },
-    { freq: 14, loss: 0.9 },
-    { freq: 18, loss: 1.0 },
-    { freq: 20, loss: 1.1 },
-    { freq: 30, loss: 1.5 },
-    { freq: 40, loss: 1.6 },
-    { freq: 54, loss: 1.7 },
-    { freq: 100, loss: 1.8 } // 54GHz以上均为1.8dB
-  ];
-  
-  // 边界检查
-  if (frequencyGHz <= 0) {
-    return MIN_LOSS;
-  }
-  if (frequencyGHz >= 54) {
-    return MAX_LOSS;
-  }
-  
-  // 线性插值
-  for (let i = 0; i < freqLossTable.length - 1; i++) {
-    const lower = freqLossTable[i];
-    const upper = freqLossTable[i + 1];
-    
-    if (frequencyGHz >= lower.freq && frequencyGHz <= upper.freq) {
-      // 线性插值公式
-      const ratio = (frequencyGHz - lower.freq) / (upper.freq - lower.freq);
-      const loss = lower.loss + ratio * (upper.loss - lower.loss);
-      return Math.max(MIN_LOSS, Math.min(MAX_LOSS, loss));
-    }
-  }
-  
-  // 默认返回最大值
-  return MAX_LOSS;
-}
+// calculateMiscLossByFrequency 已移除，上下行综合损耗改为使用用户输入的"其他损耗"参数
 
 /**
  * 计算大气闪烁衰减 - 根据 ITU-R P.618-14

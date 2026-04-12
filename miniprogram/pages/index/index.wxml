@@ -610,6 +610,17 @@
                  adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
+
+        <view class="form-group">
+          <text class="form-label">其他损耗(dB)</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="0.3" 
+                 value="{{satelliteParams.otherLoss}}"
+                 data-field="otherLoss"
+                 adjust-position="{{isNotIOS ? '' : false}}"
+                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
       </view>
 
       <!-- 部分收起时隐藏以下内容 -->
@@ -1561,6 +1572,12 @@
           <text class="result-label">上行大气衰减@ITU-R P.676</text>
           <text class="result-value">{{results.uplinkAtmosphericAttenuationResult}} dB</text>
         </view>
+        <view class="result-item {{markedParams.indexOf('uplinkTotalAttenuationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="uplinkTotalAttenuationResult">
+          <text class="result-label">上行总衰减</text>
+          <text class="result-value">{{results.uplinkTotalAttenuationResult}} dB</text>
+        </view>
         <view class="result-item {{markedParams.indexOf('paRecommendationdBResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="paRecommendationdBResult">
@@ -1713,6 +1730,12 @@
               data-param="downlinkAtmosphericAttenuationResult">
           <text class="result-label">下行大气衰减@ITU-R P.676</text>
           <text class="result-value">{{results.downlinkAtmosphericAttenuationResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('downlinkTotalAttenuationResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="downlinkTotalAttenuationResult">
+          <text class="result-label">下行总衰减</text>
+          <text class="result-value">{{results.downlinkTotalAttenuationResult}} dB</text>
         </view>
         <view class="result-item {{markedParams.indexOf('gOverTeResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
@@ -2144,13 +2167,13 @@
         <view class="result-item {{markedParams.indexOf('uplinkMiscLossResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="uplinkMiscLossResult">
-          <text class="result-label">上行综合损耗</text>
+          <text class="result-label">上行链路其他损耗</text>
           <text class="result-value">{{results.uplinkMiscLossResult}} dB</text>
         </view>
         <view class="result-item {{markedParams.indexOf('downlinkMiscLossResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="downlinkMiscLossResult">
-          <text class="result-label">下行综合损耗</text>
+          <text class="result-label">下行链路其他损耗</text>
           <text class="result-value">{{results.downlinkMiscLossResult}} dB</text>
         </view>
         <view class="result-item {{markedParams.indexOf('allocBandwidthResult') > -1 ? 'result-item-marked' : ''}}" 

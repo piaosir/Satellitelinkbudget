@@ -114,6 +114,9 @@ Page({
     customValueInput: '',                // 自定义值输入
     showBeamLabels: false,               // 是否显示波束名标签
     
+    // 实时显示当前位置
+    showCurrentLocation: false,          // 地图 show-location 开关
+    
     // 位置搜索相关
     showSearchPopup: false,              // 搜索弹窗显示状态
     searchMode: 'location',              // 搜索模式：location(地点搜索) / coordinate(经纬度)
@@ -3655,19 +3658,50 @@ Page({
   },
 
   /**
+   * 切换实时显示当前位置
+   */
+  toggleShowLocation() {
+    const newVal = !this.data.showCurrentLocation;
+    this.setData({ showCurrentLocation: newVal });
+    if (newVal && !this.data.hasUserLocation) {
+      wx.getLocation({
+        type: 'gcj02',
+        success: (res) => {
+          this.setData({
+            userLatitude: res.latitude,
+            userLongitude: res.longitude,
+            hasUserLocation: true
+          });
+        },
+        fail: () => {
+          wx.showToast({ title: '无法获取位置', icon: 'none' });
+          this.setData({ showCurrentLocation: false });
+        }
+      });
+    }
+  },
+
+  /**
    * 清除所有搜索标记
    */
   clearAllSearchMarkers() {
+    const hasMarkers = this.data.searchMarkers && this.data.searchMarkers.length > 0;
+    if (!hasMarkers) {
+      wx.showToast({ title: '暂无标记', icon: 'none' });
+      return;
+    }
     wx.showModal({
       title: '清除所有标记',
       content: '确定要清除所有搜索标记吗？',
       success: (res) => {
         if (res.confirm) {
-          const markers = this.data.markers.filter(m => m.id < 5000);
+          // 基于 searchMarkers 的实际 ID 集合精确移除
+          const searchIds = new Set(this.data.searchMarkers.map(m => m.id));
+          const markers = this.data.markers.filter(m => !searchIds.has(m.id));
           this.setData({ 
             markers, 
             searchMarkers: [],
-            searchMarkerIdCounter: 2000
+            searchMarkerIdCounter: 5000
           });
           // 保存设置
           this.saveCoverageSettings();

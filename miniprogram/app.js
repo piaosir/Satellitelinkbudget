@@ -143,6 +143,7 @@ App({
       beamInput: '中国波束',
       BOi: 6,
       BOo: 3,
+      otherLoss: 0.3,
       deltaTheta: 2.5,
       aciUplinkFactor: 30,
       adjUplinkFactor: 25,
