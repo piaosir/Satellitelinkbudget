@@ -1095,7 +1095,7 @@ async function generateWordParams(configs, lang) {
     rows.push(sectionRow(isZh ? '卫星参数' : 'Satellite Parameters', COL));
     rows.push(paramRow(isZh ? '卫星名称' : 'Satellite', v(sat.satelliteName), isZh ? '轨道位置(°E)' : 'Orbit(°E)', v(sat.orbitPosition)));
     rows.push(paramRow(isZh ? '工作频段' : 'Band', v(sat.frequencyBand), isZh ? 'SFD(dBW/m²)' : 'SFD(dBW/m²)', v(sat.sfdRef)));
-    rows.push(paramRow(isZh ? '转发器BW(MHz)' : 'Xpdr BW(MHz)', v(sat.transponderBandwidth), isZh ? '离轴角(°)' : 'Isolation(°)', v(sat.deltaTheta)));
+    rows.push(paramRow(isZh ? '转发器带宽(MHz)' : 'Xpdr BW(MHz)', v(sat.transponderBandwidth), isZh ? '邻星离轴角(°)' : 'Isolation(°)', v(sat.deltaTheta)));
     rows.push(paramRow(isZh ? '转发器IBO(dB)' : 'BOi(dB)', v(sat.BOi), isZh ? '转发器OBO(dB)' : 'BOo(dB)', v(sat.BOo)));
 
     // 干扰因子
@@ -1107,30 +1107,32 @@ async function generateWordParams(configs, lang) {
 
     // 上行站参数
     rows.push(sectionRow(isZh ? '上行站参数' : 'Uplink Station', COL));
-    rows.push(paramRow(isZh ? '发信站' : 'Station', v(lp.earthStationLocation), isZh ? '极化' : 'Pol', v(lp.uplinkPolarization)));
-    rows.push(paramRow(isZh ? '口径(m)' : 'Dia(m)', v(lp.antennaDiameter), isZh ? '效率(%)' : 'Eff(%)', v(lp.antennaEfficiency)));
+    rows.push(paramRow(isZh ? '地面站位置' : 'Station', v(lp.earthStationLocation), isZh ? '极化方式' : 'Pol', v(lp.uplinkPolarization)));
+    rows.push(paramRow(isZh ? '天线口径(m)' : 'Dia(m)', v(lp.antennaDiameter), isZh ? '天线效率(%)' : 'Eff(%)', v(lp.antennaEfficiency)));
     rows.push(paramRow(isZh ? '经度(°E)' : 'Lon(°E)', v(lp.longitude), isZh ? '纬度(°N)' : 'Lat(°N)', v(lp.latitude)));
-    rows.push(paramRow(isZh ? '频率(GHz)' : 'Freq(GHz)', v(lp.centerFrequency), 'G/T(dB/K)', v(lp.G_Ts)));
-    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.altitude), isZh ? '雨率(mm/h)' : 'Rain(mm/h)', v(lp.rainRate)));
-    rows.push(paramRow(isZh ? 'PA回退(dB)' : 'PA BO(dB)', v(lp.paBackoff), isZh ? '馈损(dB)' : 'Feeder(dB)', v(lp.feederLoss)));
-    rows.push(paramRow('UPC', v(lp.uplinkPowerControl), isZh ? '可用度(%)' : 'Avail(%)', v(lp.uplinkAvailability)));
+    rows.push(paramRow(isZh ? '上行频率(GHz)' : 'Freq(GHz)', v(lp.centerFrequency), isZh ? '卫星G/T(dB/K)' : 'G/T(dB/K)', v(lp.G_Ts)));
+    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.altitude), isZh ? '降雨率(mm/h)' : 'Rain(mm/h)', v(lp.rainRate)));
+    rows.push(paramRow(isZh ? '功放回退(dB)' : 'PA BO(dB)', v(lp.paBackoff), isZh ? '馈线损耗(dB)' : 'Feeder(dB)', v(lp.feederLoss)));
+    rows.push(paramRow('UPC', lp.uplinkPowerControl === '自定义' ? (isZh ? '自定义(' + v(lp.upcValue) + 'dB)' : 'Custom(' + v(lp.upcValue) + 'dB)') : v(lp.uplinkPowerControl), isZh ? '可用度(%)' : 'Avail(%)', v(lp.uplinkAvailability)));
 
     // 接收站参数
     rows.push(sectionRow(isZh ? '接收站参数' : 'Downlink Station', COL));
-    rows.push(paramRow(isZh ? '收信站' : 'Station', v(lp.rxEarthStationLocation), isZh ? '极化' : 'Pol', v(lp.downlinkPolarization)));
-    rows.push(paramRow(isZh ? '口径(m)' : 'Dia(m)', v(lp.rxAntennaDiameter), isZh ? '效率(%)' : 'Eff(%)', v(lp.rxAntennaEfficiency)));
+    rows.push(paramRow(isZh ? '地面站位置' : 'Station', v(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Pol', v(lp.downlinkPolarization)));
+    rows.push(paramRow(isZh ? '天线口径(m)' : 'Dia(m)', v(lp.rxAntennaDiameter), isZh ? '天线效率(%)' : 'Eff(%)', v(lp.rxAntennaEfficiency)));
     rows.push(paramRow(isZh ? '经度(°E)' : 'Lon(°E)', v(lp.rxLongitude), isZh ? '纬度(°N)' : 'Lat(°N)', v(lp.rxLatitude)));
-    rows.push(paramRow(isZh ? '频率(GHz)' : 'Freq(GHz)', v(lp.rxCenterFrequency), 'EIRP(dBW)', v(lp.rxEIRP)));
-    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.rxAltitude), isZh ? '雨率(mm/h)' : 'Rain(mm/h)', v(lp.rxRainRate)));
+    rows.push(paramRow(isZh ? '下行频率(GHz)' : 'Freq(GHz)', v(lp.rxCenterFrequency), isZh ? '卫星EIRP(dBW)' : 'EIRP(dBW)', v(lp.rxEIRP)));
+    rows.push(paramRow(isZh ? '海拔(m)' : 'Alt(m)', v(lp.rxAltitude), isZh ? '降雨率(mm/h)' : 'Rain(mm/h)', v(lp.rxRainRate)));
     rows.push(paramRow(isZh ? '天线噪温(K)' : 'AntT(K)', v(lp.rxAntennaNoiseTemp), isZh ? '接收机噪温(K)' : 'RxT(K)', v(lp.rxReceiverNoiseTemp)));
-    rows.push(paramRow(isZh ? '馈损(dB)' : 'Feeder(dB)', v(lp.rxFeederLoss), isZh ? '可用度(%)' : 'Avail(%)', v(lp.rxDownlinkAvailability)));
+    rows.push(paramRow(isZh ? '馈线损耗(dB)' : 'Feeder(dB)', v(lp.rxFeederLoss), isZh ? '可用度(%)' : 'Avail(%)', v(lp.rxDownlinkAvailability)));
 
     // 载波参数
     rows.push(sectionRow(isZh ? '载波参数' : 'Carrier Parameters', COL));
-    rows.push(paramRow(isZh ? 'DVB标准' : 'DVB Std', dvbLabel, isZh ? '调制' : 'Mod', v(lp.modulation)));
-    rows.push(paramRow(isZh ? '速率(kbps)' : 'Rate(kbps)', v(lp.infoRate), 'FEC', v(lp.fec)));
-    rows.push(paramRow('RS', v(lp.rsCode), '1+α', v(lp.bandwidthFactor)));
-    rows.push(paramRow('BER', '1E-' + v(lp.ber), 'Eb/N₀(dB)', v(lp.ebno)));
+    rows.push(paramRow(isZh ? '标准' : 'DVB Std', dvbLabel, isZh ? '调制方式' : 'Mod', v(lp.modulation)));
+    rows.push(paramRow(isZh ? '信息速率(kbps)' : 'Rate(kbps)', v(lp.infoRate), isZh ? 'FEC码率' : 'FEC', v(lp.fec)));
+    rows.push(paramRow(isZh ? '帧效率' : 'Frame Eff', v(lp.rsCode), isZh ? '滚降系数(1+α)' : '1+α', v(lp.bandwidthFactor)));
+    const noiseMode = config.noiseRatioMode || 'ebno';
+    const noiseLabel = noiseMode === 'esno' ? 'Es/N₀(dB)' : 'Eb/N₀(dB)';
+    rows.push(paramRow(isZh ? '误码率' : 'BER', '1E-' + v(lp.ber), noiseLabel, v(lp.ebno)));
     const lastLabel = isForward ? (isZh ? '功放功率(W)' : 'PA(W)') : (isZh ? '余量(dB)' : 'Margin(dB)');
     const lastVal = isForward ? v(lp.inputPaPower) : v(lp.margin);
     rows.push(paramRow(lastLabel, lastVal));

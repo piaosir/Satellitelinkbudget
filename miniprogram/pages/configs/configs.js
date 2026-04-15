@@ -1705,14 +1705,17 @@ Page({
     const isForward = lp.calcMode === 'forward';
     const lastLabel = isForward ? '功放功率' : '链路余量';
     const lastValue = isForward ? (v(lp.inputPaPower) + 'W') : (v(lp.margin) + 'dB');
+    const upcDisplay = lp.uplinkPowerControl === '自定义' ? '自定义(' + v(lp.upcValue) + 'dB)' : v(lp.uplinkPowerControl);
+    const noiseMode = config.noiseRatioMode || 'ebno';
+    const noiseLabel = noiseMode === 'esno' ? 'Es/N₀门限' : 'Eb/N₀门限';
 
     // 每个section用两列表格展示
     const sections = [
       { title: '卫星参数', rows: [
-        ['卫星', v(sat.satelliteName), '轨位', v(sat.orbitPosition) + '°E'],
-        ['频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
-        ['转发器BW', v(sat.transponderBandwidth) + 'MHz', '离轴角', v(sat.deltaTheta) + '°'],
-        ['BOi', v(sat.BOi) + 'dB', 'BOo', v(sat.BOo) + 'dB'],
+        ['卫星名称', v(sat.satelliteName), '轨道位置', v(sat.orbitPosition) + '°E'],
+        ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
+        ['转发器带宽', v(sat.transponderBandwidth) + 'MHz', '邻星离轴角', v(sat.deltaTheta) + '°'],
+        ['转发器IBO', v(sat.BOi) + 'dB', '转发器OBO', v(sat.BOo) + 'dB'],
       ]},
       { title: '干扰因子(dB)', rows: [
         ['上行C/ACI', v(sat.aciUplinkFactor), '上行C/ASI', v(sat.adjUplinkFactor)],
@@ -1721,28 +1724,28 @@ Page({
         ['下行C/XPI', v(sat.xpolDownlinkFactor), 'Xpdr C/IM', v(sat.xpdrIntermodFactor)],
       ]},
       { title: '上行站', rows: [
-        ['站名', v(lp.earthStationLocation), '极化', v(lp.uplinkPolarization)],
-        ['口径', v(lp.antennaDiameter) + 'm', '效率', v(lp.antennaEfficiency) + '%'],
+        ['地面站位置', v(lp.earthStationLocation), '极化方式', v(lp.uplinkPolarization)],
+        ['天线口径', v(lp.antennaDiameter) + 'm', '天线效率', v(lp.antennaEfficiency) + '%'],
         ['经度', v(lp.longitude) + '°E', '纬度', v(lp.latitude) + '°N'],
-        ['频率', v(lp.centerFrequency) + 'GHz', 'G/T', v(lp.G_Ts) + 'dB/K'],
-        ['海拔', v(lp.altitude) + 'm', '雨率', v(lp.rainRate) + 'mm/h'],
-        ['PA回退', v(lp.paBackoff) + 'dB', '馈损', v(lp.feederLoss) + 'dB'],
-        ['UPC', v(lp.uplinkPowerControl), '可用度', v(lp.uplinkAvailability) + '%'],
+        ['上行频率', v(lp.centerFrequency) + 'GHz', '卫星G/T', v(lp.G_Ts) + 'dB/K'],
+        ['海拔', v(lp.altitude) + 'm', '降雨率', v(lp.rainRate) + 'mm/h'],
+        ['功放回退', v(lp.paBackoff) + 'dB', '馈线损耗', v(lp.feederLoss) + 'dB'],
+        ['UPC', upcDisplay, '可用度', v(lp.uplinkAvailability) + '%'],
       ]},
       { title: '接收站', rows: [
-        ['站名', v(lp.rxEarthStationLocation), '极化', v(lp.downlinkPolarization)],
-        ['口径', v(lp.rxAntennaDiameter) + 'm', '效率', v(lp.rxAntennaEfficiency) + '%'],
+        ['地面站位置', v(lp.rxEarthStationLocation), '极化方式', v(lp.downlinkPolarization)],
+        ['天线口径', v(lp.rxAntennaDiameter) + 'm', '天线效率', v(lp.rxAntennaEfficiency) + '%'],
         ['经度', v(lp.rxLongitude) + '°E', '纬度', v(lp.rxLatitude) + '°N'],
-        ['频率', v(lp.rxCenterFrequency) + 'GHz', 'EIRP', v(lp.rxEIRP) + 'dBW'],
-        ['海拔', v(lp.rxAltitude) + 'm', '雨率', v(lp.rxRainRate) + 'mm/h'],
+        ['下行频率', v(lp.rxCenterFrequency) + 'GHz', '卫星EIRP', v(lp.rxEIRP) + 'dBW'],
+        ['海拔', v(lp.rxAltitude) + 'm', '降雨率', v(lp.rxRainRate) + 'mm/h'],
         ['天线噪温', v(lp.rxAntennaNoiseTemp) + 'K', '接收机噪温', v(lp.rxReceiverNoiseTemp) + 'K'],
-        ['馈损', v(lp.rxFeederLoss) + 'dB', '可用度', v(lp.rxDownlinkAvailability) + '%'],
+        ['馈线损耗', v(lp.rxFeederLoss) + 'dB', '可用度', v(lp.rxDownlinkAvailability) + '%'],
       ]},
-      { title: '载波', rows: [
-        ['标准', dvbLabel, '调制', v(lp.modulation)],
-        ['速率', v(lp.infoRate) + 'kbps', 'FEC', v(lp.fec)],
-        ['RS', v(lp.rsCode), '1+α', v(lp.bandwidthFactor)],
-        ['BER', '1E-' + v(lp.ber), 'Eb/N0门限', v(lp.ebno) + 'dB'],
+      { title: '载波参数', rows: [
+        ['标准', dvbLabel, '调制方式', v(lp.modulation)],
+        ['信息速率', v(lp.infoRate) + 'kbps', 'FEC码率', v(lp.fec)],
+        ['帧效率', v(lp.rsCode), '滚降系数(1+α)', v(lp.bandwidthFactor)],
+        ['误码率', '1E-' + v(lp.ber), noiseLabel, v(lp.ebno) + 'dB'],
         [lastLabel, lastValue],
       ]},
     ];
