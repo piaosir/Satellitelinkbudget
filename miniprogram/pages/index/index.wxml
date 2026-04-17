@@ -1356,9 +1356,21 @@
       
       <!-- 实时计算结果 -->
       <view class="station-result station-result-row">
-        <view class="station-result-item">
+        <view class="station-result-item station-result-editable">
           <text class="station-result-label">载波带宽</text>
-          <text class="station-result-value">{{realtimeParams.carrierBandwidth}} kHz</text>
+          <input class="station-result-input" 
+                 type="text"
+                 placeholder="--" 
+                 value="{{realtimeParams.carrierBandwidth}}"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
+                 bindinput="onCarrierBandwidthInput"
+                 bindblur="onCarrierBandwidthBlur"
+                 bindfocus="onInputFocus"
+                 selection-start="{{inputSelectAll ? 0 : -1}}"
+                 selection-end="{{inputSelectAll ? 999 : -1}}" />
+          <text class="station-result-unit">kHz</text>
         </view>
         <view class="station-result-item station-result-editable">
           <text class="station-result-label">符号率</text>

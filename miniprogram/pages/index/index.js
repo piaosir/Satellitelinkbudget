@@ -511,7 +511,8 @@ Page({
         // 同步恢复速率计算模式和符号率（旧配置无此字段时重置为默认值）
         this.setData({
           rateCalcMode: linkParams.rateCalcMode || 'infoRate',
-          'realtimeParams.symbolRate': (linkParams.symbolRate !== undefined && linkParams.symbolRate !== '' && linkParams.symbolRate !== '--') ? linkParams.symbolRate : '--'
+          'realtimeParams.symbolRate': (linkParams.symbolRate !== undefined && linkParams.symbolRate !== '' && linkParams.symbolRate !== '--') ? linkParams.symbolRate : '--',
+          'realtimeParams.carrierBandwidth': (linkParams.carrierBandwidth !== undefined && linkParams.carrierBandwidth !== '' && linkParams.carrierBandwidth !== '--') ? linkParams.carrierBandwidth : '--'
         });
       }
       
@@ -648,7 +649,8 @@ Page({
       calcMode: this.data.calcMode,
       inputPaPower: this.data.inputPaPower,
       rateCalcMode: this.data.rateCalcMode,
-      symbolRate: this.data.realtimeParams.symbolRate
+      symbolRate: this.data.realtimeParams.symbolRate,
+      carrierBandwidth: this.data.realtimeParams.carrierBandwidth
     };
     app.globalData.linkParams[this.data.currentLinkNum] = linkParamsToSave;
     // 同时保存噪声比模式
@@ -867,6 +869,54 @@ Page({
         [`linkParams.${field}`]: value
       });
     }
+    
+    // 更新实时参数
+    this.updateRealtimeParams();
+  },
+
+  // 载波带宽输入变化 - 实时更新显示值
+  onCarrierBandwidthInput(e) {
+    const value = e.detail.value;
+    this.setData({
+      'realtimeParams.carrierBandwidth': value
+    });
+  },
+
+  // 载波带宽输入完成 - 反推符号率和信息速率
+  onCarrierBandwidthBlur(e) {
+    const carrierBandwidth = parseFloat(e.detail.value);
+    
+    if (isNaN(carrierBandwidth) || carrierBandwidth <= 0) {
+      // 无效值，恢复计算
+      this.updateRealtimeParams();
+      return;
+    }
+    
+    // 获取当前参数
+    const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.2;
+    const modulation = this.data.linkParams.modulation || 'QPSK';
+    const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+    const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
+    const m = parseFloat(this.data.linkParams.m) || 1; // 扩频增益
+    
+    // 获取调制因子
+    const modulationFactor = MODULATION_FACTORS[modulation] || 2;
+    
+    // 根据滚降系数计算符号率: symbolRate = carrierBandwidth / bandwidthFactor
+    const symbolRate = Math.round(carrierBandwidth / bandwidthFactor * 1000) / 1000;
+    
+    // 反推信息速率: infoRate = symbolRate * modulationFactor / m * rsCode * fec
+    const infoRate = symbolRate * modulationFactor / m * rsCode * fec;
+    
+    // 更新信息速率（保留3位小数，去除末尾多余的零）
+    const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+    
+    // 设置为载波带宽优先模式
+    this.setData({
+      'linkParams.infoRate': infoRateFormatted,
+      'realtimeParams.symbolRate': parseFloat(symbolRate.toFixed(3)).toString(),
+      rateCalcMode: 'carrierBandwidth'
+    });
     
     // 更新实时参数
     this.updateRealtimeParams();
@@ -2569,6 +2619,33 @@ Page({
         }
       }
       
+      // 如果是载波带宽优先模式，先根据当前载波带宽反推符号率和信息速率
+      if (this.data.rateCalcMode === 'carrierBandwidth') {
+        const currentBandwidth = parseFloat(this.data.realtimeParams.carrierBandwidth);
+        
+        if (!isNaN(currentBandwidth) && currentBandwidth > 0) {
+          const modulation = this.data.linkParams.modulation || 'QPSK';
+          const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+          const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
+          const m = parseFloat(this.data.linkParams.m) || 1;
+          const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.2;
+          const modulationFactor = MODULATION_FACTORS[modulation] || 2;
+          
+          // 根据滚降系数计算符号率: symbolRate = carrierBandwidth / bandwidthFactor
+          const symbolRate = Math.round(currentBandwidth / bandwidthFactor * 1000) / 1000;
+          
+          // 反推信息速率: infoRate = symbolRate * modulationFactor / m * rsCode * fec
+          const infoRate = symbolRate * modulationFactor / m * rsCode * fec;
+          const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+          
+          // 更新符号率和信息速率
+          this.setData({
+            'linkParams.infoRate': infoRateFormatted,
+            'realtimeParams.symbolRate': parseFloat(symbolRate.toFixed(3)).toString()
+          });
+        }
+      }
+      
       // 准备参数，包含当前的余量值
       const linkParamsWithMargin = {
         ...this.data.linkParams,
@@ -2583,6 +2660,13 @@ Page({
         // 根据模式决定是否更新符号率和载波带宽
         if (this.data.rateCalcMode === 'symbolRate') {
           // 符号率优先模式：保持符号率和载波带宽不变，只更新其他参数
+          this.setData({
+            'realtimeParams.stationEIRP': results.data.stationEIRPResult,
+            'realtimeParams.paRecommendation': results.data.paRecommendation,
+            'realtimeParams.gOverTe': results.data.gOverTeResult
+          });
+        } else if (this.data.rateCalcMode === 'carrierBandwidth') {
+          // 载波带宽优先模式：保持载波带宽不变，符号率由带宽反推，只更新其他参数
           this.setData({
             'realtimeParams.stationEIRP': results.data.stationEIRPResult,
             'realtimeParams.paRecommendation': results.data.paRecommendation,
