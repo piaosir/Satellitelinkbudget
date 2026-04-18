@@ -262,6 +262,7 @@ page {
   font-weight: 600;
   color: #ffffff;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 /* 激活状态的按钮 */

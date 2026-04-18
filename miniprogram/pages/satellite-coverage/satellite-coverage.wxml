@@ -58,9 +58,9 @@
         <text class="bottom-btn-text">仰角线</text>
       </view>
       
-      <!-- 覆盖图按钮 -->
+      <!-- 波束按钮 -->
       <view class="bottom-btn {{showCoverageContours ? 'active' : ''}} {{!hasCoverageData ? 'disabled' : ''}} {{isSwitchingSatellite ? 'disabled' : ''}}" bindtap="showCoveragePanel">
-        <text class="bottom-btn-text">覆盖</text>
+        <text class="bottom-btn-text">波束</text>
       </view>
       
       <!-- 自定义覆盖值按钮 (仅在有覆盖数据时显示) -->
