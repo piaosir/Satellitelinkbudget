@@ -233,12 +233,21 @@
           </view>
         </button>
         
-        <!-- Word参数文档 -->
-        <view class="share-option-btn" bindtap="shareWord">
-          <view class="share-option-icon icon-word"></view>
+        <!-- Excel参数文档 -->
+        <view class="share-option-btn" bindtap="shareExcel">
+          <view class="share-option-icon icon-excel"></view>
           <view class="share-option-info">
-            <text class="share-option-text">参数文档(Word)</text>
-            <text class="share-option-desc">生成参数设置文档，可转发或保存</text>
+            <text class="share-option-text">参数文档(Excel)</text>
+            <text class="share-option-desc">生成Excel参数设置表格，可转发或保存</text>
+          </view>
+        </view>
+
+        <!-- PDF参数文档 -->
+        <view class="share-option-btn" bindtap="sharePdf">
+          <view class="share-option-icon icon-pdf"></view>
+          <view class="share-option-info">
+            <text class="share-option-text">参数文档(PDF)</text>
+            <text class="share-option-desc">生成PDF参数设置文档，可转发或保存</text>
           </view>
         </view>
 

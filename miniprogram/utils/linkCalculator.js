@@ -85,7 +85,8 @@ const MODULATION_FACTORS = {
   '16APSK': 4,
   '32APSK': 5,
   '64APSK': 6,
-  '128APSK': 7
+  '128APSK': 7,
+  '256APSK': 8
 };
 
 // ITU-R P.838 降雨衰减系数表 (完全按照 index.html)

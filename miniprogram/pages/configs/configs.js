@@ -1568,8 +1568,8 @@ Page({
     }
   },
 
-  // 分享Word参数设置文档
-  async shareWord() {
+  // 分享Excel参数设置文档
+  async shareExcel() {
     const { currentShareConfig, exportLang } = this.data;
     if (!currentShareConfig || !currentShareConfig.configId) {
       wx.showToast({ title: '配置信息异常', icon: 'none' });
@@ -1577,7 +1577,7 @@ Page({
     }
 
     this.hideSharePanel();
-    wx.showLoading({ title: '生成参数文档...', mask: true });
+    wx.showLoading({ title: '生成Excel参数文档...', mask: true });
 
     try {
       const configsToExport = await this.getConfigsData([currentShareConfig.configId]);
@@ -1588,15 +1588,15 @@ Page({
         return;
       }
 
-      const lastWordFileID = wx.getStorageSync('lastWordFileID') || null;
+      const lastExcelParamsFileID = wx.getStorageSync('lastExcelParamsFileID') || null;
 
       const res = await wx.cloud.callFunction({
         name: 'generateReport',
         data: {
           configs: configsToExport,
-          format: 'word-params',
+          format: 'excel-params',
           lang: exportLang,
-          oldFileID: lastWordFileID
+          oldFileID: lastExcelParamsFileID
         }
       });
 
@@ -1604,7 +1604,7 @@ Page({
         throw new Error(res.result?.error || '云函数返回错误');
       }
 
-      wx.setStorageSync('lastWordFileID', res.result.fileID);
+      wx.setStorageSync('lastExcelParamsFileID', res.result.fileID);
 
       const downloadRes = await wx.cloud.downloadFile({
         fileID: res.result.fileID
@@ -1622,7 +1622,7 @@ Page({
       wx.openDocument({
         filePath: downloadRes.tempFilePath,
         showMenu: true,
-        fileType: 'docx',
+        fileType: 'xlsx',
         success: () => {
           wx.showToast({
             title: '点击右上角可转发',
@@ -1634,17 +1634,99 @@ Page({
           console.error('打开文档失败:', err);
           wx.showModal({
             title: '导出成功',
-            content: `参数文档已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
+            content: `Excel参数文档已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
             showCancel: false
           });
         }
       });
     } catch (error) {
-      console.error('分享参数文档失败:', error);
+      console.error('分享Excel参数文档失败:', error);
       wx.hideLoading();
       wx.showModal({
         title: '分享失败',
-        content: error.message || '无法生成参数文档，请稍后重试',
+        content: error.message || '无法生成Excel参数文档，请稍后重试',
+        showCancel: false
+      });
+    }
+  },
+
+  // 分享PDF参数设置文档
+  async sharePdf() {
+    const { currentShareConfig, exportLang } = this.data;
+    if (!currentShareConfig || !currentShareConfig.configId) {
+      wx.showToast({ title: '配置信息异常', icon: 'none' });
+      return;
+    }
+
+    this.hideSharePanel();
+    wx.showLoading({ title: '生成PDF参数文档...', mask: true });
+
+    try {
+      const configsToExport = await this.getConfigsData([currentShareConfig.configId]);
+
+      if (configsToExport.length === 0) {
+        wx.hideLoading();
+        wx.showToast({ title: '没有可导出的数据', icon: 'none' });
+        return;
+      }
+
+      const lastPdfParamsFileID = wx.getStorageSync('lastPdfParamsFileID') || null;
+
+      const res = await wx.cloud.callFunction({
+        name: 'generateReport',
+        data: {
+          configs: configsToExport,
+          format: 'pdf-params',
+          lang: exportLang,
+          oldFileID: lastPdfParamsFileID
+        }
+      });
+
+      if (!res.result || !res.result.success) {
+        throw new Error(res.result?.error || '云函数返回错误');
+      }
+
+      wx.setStorageSync('lastPdfParamsFileID', res.result.fileID);
+
+      const downloadRes = await wx.cloud.downloadFile({
+        fileID: res.result.fileID
+      });
+
+      if (!downloadRes.tempFilePath) {
+        throw new Error('文件下载失败');
+      }
+
+      wx.hideLoading();
+
+      this._lastExportedFile = downloadRes.tempFilePath;
+      this._lastExportedFileName = res.result.fileName;
+
+      wx.openDocument({
+        filePath: downloadRes.tempFilePath,
+        showMenu: true,
+        fileType: 'pdf',
+        success: () => {
+          wx.showToast({
+            title: '点击右上角可转发',
+            icon: 'none',
+            duration: 3000
+          });
+        },
+        fail: (err) => {
+          console.error('打开文档失败:', err);
+          wx.showModal({
+            title: '导出成功',
+            content: `PDF参数文档已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
+            showCancel: false
+          });
+        }
+      });
+    } catch (error) {
+      console.error('分享PDF参数文档失败:', error);
+      wx.hideLoading();
+      wx.showModal({
+        title: '分享失败',
+        content: error.message || '无法生成PDF参数文档，请稍后重试',
         showCancel: false
       });
     }
@@ -1701,7 +1783,7 @@ Page({
     const sat = config.satelliteParams || {};
     const lp = this._getFirstLinkParams(config);
     const v = (val) => (val !== undefined && val !== null && val !== '') ? String(val) : '--';
-    const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : '自定义';
+    const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : '自定义';
     const isForward = lp.calcMode === 'forward';
     const lastLabel = isForward ? '功放功率' : '链路余量';
     const lastValue = isForward ? (v(lp.inputPaPower) + 'W') : (v(lp.margin) + 'dB');

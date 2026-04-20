@@ -11,7 +11,8 @@ const MODULATION_FACTORS = {
   '16APSK': 4,
   '32APSK': 5,
   '64APSK': 6,
-  '128APSK': 7
+  '128APSK': 7,
+  '256APSK': 8
 };
 
 // 调制方式选项
@@ -24,7 +25,8 @@ const MODULATION_OPTIONS = [
   { value: '16APSK', label: '16APSK' },
   { value: '32APSK', label: '32APSK' },
   { value: '64APSK', label: '64APSK' },
-  { value: '128APSK', label: '128APSK' }
+  { value: '128APSK', label: '128APSK' },
+  { value: '256APSK', label: '256APSK' }
 ];
 
 // 工作频段选项及其对应的默认上下行频率
@@ -115,7 +117,8 @@ const P838_TABLE = {
 const DVB_STANDARD_OPTIONS = [
   { value: 'custom', label: '自定义' },
   { value: 'DVB-S', label: 'DVB-S' },
-  { value: 'DVB-S2', label: 'DVB-S2' }
+  { value: 'DVB-S2', label: 'DVB-S2' },
+  { value: 'DVB-S2X', label: 'DVB-S2X' }
 ];
 
 // DVB-S MODCOD预设表 (Eb/N₀, RS=188/204, 1+α=1.35)
@@ -162,6 +165,80 @@ const DVBS2_MODCOD_TABLE = [
   { label: '32APSK 5/6', modulation: '32APSK', fec: '5/6', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 14.28 },
   { label: '32APSK 8/9', modulation: '32APSK', fec: '8/9', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 15.69 },
   { label: '32APSK 9/10', modulation: '32APSK', fec: '9/10', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 16.05 }
+];
+
+// DVB-S2X MODCOD预设表 (Es/N₀, RS=0.9, 1+α=1.05)
+// 参考标准: ETSI EN 302 307-2 V1.3.1 (2021-07), Table 20a
+// 包含全部DVB-S2 MODCOD (向后兼容) 及 DVB-S2X 新增MODCOD
+// 门限值为正常FECFRAME (64800 bits), AWGN信道, QEF (PER < 10⁻⁷) 条件下的Es/N₀
+const DVBS2X_MODCOD_TABLE = [
+  // ——— QPSK (DVB-S2 legacy + S2X新增) ———
+  { label: 'QPSK 2/9',  modulation: 'QPSK', fec: '2/9',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: -2.85 },
+  { label: 'QPSK 13/45', modulation: 'QPSK', fec: '13/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: -2.03 },
+  { label: 'QPSK 1/4',  modulation: 'QPSK', fec: '1/4',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: -1.20 },
+  { label: 'QPSK 1/3',  modulation: 'QPSK', fec: '1/3',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: -0.70 },
+  { label: 'QPSK 2/5',  modulation: 'QPSK', fec: '2/5',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 0.00 },
+  { label: 'QPSK 9/20', modulation: 'QPSK', fec: '9/20', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 0.69 },
+  { label: 'QPSK 1/2',  modulation: 'QPSK', fec: '1/2',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 1.00 },
+  { label: 'QPSK 11/20', modulation: 'QPSK', fec: '11/20', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 1.58 },
+  { label: 'QPSK 3/5',  modulation: 'QPSK', fec: '3/5',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 2.23 },
+  { label: 'QPSK 2/3',  modulation: 'QPSK', fec: '2/3',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 3.10 },
+  { label: 'QPSK 3/4',  modulation: 'QPSK', fec: '3/4',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 4.03 },
+  { label: 'QPSK 4/5',  modulation: 'QPSK', fec: '4/5',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 4.68 },
+  { label: 'QPSK 5/6',  modulation: 'QPSK', fec: '5/6',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 5.18 },
+  { label: 'QPSK 8/9',  modulation: 'QPSK', fec: '8/9',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 6.20 },
+  { label: 'QPSK 9/10', modulation: 'QPSK', fec: '9/10', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 6.42 },
+  // ——— 8PSK (DVB-S2 legacy + S2X新增) ———
+  { label: '8PSK 3/5',   modulation: '8PSK', fec: '3/5',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 5.50 },
+  { label: '8PSK 23/36', modulation: '8PSK', fec: '23/36', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 6.12 },
+  { label: '8PSK 2/3',   modulation: '8PSK', fec: '2/3',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 6.62 },
+  { label: '8PSK 25/36', modulation: '8PSK', fec: '25/36', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 7.05 },
+  { label: '8PSK 13/18', modulation: '8PSK', fec: '13/18', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 7.49 },
+  { label: '8PSK 3/4',   modulation: '8PSK', fec: '3/4',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 7.91 },
+  { label: '8PSK 5/6',   modulation: '8PSK', fec: '5/6',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 9.35 },
+  { label: '8PSK 8/9',   modulation: '8PSK', fec: '8/9',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 10.69 },
+  { label: '8PSK 9/10',  modulation: '8PSK', fec: '9/10',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 10.98 },
+  // ——— 16APSK (DVB-S2 legacy + S2X新增) ———
+  { label: '16APSK 26/45', modulation: '16APSK', fec: '26/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 7.80 },
+  { label: '16APSK 3/5',   modulation: '16APSK', fec: '3/5',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 8.38 },
+  { label: '16APSK 28/45', modulation: '16APSK', fec: '28/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 8.56 },
+  { label: '16APSK 23/36', modulation: '16APSK', fec: '23/36', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 8.77 },
+  { label: '16APSK 2/3',   modulation: '16APSK', fec: '2/3',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 8.97 },
+  { label: '16APSK 25/36', modulation: '16APSK', fec: '25/36', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 9.49 },
+  { label: '16APSK 3/4',   modulation: '16APSK', fec: '3/4',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 10.21 },
+  { label: '16APSK 13/18', modulation: '16APSK', fec: '13/18', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 9.90 },
+  { label: '16APSK 7/9',   modulation: '16APSK', fec: '7/9',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 10.69 },
+  { label: '16APSK 4/5',   modulation: '16APSK', fec: '4/5',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 11.03 },
+  { label: '16APSK 5/6',   modulation: '16APSK', fec: '5/6',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 11.61 },
+  { label: '16APSK 77/90', modulation: '16APSK', fec: '77/90', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 12.09 },
+  { label: '16APSK 8/9',   modulation: '16APSK', fec: '8/9',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 12.89 },
+  { label: '16APSK 9/10',  modulation: '16APSK', fec: '9/10',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 13.13 },
+  // ——— 32APSK (DVB-S2 legacy + S2X新增) ———
+  { label: '32APSK 2/3',   modulation: '32APSK', fec: '2/3',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 11.75 },
+  { label: '32APSK 32/45', modulation: '32APSK', fec: '32/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 12.14 },
+  { label: '32APSK 11/15', modulation: '32APSK', fec: '11/15', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 12.49 },
+  { label: '32APSK 3/4',   modulation: '32APSK', fec: '3/4',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 12.73 },
+  { label: '32APSK 7/9',   modulation: '32APSK', fec: '7/9',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 13.24 },
+  { label: '32APSK 4/5',   modulation: '32APSK', fec: '4/5',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 13.64 },
+  { label: '32APSK 5/6',   modulation: '32APSK', fec: '5/6',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 14.28 },
+  { label: '32APSK 8/9',   modulation: '32APSK', fec: '8/9',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 15.69 },
+  { label: '32APSK 9/10',  modulation: '32APSK', fec: '9/10',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 16.05 },
+  // ——— 64APSK (DVB-S2X新增) ———
+  { label: '64APSK 32/45', modulation: '64APSK', fec: '32/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 13.98 },
+  { label: '64APSK 11/15', modulation: '64APSK', fec: '11/15', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 14.81 },
+  { label: '64APSK 7/9',   modulation: '64APSK', fec: '7/9',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 15.52 },
+  { label: '64APSK 4/5',   modulation: '64APSK', fec: '4/5',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 16.20 },
+  { label: '64APSK 5/6',   modulation: '64APSK', fec: '5/6',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 16.55 },
+  // ——— 128APSK (DVB-S2X新增) ———
+  { label: '128APSK 3/4',  modulation: '128APSK', fec: '3/4',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 17.73 },
+  { label: '128APSK 7/9',  modulation: '128APSK', fec: '7/9',  rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 18.53 },
+  // ——— 256APSK (DVB-S2X新增) ———
+  { label: '256APSK 29/45', modulation: '256APSK', fec: '29/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 16.98 },
+  { label: '256APSK 2/3',   modulation: '256APSK', fec: '2/3',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 17.24 },
+  { label: '256APSK 31/45', modulation: '256APSK', fec: '31/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 18.10 },
+  { label: '256APSK 32/45', modulation: '256APSK', fec: '32/45', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 18.59 },
+  { label: '256APSK 11/15', modulation: '256APSK', fec: '11/15', rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 18.84 },
+  { label: '256APSK 3/4',   modulation: '256APSK', fec: '3/4',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 19.57 }
 ];
 
 // 物理常量
@@ -240,6 +317,7 @@ module.exports = {
   DVB_STANDARD_OPTIONS,
   DVBS_MODCOD_TABLE,
   DVBS2_MODCOD_TABLE,
+  DVBS2X_MODCOD_TABLE,
   P838_TABLE,
   CONSTANTS,
   RESULT_LABELS

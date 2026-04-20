@@ -1,6 +1,6 @@
 // index.js
 const app = getApp();
-const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE } = require('../../utils/constants');
+const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE, DVBS2X_MODCOD_TABLE } = require('../../utils/constants');
 const { validateAllParams } = require('../../utils/validator');
 const { formatResultsForDisplay } = require('../../utils/formatter');
 const { calculateLinkBudget } = require('../../utils/linkCalculator');
@@ -453,6 +453,8 @@ Page({
             modcodList = DVBS_MODCOD_TABLE;
           } else if (dvbStandard === 'DVB-S2') {
             modcodList = DVBS2_MODCOD_TABLE;
+          } else if (dvbStandard === 'DVB-S2X') {
+            modcodList = DVBS2X_MODCOD_TABLE;
           }
           const modcodIdx = (linkParams.modcodIndex >= 0 && linkParams.modcodIndex < modcodList.length)
             ? linkParams.modcodIndex : 0;
@@ -1087,6 +1089,8 @@ Page({
       modcodList = DVBS_MODCOD_TABLE;
     } else if (standard === 'DVB-S2') {
       modcodList = DVBS2_MODCOD_TABLE;
+    } else if (standard === 'DVB-S2X') {
+      modcodList = DVBS2X_MODCOD_TABLE;
     }
 
     updateData.currentModcodList = modcodList;
