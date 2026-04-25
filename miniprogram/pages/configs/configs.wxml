@@ -133,6 +133,14 @@
       <view class="filter-panel-close" bindtap="hideFilterPanel">×</view>
     </view>
     <view class="filter-panel-content">
+      <!-- 轨道类型筛选 -->
+      <view class="filter-group">
+        <text class="filter-group-label">轨道类型</text>
+        <view class="filter-options">
+          <view class="filter-tag {{filterOrbitType === '' ? 'active' : ''}}" bindtap="selectFilterOrbitType" data-value="">全部</view>
+          <view class="filter-tag {{filterOrbitType === item ? 'active' : ''}}" wx:for="{{orbitTypeList}}" wx:key="index" bindtap="selectFilterOrbitType" data-value="{{item}}">{{item}}</view>
+        </view>
+      </view>
       <!-- 卫星名称筛选 -->
       <view class="filter-group">
         <text class="filter-group-label">卫星名称</text>

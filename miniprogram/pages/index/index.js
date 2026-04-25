@@ -2606,7 +2606,13 @@ Page({
   generateReport() {
     // 保存当前数据到全局
     this.saveLinkParams();
-    app.globalData.satelliteParams = this.data.satelliteParams;
+    app.globalData.orbitType = this.data.orbitType || 'GEO';
+    app.globalData.satelliteParams = {
+      ...this.data.satelliteParams,
+      orbitType: this.data.orbitType || 'GEO',
+      ngsoOrbitClass: this.data.orbitType === 'NGSO' ? (this.data.ngsoOrbitClass || 'LEO') : ''
+    };
+    app.globalData.islInputMode = this.data.islInputMode || 'cno';
     
     // 在后台执行一次计算，确保生成报告时使用最新的计算结果
     const results = this.performBackgroundCalculation();
@@ -3475,6 +3481,22 @@ Page({
     this.setData({ selectedHistoryIds: selected });
   },
 
+  // 构建历史记录导出configs（含轨道类型标签）
+  _buildHistoryExportConfigs(recordsWithResults) {
+    return recordsWithResults.map(record => {
+      const orbitLabel = record.orbitType === 'NGSO'
+        ? `${record.ngsoOrbitClass || 'LEO'}/NGSO`
+        : 'GEO';
+      return {
+        configName: `${record.satelliteName}[${orbitLabel}]_${record.time}`,
+        satelliteParams: record.satelliteParams,
+        linkParams: { 1: record.linkParams },
+        calculationResults: { 1: record.calculationResults },
+        noiseRatioMode: record.noiseRatioMode || 'ebno'
+      };
+    });
+  },
+
   // 导出选中的历史记录为Excel（含对比高亮）
   async exportHistoryExcel() {
     const { selectedHistoryIds, historyRecords } = this.data;
@@ -3500,14 +3522,7 @@ Page({
     wx.showLoading({ title: '生成Excel中...', mask: true });
 
     try {
-      // 将历史记录转为配置格式以复用云函数
-      const configs = recordsWithResults.map(record => ({
-        configName: `${record.satelliteName}_${record.time}`,
-        satelliteParams: record.satelliteParams,
-        linkParams: { 1: record.linkParams },
-        calculationResults: { 1: record.calculationResults },
-        noiseRatioMode: record.noiseRatioMode || 'ebno'
-      }));
+      const configs = this._buildHistoryExportConfigs(recordsWithResults);
 
       const lastExcelFileID = wx.getStorageSync('lastHistoryExcelFileID') || null;
 
@@ -3560,6 +3575,166 @@ Page({
       wx.showModal({
         title: '导出失败',
         content: error.message || '无法导出Excel，请稍后重试',
+        showCancel: false
+      });
+    }
+  },
+
+  // 导出选中的历史记录为Word
+  async exportHistoryWord() {
+    const { selectedHistoryIds, historyRecords } = this.data;
+    if (selectedHistoryIds.length === 0) {
+      wx.showToast({ title: '请先选择记录', icon: 'none' });
+      return;
+    }
+
+    const selectedRecords = selectedHistoryIds.map(id => historyRecords.find(r => r.id === id)).filter(Boolean);
+    const recordsWithResults = selectedRecords.filter(r => r.calculationResults);
+    if (recordsWithResults.length === 0) {
+      wx.showModal({
+        title: '无法导出',
+        content: '选中的历史记录没有计算结果数据（旧版记录不支持导出，请重新计算后再试）',
+        showCancel: false
+      });
+      return;
+    }
+
+    wx.showLoading({ title: '生成Word中...', mask: true });
+
+    try {
+      const configs = this._buildHistoryExportConfigs(recordsWithResults);
+
+      const lastWordFileID = wx.getStorageSync('lastHistoryWordFileID') || null;
+
+      const res = await wx.cloud.callFunction({
+        name: 'generateReport',
+        data: {
+          configs: configs,
+          format: 'word',
+          lang: 'zh',
+          compareMode: false,
+          oldFileID: lastWordFileID
+        }
+      });
+
+      if (!res.result || !res.result.success) {
+        throw new Error(res.result?.error || '云函数返回错误');
+      }
+
+      wx.setStorageSync('lastHistoryWordFileID', res.result.fileID);
+
+      const downloadRes = await wx.cloud.downloadFile({
+        fileID: res.result.fileID
+      });
+
+      if (!downloadRes.tempFilePath) {
+        throw new Error('文件下载失败');
+      }
+
+      wx.hideLoading();
+
+      wx.openDocument({
+        filePath: downloadRes.tempFilePath,
+        showMenu: true,
+        fileType: 'docx',
+        success: () => {
+          wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 });
+        },
+        fail: (err) => {
+          console.error('打开文档失败:', err);
+          wx.showModal({
+            title: '导出成功',
+            content: `Word文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
+            showCancel: false
+          });
+        }
+      });
+    } catch (error) {
+      console.error('导出历史Word失败:', error);
+      wx.hideLoading();
+      wx.showModal({
+        title: '导出失败',
+        content: error.message || '无法导出Word，请稍后重试',
+        showCancel: false
+      });
+    }
+  },
+
+  // 导出选中的历史记录为PDF
+  async exportHistoryPDF() {
+    const { selectedHistoryIds, historyRecords } = this.data;
+    if (selectedHistoryIds.length === 0) {
+      wx.showToast({ title: '请先选择记录', icon: 'none' });
+      return;
+    }
+
+    const selectedRecords = selectedHistoryIds.map(id => historyRecords.find(r => r.id === id)).filter(Boolean);
+    const recordsWithResults = selectedRecords.filter(r => r.calculationResults);
+    if (recordsWithResults.length === 0) {
+      wx.showModal({
+        title: '无法导出',
+        content: '选中的历史记录没有计算结果数据（旧版记录不支持导出，请重新计算后再试）',
+        showCancel: false
+      });
+      return;
+    }
+
+    wx.showLoading({ title: '生成PDF中...', mask: true });
+
+    try {
+      const configs = this._buildHistoryExportConfigs(recordsWithResults);
+
+      const lastPDFFileID = wx.getStorageSync('lastHistoryPDFFileID') || null;
+
+      const res = await wx.cloud.callFunction({
+        name: 'generateReport',
+        data: {
+          configs: configs,
+          format: 'pdf',
+          lang: 'zh',
+          compareMode: false,
+          oldFileID: lastPDFFileID
+        }
+      });
+
+      if (!res.result || !res.result.success) {
+        throw new Error(res.result?.error || '云函数返回错误');
+      }
+
+      wx.setStorageSync('lastHistoryPDFFileID', res.result.fileID);
+
+      const downloadRes = await wx.cloud.downloadFile({
+        fileID: res.result.fileID
+      });
+
+      if (!downloadRes.tempFilePath) {
+        throw new Error('文件下载失败');
+      }
+
+      wx.hideLoading();
+
+      wx.openDocument({
+        filePath: downloadRes.tempFilePath,
+        showMenu: true,
+        fileType: 'pdf',
+        success: () => {
+          wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 });
+        },
+        fail: (err) => {
+          console.error('打开文档失败:', err);
+          wx.showModal({
+            title: '导出成功',
+            content: `PDF文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
+            showCancel: false
+          });
+        }
+      });
+    } catch (error) {
+      console.error('导出历史PDF失败:', error);
+      wx.hideLoading();
+      wx.showModal({
+        title: '导出失败',
+        content: error.message || '无法导出PDF，请稍后重试',
         showCancel: false
       });
     }

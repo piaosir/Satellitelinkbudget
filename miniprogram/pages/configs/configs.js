@@ -164,9 +164,11 @@ Page({
     showFilterPanel: false,
     filterSatellite: '', // 当前选中的卫星名称筛选
     filterBand: '', // 当前选中的频段筛选
+    filterOrbitType: '', // 当前选中的轨道类型筛选
     filterActive: false, // 筛选是否激活
     satelliteList: [], // 可选的卫星名称列表
     bandList: [], // 可选的频段列表
+    orbitTypeList: [], // 可选的轨道类型列表
     allConfigs: [] // 完整配置列表（筛选前）
   },
 
@@ -750,31 +752,51 @@ Page({
     }
   },
 
-  // 从配置列表中提取卫星名称和频段列表
+  // 从配置列表中提取卫星名称、频段、轨道类型列表
   updateFilterLists(configs) {
     const satelliteSet = new Set();
     const bandSet = new Set();
+    const orbitTypeSet = new Set();
     configs.forEach(item => {
       const name = item.satelliteParams && item.satelliteParams.satelliteName;
       const band = item.satelliteParams && item.satelliteParams.frequencyBand;
+      const orbitType = item.satelliteParams && item.satelliteParams.orbitType;
+      const ngsoClass = item.satelliteParams && item.satelliteParams.ngsoOrbitClass;
       if (name) satelliteSet.add(name);
       if (band) bandSet.add(band);
+      // 派生轨道类型：NGSO 取具体轨道级别，否则为 GEO
+      const derivedOrbit = orbitType === 'NGSO' ? (ngsoClass || 'NGSO') : 'GEO';
+      orbitTypeSet.add(derivedOrbit);
+    });
+    // 固定顺序：GEO 优先，其余按字母
+    const orbitOrder = ['GEO', 'LEO', 'MEO', 'HEO', 'NGSO'];
+    const orbitTypeList = Array.from(orbitTypeSet).sort((a, b) => {
+      const ia = orbitOrder.indexOf(a);
+      const ib = orbitOrder.indexOf(b);
+      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     });
     this.setData({
       satelliteList: Array.from(satelliteSet).sort(),
-      bandList: Array.from(bandSet).sort()
+      bandList: Array.from(bandSet).sort(),
+      orbitTypeList
     });
   },
 
   // 根据当前筛选条件过滤配置
   getFilteredConfigs(configs) {
-    const { filterSatellite, filterBand } = this.data;
-    if (!filterSatellite && !filterBand) return configs;
+    const { filterSatellite, filterBand, filterOrbitType } = this.data;
+    if (!filterSatellite && !filterBand && !filterOrbitType) return configs;
     return configs.filter(item => {
       const name = item.satelliteParams && item.satelliteParams.satelliteName;
       const band = item.satelliteParams && item.satelliteParams.frequencyBand;
+      const orbitType = item.satelliteParams && item.satelliteParams.orbitType;
+      const ngsoClass = item.satelliteParams && item.satelliteParams.ngsoOrbitClass;
       if (filterSatellite && name !== filterSatellite) return false;
       if (filterBand && band !== filterBand) return false;
+      if (filterOrbitType) {
+        const derivedOrbit = orbitType === 'NGSO' ? (ngsoClass || 'NGSO') : 'GEO';
+        if (derivedOrbit !== filterOrbitType) return false;
+      }
       return true;
     });
   },
@@ -798,11 +820,17 @@ Page({
     this.setData({ filterBand: e.currentTarget.dataset.value });
   },
 
+  // 选择轨道类型筛选
+  selectFilterOrbitType(e) {
+    this.setData({ filterOrbitType: e.currentTarget.dataset.value });
+  },
+
   // 重置筛选
   resetFilter() {
     this.setData({
       filterSatellite: '',
       filterBand: '',
+      filterOrbitType: '',
       filterActive: false,
       configs: this.data.allConfigs,
       showFilterPanel: false
@@ -811,8 +839,8 @@ Page({
 
   // 应用筛选
   applyFilter() {
-    const { filterSatellite, filterBand, allConfigs } = this.data;
-    const active = !!(filterSatellite || filterBand);
+    const { filterSatellite, filterBand, filterOrbitType, allConfigs } = this.data;
+    const active = !!(filterSatellite || filterBand || filterOrbitType);
     this.setData({
       filterActive: active,
       configs: this.getFilteredConfigs(allConfigs),
@@ -1802,38 +1830,75 @@ Page({
     const noiseMode = config.noiseRatioMode || 'ebno';
     const noiseLabel = noiseMode === 'esno' ? 'Es/N₀门限' : 'Eb/N₀门限';
 
+    // NGSO 适配
+    const isNGSO = sat.orbitType === 'NGSO';
+    const ngsoClass = sat.ngsoOrbitClass || 'LEO';
+    const islMode = sat.islInputMode || 'cno';
+    const islLabel = islMode === 'cno' ? 'ISL C/N₀' : 'ISL SNR';
+    const islUnit = islMode === 'cno' ? 'dBHz' : 'dB';
+    const islDisplayVal = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
+    // 上行站距离（NGSO）
+    const upDistMode = lp.distanceMode || 'altitude';
+    const upDistLabel = upDistMode === 'slantRange' ? '星地斜距' : '轨道高度';
+    const upDistVal = upDistMode === 'slantRange' ? v(lp.slantRange) + 'km' : v(lp.orbitAltitude) + 'km';
+    // 接收站距离（NGSO）
+    const rxDistMode = lp.rxDistanceMode || 'altitude';
+    const rxDistLabel = rxDistMode === 'slantRange' ? '星地斜距' : '轨道高度';
+    const rxDistVal = rxDistMode === 'slantRange' ? v(lp.rxSlantRange) + 'km' : v(lp.rxOrbitAltitude) + 'km';
+
+    // 卫星参数 section（GEO/NGSO 不同）
+    const satRows = isNGSO ? [
+      ['卫星名称', v(sat.satelliteName), '轨道类型', `${ngsoClass} / NGSO`],
+      ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
+      ['转发器带宽', v(sat.transponderBandwidth) + 'MHz', islLabel, v(islDisplayVal) + islUnit],
+      ['转发器IBO', v(sat.BOi) + 'dB', '转发器OBO', v(sat.BOo) + 'dB'],
+      ['ISL跳数', v(sat.islHops)],
+    ] : [
+      ['卫星名称', v(sat.satelliteName), '轨道位置', v(sat.orbitPosition) + '°E'],
+      ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
+      ['转发器带宽', v(sat.transponderBandwidth) + 'MHz', '邻星离轴角', v(sat.deltaTheta) + '°'],
+      ['转发器IBO', v(sat.BOi) + 'dB', '转发器OBO', v(sat.BOo) + 'dB'],
+    ];
+
+    // 上行站 section（NGSO 增加最低仰角和轨道高度/斜距）
+    const upRows = [
+      ['地面站位置', v(lp.earthStationLocation), '极化方式', v(lp.uplinkPolarization)],
+      ['天线口径', v(lp.antennaDiameter) + 'm', '天线效率', v(lp.antennaEfficiency) + '%'],
+      ['经度', v(lp.longitude) + '°E', '纬度', v(lp.latitude) + '°N'],
+      ['上行频率', v(lp.centerFrequency) + 'GHz', '卫星G/T', v(lp.G_Ts) + 'dB/K'],
+    ];
+    if (isNGSO) {
+      upRows.push(['最低仰角', v(lp.minElevation) + '°', upDistLabel, upDistVal]);
+    }
+    upRows.push(['海拔', v(lp.altitude) + 'm', '降雨率', v(lp.rainRate) + 'mm/h']);
+    upRows.push(['功放回退', v(lp.paBackoff) + 'dB', '馈线损耗', v(lp.feederLoss) + 'dB']);
+    upRows.push(['UPC', upcDisplay, '可用度', v(lp.uplinkAvailability) + '%']);
+
+    // 接收站 section
+    const rxRows = [
+      ['地面站位置', v(lp.rxEarthStationLocation), '极化方式', v(lp.downlinkPolarization)],
+      ['天线口径', v(lp.rxAntennaDiameter) + 'm', '天线效率', v(lp.rxAntennaEfficiency) + '%'],
+      ['经度', v(lp.rxLongitude) + '°E', '纬度', v(lp.rxLatitude) + '°N'],
+      ['下行频率', v(lp.rxCenterFrequency) + 'GHz', '卫星EIRP', v(lp.rxEIRP) + 'dBW'],
+    ];
+    if (isNGSO) {
+      rxRows.push(['最低仰角', v(lp.rxMinElevation) + '°', rxDistLabel, rxDistVal]);
+    }
+    rxRows.push(['海拔', v(lp.rxAltitude) + 'm', '降雨率', v(lp.rxRainRate) + 'mm/h']);
+    rxRows.push(['天线噪温', v(lp.rxAntennaNoiseTemp) + 'K', '接收机噪温', v(lp.rxReceiverNoiseTemp) + 'K']);
+    rxRows.push(['馈线损耗', v(lp.rxFeederLoss) + 'dB', '可用度', v(lp.rxDownlinkAvailability) + '%']);
+
     // 每个section用两列表格展示
     const sections = [
-      { title: '卫星参数', rows: [
-        ['卫星名称', v(sat.satelliteName), '轨道位置', v(sat.orbitPosition) + '°E'],
-        ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
-        ['转发器带宽', v(sat.transponderBandwidth) + 'MHz', '邻星离轴角', v(sat.deltaTheta) + '°'],
-        ['转发器IBO', v(sat.BOi) + 'dB', '转发器OBO', v(sat.BOo) + 'dB'],
-      ]},
+      { title: '卫星参数', rows: satRows },
       { title: '干扰因子(dB)', rows: [
         ['上行C/ACI', v(sat.aciUplinkFactor), '上行C/ASI', v(sat.adjUplinkFactor)],
         ['上行C/XPI', v(sat.xpolUplinkFactor), 'HPA C/IM', v(sat.hpaIntermodFactor)],
         ['下行C/ACI', v(sat.aciDownlinkFactor), '下行C/ASI', v(sat.adjDownlinkFactor)],
         ['下行C/XPI', v(sat.xpolDownlinkFactor), 'Xpdr C/IM', v(sat.xpdrIntermodFactor)],
       ]},
-      { title: '上行站', rows: [
-        ['地面站位置', v(lp.earthStationLocation), '极化方式', v(lp.uplinkPolarization)],
-        ['天线口径', v(lp.antennaDiameter) + 'm', '天线效率', v(lp.antennaEfficiency) + '%'],
-        ['经度', v(lp.longitude) + '°E', '纬度', v(lp.latitude) + '°N'],
-        ['上行频率', v(lp.centerFrequency) + 'GHz', '卫星G/T', v(lp.G_Ts) + 'dB/K'],
-        ['海拔', v(lp.altitude) + 'm', '降雨率', v(lp.rainRate) + 'mm/h'],
-        ['功放回退', v(lp.paBackoff) + 'dB', '馈线损耗', v(lp.feederLoss) + 'dB'],
-        ['UPC', upcDisplay, '可用度', v(lp.uplinkAvailability) + '%'],
-      ]},
-      { title: '接收站', rows: [
-        ['地面站位置', v(lp.rxEarthStationLocation), '极化方式', v(lp.downlinkPolarization)],
-        ['天线口径', v(lp.rxAntennaDiameter) + 'm', '天线效率', v(lp.rxAntennaEfficiency) + '%'],
-        ['经度', v(lp.rxLongitude) + '°E', '纬度', v(lp.rxLatitude) + '°N'],
-        ['下行频率', v(lp.rxCenterFrequency) + 'GHz', '卫星EIRP', v(lp.rxEIRP) + 'dBW'],
-        ['海拔', v(lp.rxAltitude) + 'm', '降雨率', v(lp.rxRainRate) + 'mm/h'],
-        ['天线噪温', v(lp.rxAntennaNoiseTemp) + 'K', '接收机噪温', v(lp.rxReceiverNoiseTemp) + 'K'],
-        ['馈线损耗', v(lp.rxFeederLoss) + 'dB', '可用度', v(lp.rxDownlinkAvailability) + '%'],
-      ]},
+      { title: '上行站', rows: upRows },
+      { title: '接收站', rows: rxRows },
       { title: '载波参数', rows: [
         ['标准', dvbLabel, '调制方式', v(lp.modulation)],
         ['信息速率', v(lp.infoRate) + 'kbps', 'FEC码率', v(lp.fec)],
@@ -1843,7 +1908,8 @@ Page({
       ]},
     ];
 
-    const lines = [(config.configName || '卫星链路配置')];
+    const orbitTag = isNGSO ? `[${ngsoClass}]` : '[GEO]';
+    const lines = [(config.configName || '卫星链路配置') + '  ' + orbitTag];
     for (const sec of sections) {
       lines.push('┌ ' + sec.title);
       for (const r of sec.rows) {
@@ -2324,10 +2390,17 @@ Page({
         return;
       }
       
-      app.globalData.satelliteParams = config.satelliteParams;
+      const reportOrbitType = (config.satelliteParams && config.satelliteParams.orbitType) || 'GEO';
+      app.globalData.orbitType = reportOrbitType;
+      app.globalData.satelliteParams = {
+        ...config.satelliteParams,
+        orbitType: reportOrbitType,
+        ngsoOrbitClass: reportOrbitType === 'NGSO' ? (config.satelliteParams.ngsoOrbitClass || 'LEO') : ''
+      };
       app.globalData.linkParams = config.linkParams;
       app.globalData.calculationResults = config.calculationResults;
       app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
+      app.globalData.islInputMode = (config.satelliteParams && config.satelliteParams.islInputMode) || 'cno';
       app.globalData.markedParams = config.markedParams || [];
       
       wx.hideLoading();

@@ -330,11 +330,13 @@ function performCalculations(satParams, inputs) {
   const rxRainRate = parseFloat(inputs.rxRainRate) || 0; // mm/h
   const rxAltitude = (parseFloat(inputs.rxAltitude) || 0) / 1000; // km
   
-  // 噪声温度参数
-  const antennaNoiseTemp = parseFloat(inputs.rxAntennaNoiseTemp) ||
-    ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 30 : 35); // K
-  const receiverNoiseTemp = parseFloat(inputs.rxReceiverNoiseTemp) ||
-    ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 40 : 75); // K
+  // 噪声温度参数 (支持输入0)
+  const antennaNoiseTemp = (inputs.rxAntennaNoiseTemp !== undefined && inputs.rxAntennaNoiseTemp !== '' && inputs.rxAntennaNoiseTemp !== null)
+    ? parseFloat(inputs.rxAntennaNoiseTemp)
+    : ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 30 : 35); // K
+  const receiverNoiseTemp = (inputs.rxReceiverNoiseTemp !== undefined && inputs.rxReceiverNoiseTemp !== '' && inputs.rxReceiverNoiseTemp !== null)
+    ? parseFloat(inputs.rxReceiverNoiseTemp)
+    : ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 40 : 75); // K
   
   // 干扰因子 - 从卫星参数中读取 (支持输入0)
   const deltaTheta = satParams.deltaTheta !== undefined && satParams.deltaTheta !== '' && satParams.deltaTheta !== null

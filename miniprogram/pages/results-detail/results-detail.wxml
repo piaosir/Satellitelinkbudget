@@ -355,13 +355,13 @@
     </view>
 
     <!-- ===================== 卫星参数 ===================== -->
-    <view id="sec-sat" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['卫星轨道位置','轨道高度','卫星EIRP','卫星SFD','卫星天线增益','转发器IBO','转发器OBO','转发器带宽','卫星功率谱密度','转发器工作区回退','链路时延','上行最大多普勒频移','下行最大多普勒频移'], searchKeyword, results, ['orbitPositionResult','orbitAltitudeResult','EIRPsResult','SFDsResult','antennaGainResult','BOiResult','BOoResult','transponderBandwidthResult','satellitePSDResult','actualTransponderCapacityResult','linkDelayResult','maxDopplerUplinkResult','maxDopplerDownlinkResult'])}}">  
+    <view id="sec-sat" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['卫星轨道位置','轨道高度','卫星EIRP','卫星SFD','卫星天线增益','转发器IBO','转发器OBO','转发器带宽','卫星功率谱密度','转发器工作区回退','链路时延','上行最大多普勒频移','下行最大多普勒频移','轨道速度'], searchKeyword, results, ['orbitPositionResult','orbitAltitudeResult','EIRPsResult','SFDsResult','antennaGainResult','BOiResult','BOoResult','transponderBandwidthResult','satellitePSDResult','actualTransponderCapacityResult','linkDelayResult','maxDopplerUplinkResult','maxDopplerDownlinkResult','orbitVelocityResult'])}}">  
       <view class="section-header" bindtap="toggleSection" data-section="satellite">
         <view class="section-title-row">
           <view class="section-dot dot-purple"></view>
           <text class="section-title">卫星参数</text>
           <text class="orbit-chip orbit-chip-{{orbitType === 'NGSO' ? 'ngso' : 'geo'}}">{{orbitTypeLabel}}</text>
-          <text class="section-count">{{orbitType === 'NGSO' ? '12项' : '11项'}}</text>
+          <text class="section-count">{{orbitType === 'NGSO' ? '13项' : '11项'}}</text>
         </view>
         <text class="section-arrow {{expandedSections.satellite ? 'expanded' : ''}}">›</text>
       </view>
@@ -425,6 +425,10 @@
           <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'maxDopplerDownlinkResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="maxDopplerDownlinkResult">
             <text class="detail-label">下行最大多普勒频移</text>
             <text class="detail-value">±{{results.maxDopplerDownlinkResult}} kHz</text>
+          </view>
+          <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'orbitVelocityResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="orbitVelocityResult">
+            <text class="detail-label">轨道速度</text>
+            <text class="detail-value">{{results.orbitVelocityResult}} km/s</text>
           </view>
         </view>
       </view>

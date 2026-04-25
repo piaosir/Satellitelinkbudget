@@ -11,7 +11,7 @@
     <view class="meta-line">
       <text class="meta-item">{{satelliteParams.satelliteName}}</text>
       <text class="meta-sep">·</text>
-      <text class="meta-item">{{satelliteParams.orbitPosition}}°E</text>
+      <text class="meta-item">{{reportOrbitMeta}}</text>
       <text class="meta-sep">·</text>
       <text class="meta-item">{{satelliteParams.frequencyBand}} {{t.frequencyBandSuffix}}</text>
       <text class="meta-sep">·</text>
@@ -56,14 +56,26 @@
       <view class="section-block flex-1">
         <view class="section-header">{{t.sectionSatellite}}</view>
         <view class="param-flow">
-          <view class="param-entry"><text class="p-label">{{t.sfdRef}}</text><text class="p-value">{{results.SFDsResult}}<text class="p-unit"> dBW/m²</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.transponderBW}}</text><text class="p-value">{{satelliteParams.transponderBandwidth}}<text class="p-unit"> MHz</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.inputBackoff}}</text><text class="p-value">{{satelliteParams.BOi}}<text class="p-unit"> dB</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.outputBackoff}}</text><text class="p-value">{{satelliteParams.BOo}}<text class="p-unit"> dB</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.satelliteEIRP}}</text><text class="p-value">{{results.EIRPsResult}}<text class="p-unit"> dBW</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.satelliteSFD}}</text><text class="p-value">{{results.PFDcResult}}<text class="p-unit"> dBW/m²</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.satellitePSD}}</text><text class="p-value">{{results.satellitePSDResult}}<text class="p-unit"> dBW/Hz</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.groundPFD}}</text><text class="p-value">{{results.satellitePFD}}<text class="p-unit"> dBW/m²</text></text></view>
+          <block wx:if="{{!isNGSO}}">
+            <view class="param-entry"><text class="p-label">{{t.sfdRef}}</text><text class="p-value">{{results.SFDsResult}}<text class="p-unit"> dBW/m²</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.transponderBW}}</text><text class="p-value">{{satelliteParams.transponderBandwidth}}<text class="p-unit"> MHz</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.inputBackoff}}</text><text class="p-value">{{satelliteParams.BOi}}<text class="p-unit"> dB</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.outputBackoff}}</text><text class="p-value">{{satelliteParams.BOo}}<text class="p-unit"> dB</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.satelliteEIRP}}</text><text class="p-value">{{results.EIRPsResult}}<text class="p-unit"> dBW</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.satelliteSFD}}</text><text class="p-value">{{results.PFDcResult}}<text class="p-unit"> dBW/m²</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.satellitePSD}}</text><text class="p-value">{{results.satellitePSDResult}}<text class="p-unit"> dBW/Hz</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.groundPFD}}</text><text class="p-value">{{results.satellitePFD}}<text class="p-unit"> dBW/m²</text></text></view>
+          </block>
+          <block wx:else>
+            <view class="param-entry"><text class="p-label">{{t.orbitType}}</text><text class="p-value">{{reportOrbitMeta}}</text></view>
+            <view class="param-entry"><text class="p-label">{{t.orbitAltitude}}</text><text class="p-value">{{results.orbitAltitudeResult}}<text class="p-unit"> km</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.maxDopplerUplink}}</text><text class="p-value">±{{results.maxDopplerUplinkResult}}<text class="p-unit"> kHz</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.maxDopplerDownlink}}</text><text class="p-value">±{{results.maxDopplerDownlinkResult}}<text class="p-unit"> kHz</text></text></view>
+            <view class="param-entry"><text class="p-label">{{islInputMode === 'cno' ? t.islCno : t.islSnr}}</text><text class="p-value">{{satelliteParams.cIslDisplay || satelliteParams.cIsl}}<text class="p-unit"> {{islInputMode === 'cno' ? 'dBHz' : 'dB'}}</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.islHops}}</text><text class="p-value">{{satelliteParams.islHops || 0}}</text></view>
+            <view class="param-entry"><text class="p-label">{{t.linkDelay}}</text><text class="p-value">{{results.linkDelayResult}}<text class="p-unit"> ms</text></text></view>
+            <view class="param-entry"><text class="p-label">{{t.orbitVelocity}}</text><text class="p-value">{{results.orbitVelocityResult}}<text class="p-unit"> km/s</text></text></view>
+          </block>
         </view>
       </view>
 
@@ -116,13 +128,13 @@
         </view>
         <!-- 仰角 -->
         <view class="dual-row">
-          <view class="dual-cell"><text class="p-label">{{t.elevation}}</text><text class="p-value">{{results.elevationResult}}<text class="p-unit">°</text></text></view>
-          <view class="dual-cell"><text class="p-label">{{t.elevation}}</text><text class="p-value">{{results.rxElevationResult}}<text class="p-unit">°</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{isNGSO ? t.minElevation : t.elevation}}</text><text class="p-value">{{results.elevationResult}}<text class="p-unit">°</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{isNGSO ? t.minElevation : t.elevation}}</text><text class="p-value">{{results.rxElevationResult}}<text class="p-unit">°</text></text></view>
         </view>
-        <!-- 方位角 -->
+        <!-- 方位角 / 星地斜距 -->
         <view class="dual-row">
-          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.azimuthResult}}<text class="p-unit">°</text></text></view>
-          <view class="dual-cell"><text class="p-label">{{t.polarAngle}}</text><text class="p-value">{{results.rxAzimuthResult}}<text class="p-unit">°</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{isNGSO ? t.slantRange : t.polarAngle}}</text><text class="p-value">{{isNGSO ? results.slantRangeResult : results.azimuthResult}}<text class="p-unit">{{isNGSO ? ' km' : '°'}}</text></text></view>
+          <view class="dual-cell"><text class="p-label">{{isNGSO ? t.slantRange : t.polarAngle}}</text><text class="p-value">{{isNGSO ? results.rxSlantRangeResult : results.rxAzimuthResult}}<text class="p-unit">{{isNGSO ? ' km' : '°'}}</text></text></view>
         </view>
         <!-- 自由空间损耗 -->
         <view class="dual-row">

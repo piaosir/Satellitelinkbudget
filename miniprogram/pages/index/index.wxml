@@ -416,7 +416,9 @@
       <text class="history-title">{{historySelectMode ? '已选择 ' + selectedHistoryIds.length + ' 条' : '最近计算记录'}}</text>
       <view class="history-actions">
         <text class="history-select-btn {{historySelectMode ? 'active' : ''}}" bindtap="toggleHistorySelectMode" wx:if="{{historyRecords.length > 0}}">{{historySelectMode ? '取消' : '多选'}}</text>
-        <text class="history-export-btn" bindtap="exportHistoryExcel" wx:if="{{historySelectMode && selectedHistoryIds.length > 0}}">Excel</text>
+        <text class="history-export-btn history-export-btn-word" bindtap="exportHistoryWord" wx:if="{{historySelectMode && selectedHistoryIds.length > 0}}">Word</text>
+        <text class="history-export-btn history-export-btn-excel" bindtap="exportHistoryExcel" wx:if="{{historySelectMode && selectedHistoryIds.length > 0}}">Excel</text>
+        <text class="history-export-btn history-export-btn-pdf" bindtap="exportHistoryPDF" wx:if="{{historySelectMode && selectedHistoryIds.length > 0}}">PDF</text>
         <text class="history-clear" bindtap="clearAllHistory" wx:if="{{historyRecords.length > 0 && !historySelectMode}}">清空</text>
         <text class="history-close" bindtap="toggleHistoryPanel">✕</text>
       </view>
@@ -584,6 +586,7 @@
                  adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
+
       </view>
 
       <!-- 第二行：频段 + SFD + 转发器带宽 + 转发器IBO -->
@@ -1947,6 +1950,13 @@
               data-param="orbitAltitudeResult">
           <text class="result-label">轨道高度</text>
           <text class="result-value">{{results.orbitAltitudeResult}} km</text>
+        </view>
+        <view wx:if="{{orbitType === 'NGSO'}}"
+              class="result-item {{markedParams.indexOf('orbitVelocityResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="orbitVelocityResult">
+          <text class="result-label">轨道速度</text>
+          <text class="result-value">{{results.orbitVelocityResult}} km/s</text>
         </view>
         <view class="result-item {{markedParams.indexOf('EIRPsResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 

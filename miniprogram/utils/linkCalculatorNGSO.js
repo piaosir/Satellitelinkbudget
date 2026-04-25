@@ -400,11 +400,13 @@ function performCalculations(satParams, inputs) {
   const rxRainRate = parseFloat(inputs.rxRainRate) || 0; // mm/h
   const rxAltitude = (parseFloat(inputs.rxAltitude) || 0) / 1000; // km
   
-  // 噪声温度参数
-  const antennaNoiseTemp = parseFloat(inputs.rxAntennaNoiseTemp) ||
-    ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 30 : 35); // K
-  const receiverNoiseTemp = parseFloat(inputs.rxReceiverNoiseTemp) ||
-    ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 40 : 75); // K
+  // 噪声温度参数 (支持输入0)
+  const antennaNoiseTemp = (inputs.rxAntennaNoiseTemp !== undefined && inputs.rxAntennaNoiseTemp !== '' && inputs.rxAntennaNoiseTemp !== null)
+    ? parseFloat(inputs.rxAntennaNoiseTemp)
+    : ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 30 : 35); // K
+  const receiverNoiseTemp = (inputs.rxReceiverNoiseTemp !== undefined && inputs.rxReceiverNoiseTemp !== '' && inputs.rxReceiverNoiseTemp !== null)
+    ? parseFloat(inputs.rxReceiverNoiseTemp)
+    : ((frequencyBand === 'C' || frequencyBand === 'ExtC') ? 40 : 75); // K
   
   // 干扰因子 - 从卫星参数中读取 (支持输入0)
   const deltaTheta = satParams.deltaTheta !== undefined && satParams.deltaTheta !== '' && satParams.deltaTheta !== null
@@ -414,6 +416,9 @@ function performCalculations(satParams, inputs) {
   // ============ NGSO 专属：星间链路(ISL) 参数 ============
   // cIsl: ISL SNR (dB，解调带宽内，用户输入）；计算时内部转换为 C/T (dBW/K)
   // islHops: 星间链路跳数（0 表示无 ISL）
+  // islDistance: 每跳星间链路距离，取 1500 km（LEO 典型值；基于 2(R_E+h)sin(π/N) 几何估算，
+  //              550 km/22颗/面 ≈ 1960 km，1200 km/18颗/面 ≈ 2630 km，取保守代表值）
+  const ISL_HOP_DISTANCE_KM = 2000; // km/跳，代表性 LEO 星间链路单跳距离
   const cIsl = (satParams.cIsl !== undefined && satParams.cIsl !== '' && satParams.cIsl !== null)
     ? parseFloat(satParams.cIsl) : 30;
   const islHopsRaw = (satParams.islHops !== undefined && satParams.islHops !== '' && satParams.islHops !== null)
@@ -1472,9 +1477,11 @@ function performCalculations(satParams, inputs) {
   results.BOoResult = BOo;
   results.antennaGainResult = antennaGain.toFixed(2);
   results.transponderBandwidthResult = transponderBandwidth;
-  // 链路时延（NGSO单程端到端传播时延）
-  // τ = (d_up + d_down) / c，d_up/d_down 为上/下行星地斜距(km)，c = 299792.458 km/s
-  const linkDelay = (slantRange + rxSlantRange) / 299792.458 * 1000; // ms
+  // 链路时延（NGSO单程端到端传播时延，含ISL跳数）
+  // τ = (d_up + d_ISL + d_down) / c
+  // d_up/d_down: 上/下行星地斜距(km)；d_ISL = islHops × islDistance (km)；c = 299792.458 km/s
+  const islTotalDistance = islHops * ISL_HOP_DISTANCE_KM; // ISL段总距离 (km)
+  const linkDelay = (slantRange + islTotalDistance + rxSlantRange) / 299792.458 * 1000; // ms
   results.linkDelayResult = linkDelay.toFixed(1);
   // 最大多普勒频移（NGSO专属）
   // 轨道速度：v = sqrt(μ / (Re + h))，μ = 3.986004418e5 km³/s²，Re = 6378.137 km

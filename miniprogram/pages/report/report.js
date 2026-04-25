@@ -56,7 +56,20 @@ const translations = {
     eirpOutput: 'EIRP输出',
     polarization: '极化方式',
     elevation: '仰角',
+    minElevation: '最低仰角',
     polarAngle: '方位角',
+    orbitType: '轨道类型',
+    orbitAltitude: '轨道高度',
+    orbitVelocity: '轨道速度',
+    uplinkSlantRange: '上行斜距',
+    downlinkSlantRange: '下行斜距',
+    slantRange: '星地斜距',
+    linkDelay: '链路时延',
+    maxDopplerUplink: '上行最大多普勒',
+    maxDopplerDownlink: '下行最大多普勒',
+    islCno: 'ISL C/N₀',
+    islSnr: 'ISL SNR',
+    islHops: 'ISL跳数',
     fsl: '自由空间损耗',
     rainAtten: '降雨衰减',
     feederLoss: '馈线损耗',
@@ -136,7 +149,20 @@ const translations = {
     eirpOutput: 'EIRP Output',
     polarization: 'Polarization',
     elevation: 'Elevation',
+    minElevation: 'Min Elevation',
     polarAngle: 'Azimuth',
+    orbitType: 'Orbit Type',
+    orbitAltitude: 'Orbit Altitude',
+    orbitVelocity: 'Orbit Velocity',
+    uplinkSlantRange: 'Uplink Slant Range',
+    downlinkSlantRange: 'Downlink Slant Range',
+    slantRange: 'Slant Range',
+    linkDelay: 'Link Delay',
+    maxDopplerUplink: 'Max Uplink Doppler',
+    maxDopplerDownlink: 'Max Downlink Doppler',
+    islCno: 'ISL C/N₀',
+    islSnr: 'ISL SNR',
+    islHops: 'ISL Hops',
     fsl: 'Free Space Loss',
     rainAtten: 'Rain Atten.',
     feederLoss: 'Feeder Loss',
@@ -175,15 +201,22 @@ Page({
     reportTime: '',
     linkPerformance: {},
     noiseRatioLabel: 'Eb/N₀', // 默认显示Eb/N0
+    isNGSO: false,
+    reportOrbitMeta: '',
+    islInputMode: 'cno',
     lang: 'zh', // 当前语言
     t: translations.zh // 当前翻译文本
   },
 
   onLoad(options) {
     const linkNum = parseInt(options.linkNum) || 1;
-    const satelliteParams = app.globalData.satelliteParams;
-    const linkParams = app.globalData.linkParams[linkNum];
-    const results = app.globalData.calculationResults[linkNum];
+    const satelliteParams = app.globalData.satelliteParams || {};
+    const linkParams = (app.globalData.linkParams || {})[linkNum] || {};
+    const results = (app.globalData.calculationResults || {})[linkNum];
+    const orbitType = satelliteParams.orbitType || app.globalData.orbitType || 'GEO';
+    const isNGSO = orbitType === 'NGSO';
+    const reportOrbitMeta = this.getReportOrbitMeta(satelliteParams, isNGSO);
+    const islInputMode = satelliteParams.islInputMode || app.globalData.islInputMode || 'cno';
     
     if (!results) {
       wx.showModal({
@@ -218,9 +251,19 @@ Page({
       reportTime: formatDateTime(new Date(), 'YYYY-MM-DD HH:mm'),
       linkPerformance: linkPerformance,
       noiseRatioLabel: noiseRatioLabel,
+      isNGSO,
+      reportOrbitMeta,
+      islInputMode,
       lang: savedLang,
       t: t
     });
+  },
+
+  getReportOrbitMeta(satelliteParams, isNGSO) {
+    if (isNGSO) {
+      return `${satelliteParams.ngsoOrbitClass || 'LEO'} / NGSO`;
+    }
+    return `${satelliteParams.orbitPosition || ''}°E`;
   },
 
   // 检查仰角警告
@@ -295,7 +338,7 @@ Page({
 
   // 分享报告 - 生成PDF并分享
   async shareReport() {
-    const { satelliteParams, linkParams, results, lang, linkNum } = this.data;
+    const { satelliteParams, linkParams, results, lang, linkNum, islInputMode } = this.data;
     const t = this.data.t;
     
     // 显示加载中
@@ -308,7 +351,10 @@ Page({
       // 构建配置数据，与云函数期望的格式一致
       const configData = {
         configName: `${satelliteParams.satelliteName}_${satelliteParams.frequencyBand}`,
-        satelliteParams: satelliteParams,
+        satelliteParams: {
+          ...satelliteParams,
+          islInputMode
+        },
         linkParams: {
           [linkNum]: linkParams
         },
@@ -574,9 +620,23 @@ Page({
 
   // 生成报告文本（专业咨询风格的自然语言描述）
   generateReportText() {
-    const { satelliteParams, linkParams, results, reportTime, linkPerformance, noiseRatioLabel, t, lang } = this.data;
+    const { satelliteParams, linkParams, results, linkPerformance, lang, isNGSO, reportOrbitMeta, islInputMode } = this.data;
+    const islLabel = islInputMode === 'cno' ? 'C/N₀' : 'SNR';
+    const islUnit = islInputMode === 'cno' ? 'dBHz' : 'dB';
     
     if (lang === 'zh') {
+      if (isNGSO) {
+        let text = `基于${satelliteParams.satelliteName}卫星（${reportOrbitMeta}）${satelliteParams.frequencyBand}频段的NGSO链路预算分析，`;
+        text += `本方案链路状态评估为“${linkPerformance.statusText}”，系统可用度达${results.systemAvailabilityResult}%，链路余量${results.linkmargin}dB。`;
+        text += `链路采用${results.modulationResult}+${results.fecResult}编码体制，信息速率${results.infoRateResult}kbps，符号速率${results.symbolRateResult}ksps，占用带宽${results.allocBandwidthResult}kHz。`;
+        text += `几何条件方面，上行最低仰角${results.elevationResult}°、星地斜距${results.slantRangeResult}km，下行最低仰角${results.rxElevationResult}°、星地斜距${results.rxSlantRangeResult}km，参考轨道高度${results.orbitAltitudeResult}km。`;
+        text += `动态特性方面，单程链路时延${results.linkDelayResult}ms，上行/下行最大多普勒频移分别约±${results.maxDopplerUplinkResult}kHz和±${results.maxDopplerDownlinkResult}kHz。`;
+        text += `星间链路配置为${satelliteParams.islHops || 0}跳，单跳ISL ${islLabel}为${satelliteParams.cIslDisplay || satelliteParams.cIsl || '--'}${islUnit}。`;
+        text += `上行段（${linkParams.earthStationLocation}）配置${results.earthAntennaDiameterResult}m天线、${results.selectedPowerWResult}W功放，上行C/N达${results.uplinkCN}dB；`;
+        text += `下行段（${linkParams.rxEarthStationLocation}）采用${results.rxAntennaDiameterResult}m天线，G/T值${results.gOverTeResult}dB/K，下行C/N达${results.downlinkCN}dB。`;
+        text += `综合载噪比${results.carrierTotalCN}dB，较门限${results.thresholdCN}dB具备${results.linkmargin}dB余量，建议功放配置${results.paRecommendation}W。`;
+        return text;
+      }
       // 麦肯锡风格：结论先行，数据支撑，简洁有力
       let text = `基于${satelliteParams.satelliteName}卫星（${satelliteParams.orbitPosition}°E）${satelliteParams.frequencyBand}频段的链路预算分析，`;
       text += `本方案链路状态评估为"${linkPerformance.statusText}"，系统可用度达${results.systemAvailabilityResult}%，链路余量${results.linkmargin}dB，满足通信需求。`;
@@ -588,6 +648,18 @@ Page({
       text += `资源占用方面，带宽利用率${results.bandwidthUsageRatio}%，功率利用率${results.powerUsageRatio}%，建议功放配置${results.paRecommendation}W以确保链路裕度。`;
       return text;
     } else {
+      if (isNGSO) {
+        let text = `Based on NGSO link budget analysis for ${satelliteParams.satelliteName} satellite (${reportOrbitMeta}) ${satelliteParams.frequencyBand} band, `;
+        text += `the proposed solution achieves “${linkPerformance.statusText}” link status with ${results.systemAvailabilityResult}% system availability and ${results.linkmargin}dB link margin. `;
+        text += `The link employs ${results.modulationResult}+${results.fecResult} coding at ${results.infoRateResult}kbps information rate, ${results.symbolRateResult}ksps symbol rate, occupying ${results.allocBandwidthResult}kHz bandwidth. `;
+        text += `For geometry, uplink minimum elevation is ${results.elevationResult}° with ${results.slantRangeResult}km slant range, while downlink minimum elevation is ${results.rxElevationResult}° with ${results.rxSlantRangeResult}km slant range; reference orbit altitude is ${results.orbitAltitudeResult}km. `;
+        text += `Dynamic characteristics include ${results.linkDelayResult}ms one-way delay and maximum Doppler shifts of approximately ±${results.maxDopplerUplinkResult}kHz uplink / ±${results.maxDopplerDownlinkResult}kHz downlink. `;
+        text += `The ISL configuration uses ${satelliteParams.islHops || 0} hop(s), with per-hop ISL ${islLabel} of ${satelliteParams.cIslDisplay || satelliteParams.cIsl || '--'}${islUnit}. `;
+        text += `The uplink segment (${linkParams.earthStationLocation}) is configured with ${results.earthAntennaDiameterResult}m antenna and ${results.selectedPowerWResult}W HPA, achieving uplink C/N of ${results.uplinkCN}dB; `;
+        text += `the downlink segment (${linkParams.rxEarthStationLocation}) uses ${results.rxAntennaDiameterResult}m antenna with G/T of ${results.gOverTeResult}dB/K, achieving downlink C/N of ${results.downlinkCN}dB. `;
+        text += `The total C/N of ${results.carrierTotalCN}dB provides ${results.linkmargin}dB margin over the ${results.thresholdCN}dB threshold, with recommended HPA capacity of ${results.paRecommendation}W.`;
+        return text;
+      }
       // McKinsey style: conclusion first, data-driven, concise and impactful
       let text = `Based on link budget analysis for ${satelliteParams.satelliteName} satellite (${satelliteParams.orbitPosition}°E) ${satelliteParams.frequencyBand} band, `;
       text += `the proposed solution achieves "${linkPerformance.statusText}" link status with ${results.systemAvailabilityResult}% system availability and ${results.linkmargin}dB link margin, meeting communication requirements. `;

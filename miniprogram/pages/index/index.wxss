@@ -1062,6 +1062,18 @@ page {
   border-radius: 8rpx;
 }
 
+.history-export-btn-word {
+  background: #2563eb;
+}
+
+.history-export-btn-excel {
+  background: #16a34a;
+}
+
+.history-export-btn-pdf {
+  background: #dc2626;
+}
+
 .history-close {
   font-size: 40rpx;
   color: #9ca3af;
