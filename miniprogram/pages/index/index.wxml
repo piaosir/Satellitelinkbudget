@@ -552,7 +552,9 @@
       <!-- NGSO 首行：卫星名称 + ISL单跳C/N + ISL跳数 -->
       <view class="grid-3" wx:if="{{orbitType === 'NGSO'}}">
         <view class="form-group">
-          <text class="form-label">卫星名称 *</text>
+          <view class="form-label-row">
+            <text class="form-label">卫星名称 *</text>
+          </view>
           <input class="form-input" 
                  placeholder="请输入" 
                  value="{{satelliteParams.satelliteName}}"
@@ -576,13 +578,14 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">ISL跳数</text>
+          <view class="form-label-row">
+            <text class="form-label">ISL跳数</text>
+          </view>
           <input class="form-input" 
                  type="text"
                  placeholder="0" 
                  value="{{satelliteParams.islHops}}"
                  data-field="islHops"
-
                  adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
@@ -859,7 +862,9 @@
         <!-- NGSO 专属：最低仰角 + 轨道高度/星地斜距（可切换） -->
         <view class="station-grid-2" wx:if="{{orbitType === 'NGSO'}}">
           <view class="station-form-group">
-            <text class="form-label">最低仰角(°)</text>
+            <view class="form-label-row">
+              <text class="form-label">最低仰角(°)</text>
+            </view>
             <input class="form-input" 
                    type="text"
                    placeholder="10" 
@@ -1134,7 +1139,9 @@
         <!-- NGSO 专属：最低仰角 + 轨道高度/星地斜距（可切换） -->
         <view class="station-grid-2" wx:if="{{orbitType === 'NGSO'}}">
           <view class="station-form-group">
-            <text class="form-label">最低仰角(°)</text>
+            <view class="form-label-row">
+              <text class="form-label">最低仰角(°)</text>
+            </view>
             <input class="form-input" 
                    type="text"
                    placeholder="10" 
@@ -1360,7 +1367,9 @@
       <!-- 第一行：核心参数 4列 -->
       <view class="grid-4">
         <view class="form-group">
-          <text class="form-label">信息速率(kbps)</text>
+          <view class="form-label-row">
+            <text class="form-label">信息速率(kbps)</text>
+          </view>
           <input class="form-input" 
                  type="text"
                  placeholder="2048" 
@@ -1373,7 +1382,9 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">调制方式</text>
+          <view class="form-label-row">
+            <text class="form-label">调制方式</text>
+          </view>
           <picker mode="selector" 
                   range="{{modulationOptions}}" 
                   range-key="label"
@@ -1387,7 +1398,9 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">FEC码率</text>
+          <view class="form-label-row">
+            <text class="form-label">FEC码率</text>
+          </view>
           <input class="form-input" 
                  type="text"
                  placeholder="3/4" 
