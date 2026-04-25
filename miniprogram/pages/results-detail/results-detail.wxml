@@ -46,6 +46,15 @@
 </wxs>
 
 <view class="page-container">
+  <!-- 顶部轨道类型标识：明确区分 GEO / NGSO（LEO·MEO·HEO） -->
+  <view class="orbit-banner orbit-banner-{{orbitType === 'NGSO' ? 'ngso' : 'geo'}}">
+    <view class="orbit-banner-left">
+      <text class="orbit-banner-tag">轨道类型</text>
+      <text class="orbit-banner-label">{{orbitTypeLabel}}</text>
+    </view>
+    <text class="orbit-banner-desc">{{orbitTypeDesc}}</text>
+  </view>
+
   <!-- 搜索栏 -->
   <view class="search-bar">
     <view class="search-input-wrap">
@@ -85,7 +94,7 @@
         <view class="section-title-row">
           <view class="section-dot dot-blue"></view>
           <text class="section-title">发信站参数</text>
-          <text class="section-count">28项</text>
+          <text class="section-count">{{orbitType === 'NGSO' ? '26项' : '28项'}}</text>
         </view>
         <text class="section-arrow {{expandedSections.txStation ? 'expanded' : ''}}">›</text>
       </view>
@@ -112,16 +121,17 @@
             <text class="detail-value">{{results.uplinkPolarizationResult}}</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'elevationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星仰角', searchKeyword, results.elevationResult)}}" bindtap="toggleHighlight" data-param="elevationResult">
-            <text class="detail-label">对卫星仰角</text>
+            <text class="detail-label">{{orbitType === 'NGSO' ? '最低仰角' : '对卫星仰角'}}</text>
             <text class="detail-value">{{results.elevationResult}}°</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'azimuthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星方位角', searchKeyword, results.azimuthResult)}}" bindtap="toggleHighlight" data-param="azimuthResult">
+          <view wx:if="{{orbitType !== 'NGSO' && filter.matchSearch('对卫星方位角', searchKeyword, results.azimuthResult)}}" class="detail-item {{filter.includes(markedParams, 'azimuthResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="azimuthResult">
             <text class="detail-label">对卫星方位角</text>
             <text class="detail-value">{{results.azimuthResult}}°</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'uplinkPolarizationAngleResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星极化角', searchKeyword, results.uplinkPolarizationAngleResult)}}" bindtap="toggleHighlight" data-param="uplinkPolarizationAngleResult">
+          <view wx:if="{{orbitType !== 'NGSO' && filter.matchSearch('对卫星极化角', searchKeyword, results.uplinkPolarizationAngleResult)}}" class="detail-item {{filter.includes(markedParams, 'uplinkPolarizationAngleResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="uplinkPolarizationAngleResult">
             <text class="detail-label">对卫星极化角</text>
-            <text class="detail-value">{{results.uplinkPolarizationAngleResult}}{{results.uplinkPolarizationAngleResult !== '-' ? '°' : ''}}</text>
+            <text class="detail-value">{{results.uplinkPolarizationAngleResult}}{{results.uplinkPolarizationAngleResult !== '-' ? '°' : ''}}
+            </text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'earthAntennaEfficiencyResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('天线效率', searchKeyword, results.earthAntennaEfficiencyResult)}}" bindtap="toggleHighlight" data-param="earthAntennaEfficiencyResult">
             <text class="detail-label">天线效率</text>
@@ -213,7 +223,7 @@
         <view class="section-title-row">
           <view class="section-dot dot-green"></view>
           <text class="section-title">收信站参数</text>
-          <text class="section-count">30项</text>
+          <text class="section-count">{{orbitType === 'NGSO' ? '28项' : '30项'}}</text>
         </view>
         <text class="section-arrow {{expandedSections.rxStation ? 'expanded' : ''}}">›</text>
       </view>
@@ -240,14 +250,14 @@
             <text class="detail-value">{{results.downlinkPolarizationResult}}</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'rxElevationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星仰角', searchKeyword, results.rxElevationResult)}}" bindtap="toggleHighlight" data-param="rxElevationResult">
-            <text class="detail-label">对卫星仰角</text>
+            <text class="detail-label">{{orbitType === 'NGSO' ? '最低仰角' : '对卫星仰角'}}</text>
             <text class="detail-value">{{results.rxElevationResult}}°</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'rxAzimuthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星方位角', searchKeyword, results.rxAzimuthResult)}}" bindtap="toggleHighlight" data-param="rxAzimuthResult">
+          <view wx:if="{{orbitType !== 'NGSO' && filter.matchSearch('对卫星方位角', searchKeyword, results.rxAzimuthResult)}}" class="detail-item {{filter.includes(markedParams, 'rxAzimuthResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="rxAzimuthResult">
             <text class="detail-label">对卫星方位角</text>
             <text class="detail-value">{{results.rxAzimuthResult}}°</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'downlinkPolarizationAngleResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('对卫星极化角', searchKeyword, results.downlinkPolarizationAngleResult)}}" bindtap="toggleHighlight" data-param="downlinkPolarizationAngleResult">
+          <view wx:if="{{orbitType !== 'NGSO' && filter.matchSearch('对卫星极化角', searchKeyword, results.downlinkPolarizationAngleResult)}}" class="detail-item {{filter.includes(markedParams, 'downlinkPolarizationAngleResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="downlinkPolarizationAngleResult">
             <text class="detail-label">对卫星极化角</text>
             <text class="detail-value">{{results.downlinkPolarizationAngleResult}}{{results.downlinkPolarizationAngleResult !== '-' ? '°' : ''}}</text>
           </view>
@@ -345,20 +355,26 @@
     </view>
 
     <!-- ===================== 卫星参数 ===================== -->
-    <view id="sec-sat" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['卫星轨道位置','卫星EIRP','卫星SFD','卫星天线增益','转发器IBO','转发器OBO','转发器带宽','卫星功率谱密度','转发器工作区回退'], searchKeyword, results, ['orbitPositionResult','EIRPsResult','SFDsResult','antennaGainResult','BOiResult','BOoResult','transponderBandwidthResult','satellitePSDResult','actualTransponderCapacityResult'])}}">
+    <view id="sec-sat" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['卫星轨道位置','轨道高度','卫星EIRP','卫星SFD','卫星天线增益','转发器IBO','转发器OBO','转发器带宽','卫星功率谱密度','转发器工作区回退','链路时延','上行最大多普勒频移','下行最大多普勒频移'], searchKeyword, results, ['orbitPositionResult','orbitAltitudeResult','EIRPsResult','SFDsResult','antennaGainResult','BOiResult','BOoResult','transponderBandwidthResult','satellitePSDResult','actualTransponderCapacityResult','linkDelayResult','maxDopplerUplinkResult','maxDopplerDownlinkResult'])}}">  
       <view class="section-header" bindtap="toggleSection" data-section="satellite">
         <view class="section-title-row">
           <view class="section-dot dot-purple"></view>
           <text class="section-title">卫星参数</text>
-          <text class="section-count">9项</text>
+          <text class="orbit-chip orbit-chip-{{orbitType === 'NGSO' ? 'ngso' : 'geo'}}">{{orbitTypeLabel}}</text>
+          <text class="section-count">{{orbitType === 'NGSO' ? '12项' : '11项'}}</text>
         </view>
         <text class="section-arrow {{expandedSections.satellite ? 'expanded' : ''}}">›</text>
       </view>
       <view class="section-body {{expandedSections.satellite ? 'show' : ''}}">
         <view class="detail-grid">
-          <view class="detail-item {{filter.includes(markedParams, 'orbitPositionResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星轨道位置', searchKeyword, results.orbitPositionResult)}}" bindtap="toggleHighlight" data-param="orbitPositionResult">
+          <view wx:if="{{orbitType !== 'NGSO' && filter.matchSearch('卫星轨道位置', searchKeyword, results.orbitPositionResult)}}" class="detail-item {{filter.includes(markedParams, 'orbitPositionResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="orbitPositionResult">
             <text class="detail-label">卫星轨道位置</text>
             <text class="detail-value">{{results.orbitPositionResult}}°E</text>
+          </view>
+          <!-- 轨道高度：GEO 35786km 固定；NGSO 由斜距+仰角反算 -->
+          <view class="detail-item {{filter.includes(markedParams, 'orbitAltitudeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('轨道高度', searchKeyword, results.orbitAltitudeResult)}}" bindtap="toggleHighlight" data-param="orbitAltitudeResult">
+            <text class="detail-label">轨道高度</text>
+            <text class="detail-value">{{results.orbitAltitudeResult}} km</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'EIRPsResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('卫星EIRP', searchKeyword, results.EIRPsResult)}}" bindtap="toggleHighlight" data-param="EIRPsResult">
             <text class="detail-label">卫星EIRP</text>
@@ -392,17 +408,35 @@
             <text class="detail-label">转发器工作区回退</text>
             <text class="detail-value">{{results.actualTransponderCapacityResult}} dB</text>
           </view>
+          <!-- GEO 专属：链路时延 -->
+          <view wx:if="{{orbitType === 'GEO'}}" class="detail-item {{filter.includes(markedParams, 'linkDelayResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="linkDelayResult">
+            <text class="detail-label">链路时延（单程）</text>
+            <text class="detail-value">{{results.linkDelayResult}} ms</text>
+          </view>
+          <!-- NGSO 专属：链路时延 + 最大多普勒频移 -->
+          <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'linkDelayResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="linkDelayResult">
+            <text class="detail-label">链路时延（单程）</text>
+            <text class="detail-value">{{results.linkDelayResult}} ms</text>
+          </view>
+          <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'maxDopplerUplinkResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="maxDopplerUplinkResult">
+            <text class="detail-label">上行最大多普勒频移</text>
+            <text class="detail-value">±{{results.maxDopplerUplinkResult}} kHz</text>
+          </view>
+          <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'maxDopplerDownlinkResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="maxDopplerDownlinkResult">
+            <text class="detail-label">下行最大多普勒频移</text>
+            <text class="detail-value">±{{results.maxDopplerDownlinkResult}} kHz</text>
+          </view>
         </view>
       </view>
     </view>
 
     <!-- ===================== 通信参数 ===================== -->
-    <view id="sec-comm" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行频率','下行频率','载波带宽','上行极化方式','下行极化方式','信息速率','调制方式','调制因子','误码率','Eb/N₀','Es/N₀','帧效率','FEC码率','载波速率','码片速率','符号速率','载波噪声带宽','系统余量'], searchKeyword, results, ['uplinkFrequencyResult','downlinkFrequencyResult','allocBandwidthResult','uplinkPolarizationResult','downlinkPolarizationResult','infoRateResult','modulationResult','modulationFactorResult','berResult','ebnoResult','esnoResult','rsCodeResult','fecResult','carrierRateResult','ChipRateResult','symbolRateResult','RXnoiseBW','marginResult'])}}">
+    <view id="sec-comm" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行频率','下行频率','载波带宽','频谱效率','上行极化方式','下行极化方式','信息速率','调制方式','调制因子','误码率','Eb/N₀','Es/N₀','帧效率','FEC码率','载波速率','码片速率','符号速率','载波噪声带宽','系统余量'], searchKeyword, results, ['uplinkFrequencyResult','downlinkFrequencyResult','allocBandwidthResult','spectralEfficiencyResult','uplinkPolarizationResult','downlinkPolarizationResult','infoRateResult','modulationResult','modulationFactorResult','berResult','ebnoResult','esnoResult','rsCodeResult','fecResult','carrierRateResult','ChipRateResult','symbolRateResult','RXnoiseBW','marginResult'])}}">
       <view class="section-header" bindtap="toggleSection" data-section="comm">
         <view class="section-title-row">
           <view class="section-dot dot-cyan"></view>
           <text class="section-title">通信参数</text>
-          <text class="section-count">18项</text>
+          <text class="section-count">19项</text>
         </view>
         <text class="section-arrow {{expandedSections.comm ? 'expanded' : ''}}">›</text>
       </view>
@@ -419,6 +453,11 @@
           <view class="detail-item {{filter.includes(markedParams, 'allocBandwidthResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波带宽', searchKeyword, results.allocBandwidthResult)}}" bindtap="toggleHighlight" data-param="allocBandwidthResult">
             <text class="detail-label">载波带宽</text>
             <text class="detail-value">{{results.allocBandwidthResult}} kHz</text>
+          </view>
+          <!-- 频谱效率 η = R_info / B_alloc -->
+          <view class="detail-item {{filter.includes(markedParams, 'spectralEfficiencyResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('频谱效率', searchKeyword, results.spectralEfficiencyResult)}}" bindtap="toggleHighlight" data-param="spectralEfficiencyResult">
+            <text class="detail-label">频谱效率</text>
+            <text class="detail-value">{{results.spectralEfficiencyResult}} bit/s/Hz</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'uplinkPolarizationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行极化方式', searchKeyword, results.uplinkPolarizationResult)}}" bindtap="toggleHighlight" data-param="uplinkPolarizationResult">
             <text class="detail-label">上行极化方式</text>

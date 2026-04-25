@@ -438,7 +438,10 @@
           <view class="history-item-main" catchtap="{{historySelectMode ? '' : 'loadHistoryRecord'}}" data-id="{{item.id}}">
             <view class="history-item-header">
               <text class="history-satellite">{{item.satelliteName}}</text>
-              <text class="history-time">{{item.time}}</text>
+              <view class="history-header-right">
+                <text class="orbit-tag {{item.orbitType === 'NGSO' ? 'orbit-tag-ngso orbit-tag-' + (item.ngsoOrbitClass || 'LEO') : 'orbit-tag-geo'}}">{{item.orbitType === 'NGSO' ? (item.ngsoOrbitClass || 'LEO') : 'GEO'}}</text>
+                <text class="history-time">{{item.time}}</text>
+              </view>
             </view>
             <view class="history-item-body">
               <text class="history-info">{{item.txLocation}} → {{item.rxLocation}}</text>
@@ -498,12 +501,16 @@
 
   <!-- 卫星参数卡片 -->
   <view class="card">
-    <view class="card-title">
-      卫星参数
+    <view class="card-title card-title-satellite">
+      <text class="sat-title-text">{{orbitType === 'NGSO' ? '非地球静止轨道卫星' : '地球静止轨道卫星'}}</text>
+      <view class="orbit-seg">
+        <view class="orbit-seg-item {{orbitType === 'GEO' ? 'active' : ''}}" data-type="GEO" bindtap="onOrbitTypeChange">GEO</view>
+        <view class="orbit-seg-item {{orbitType === 'NGSO' ? 'active' : ''}}" data-type="NGSO" bindtap="onOrbitTypeChange">NGSO</view>
+      </view>
     </view>
     <view class="collapse-content {{satelliteParamsExpandState !== 'collapsed' ? 'show' : ''}}">
-      <!-- 第一行：卫星选择 + 卫星名称 + 轨道位置 -->
-      <view class="grid-3">
+      <!-- 第一行：卫星选择 + 卫星名称 + 轨道位置（GEO）；卫星名称 + ISL单跳C/N + ISL跳数（NGSO） -->
+      <view class="grid-3" wx:if="{{orbitType !== 'NGSO'}}">
         <view class="form-group">
           <text class="form-label">选择卫星</text>
           <picker mode="selector" 
@@ -540,8 +547,61 @@
         </view>
       </view>
 
+      <!-- NGSO 首行：卫星名称 + ISL单跳C/N + ISL跳数 -->
+      <view class="grid-3" wx:if="{{orbitType === 'NGSO'}}">
+        <view class="form-group">
+          <text class="form-label">卫星名称 *</text>
+          <input class="form-input" 
+                 placeholder="请输入" 
+                 value="{{satelliteParams.satelliteName}}"
+                 data-field="satelliteName"
+                 adjust-position="{{isNotIOS ? '' : false}}"
+                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
+
+        <view class="form-group">
+          <view class="form-label-row">
+            <text class="form-label">{{islInputMode === 'cno' ? 'ISL C/N₀(dBHz)' : 'ISL SNR(dB)'}}</text>
+            <button class="toggle-btn-emoji" bindtap="toggleIslInputMode">🔄</button>
+          </view>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="{{islInputMode === 'cno' ? '105.56' : '30'}}" 
+                 value="{{satelliteParams.cIslDisplay}}"
+                 data-field="cIslDisplay"
+                 adjust-position="{{isNotIOS ? '' : false}}"
+                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">ISL跳数</text>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="0" 
+                 value="{{satelliteParams.islHops}}"
+                 data-field="islHops"
+
+                 adjust-position="{{isNotIOS ? '' : false}}"
+                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
+      </view>
+
       <!-- 第二行：频段 + SFD + 转发器带宽 + 转发器IBO -->
       <view class="grid-4">
+        <!-- NGSO 专属：轨道类型（LEO/MEO/HEO），选择后自动填入典型轨道高度/斜距 -->
+        <view class="form-group" wx:if="{{orbitType === 'NGSO'}}">
+          <text class="form-label">轨道类型</text>
+          <picker mode="selector"
+                  range="{{ngsoOrbitClassOptions}}"
+                  range-key="label"
+                  value="{{ngsoOrbitClassIndex}}"
+                  bindchange="onNgsoOrbitClassChange">
+            <view class="form-picker">
+              {{ngsoOrbitClassOptions[ngsoOrbitClassIndex].label}}
+            </view>
+          </picker>
+        </view>
+
         <view class="form-group">
           <text class="form-label">工作频段 *</text>
           <picker mode="selector" 
@@ -578,7 +638,7 @@
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
-        <view class="form-group">
+        <view class="form-group" wx:if="{{orbitType !== 'NGSO'}}">
           <text class="form-label">邻星离轴角(°)</text>
           <input class="form-input" 
                  type="text"
@@ -790,6 +850,33 @@
                    adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange"
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+          </view>
+        </view>
+
+        <!-- NGSO 专属：最低仰角 + 轨道高度/星地斜距（可切换） -->
+        <view class="station-grid-2" wx:if="{{orbitType === 'NGSO'}}">
+          <view class="station-form-group">
+            <text class="form-label">最低仰角(°)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="10" 
+                   value="{{linkParams.minElevation}}"
+                   data-field="minElevation"
+                   adjust-position="{{isNotIOS ? '' : false}}"
+                   bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+          </view>
+          <view class="station-form-group">
+            <view class="form-label-row">
+              <text class="form-label">{{linkParams.distanceMode === 'slantRange' ? '星地斜距(km)' : '轨道高度(km)'}}</text>
+              <button class="toggle-btn-emoji" data-type="uplink" bindtap="onDistanceModeToggle">🔄</button>
+            </view>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="{{linkParams.distanceMode === 'slantRange' ? '2500' : '1200'}}" 
+                   value="{{linkParams.distanceMode === 'slantRange' ? linkParams.slantRange : linkParams.orbitAltitude}}"
+                   data-field="{{linkParams.distanceMode === 'slantRange' ? 'slantRange' : 'orbitAltitude'}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
+                   bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
         </view>
 
@@ -1038,6 +1125,33 @@
                    adjust-position="{{isNotIOS ? '' : false}}"
                    bindinput="onLinkParamChange"
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+          </view>
+        </view>
+
+        <!-- NGSO 专属：最低仰角 + 轨道高度/星地斜距（可切换） -->
+        <view class="station-grid-2" wx:if="{{orbitType === 'NGSO'}}">
+          <view class="station-form-group">
+            <text class="form-label">最低仰角(°)</text>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="10" 
+                   value="{{linkParams.rxMinElevation}}"
+                   data-field="rxMinElevation"
+                   adjust-position="{{isNotIOS ? '' : false}}"
+                   bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+          </view>
+          <view class="station-form-group">
+            <view class="form-label-row">
+              <text class="form-label">{{linkParams.rxDistanceMode === 'slantRange' ? '星地斜距(km)' : '轨道高度(km)'}}</text>
+              <button class="toggle-btn-emoji" data-type="downlink" bindtap="onDistanceModeToggle">🔄</button>
+            </view>
+            <input class="form-input" 
+                   type="text"
+                   placeholder="{{linkParams.rxDistanceMode === 'slantRange' ? '2500' : '1200'}}" 
+                   value="{{linkParams.rxDistanceMode === 'slantRange' ? linkParams.rxSlantRange : linkParams.rxOrbitAltitude}}"
+                   data-field="{{linkParams.rxDistanceMode === 'slantRange' ? 'rxSlantRange' : 'rxOrbitAltitude'}}"
+                   adjust-position="{{isNotIOS ? '' : false}}"
+                   bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
         </view>
 
@@ -1485,16 +1599,16 @@
         <view class="result-item {{markedParams.indexOf('elevationResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="elevationResult">
-          <text class="result-label">对卫星仰角</text>
+          <text class="result-label">{{orbitType === 'NGSO' ? '最低仰角' : '对卫星仰角'}}</text>
           <text class="result-value">{{results.elevationResult}}°</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('azimuthResult') > -1 ? 'result-item-marked' : ''}}" 
+        <view wx:if="{{orbitType !== 'NGSO'}}" class="result-item {{markedParams.indexOf('azimuthResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="azimuthResult">
           <text class="result-label">对卫星方位角</text>
           <text class="result-value">{{results.azimuthResult}}°</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('uplinkPolarizationAngleResult') > -1 ? 'result-item-marked' : ''}}" 
+        <view wx:if="{{orbitType !== 'NGSO'}}" class="result-item {{markedParams.indexOf('uplinkPolarizationAngleResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="uplinkPolarizationAngleResult">
           <text class="result-label">对卫星极化角</text>
@@ -1656,16 +1770,16 @@
         <view class="result-item {{markedParams.indexOf('rxElevationResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="rxElevationResult">
-          <text class="result-label">对卫星仰角</text>
+          <text class="result-label">{{orbitType === 'NGSO' ? '最低仰角' : '对卫星仰角'}}</text>
           <text class="result-value">{{results.rxElevationResult}}°</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('rxAzimuthResult') > -1 ? 'result-item-marked' : ''}}" 
+        <view wx:if="{{orbitType !== 'NGSO'}}" class="result-item {{markedParams.indexOf('rxAzimuthResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="rxAzimuthResult">
           <text class="result-label">对卫星方位角</text>
           <text class="result-value">{{results.rxAzimuthResult}}°</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('downlinkPolarizationAngleResult') > -1 ? 'result-item-marked' : ''}}" 
+        <view wx:if="{{orbitType !== 'NGSO'}}" class="result-item {{markedParams.indexOf('downlinkPolarizationAngleResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="downlinkPolarizationAngleResult">
           <text class="result-label">对卫星极化角</text>
@@ -1821,11 +1935,18 @@
     <view class="result-section">
       <view class="result-section-title">卫星参数</view>
       <view class="result-grid-2">
-        <view class="result-item {{markedParams.indexOf('orbitPositionResult') > -1 ? 'result-item-marked' : ''}}" 
+        <view wx:if="{{orbitType !== 'NGSO'}}" class="result-item {{markedParams.indexOf('orbitPositionResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="orbitPositionResult">
           <text class="result-label">卫星轨道位置</text>
           <text class="result-value">{{results.orbitPositionResult}}°E</text>
+        </view>
+        <!-- 轨道高度（GEO 35786km 固定 / NGSO 反算） -->
+        <view class="result-item {{markedParams.indexOf('orbitAltitudeResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="orbitAltitudeResult">
+          <text class="result-label">轨道高度</text>
+          <text class="result-value">{{results.orbitAltitudeResult}} km</text>
         </view>
         <view class="result-item {{markedParams.indexOf('EIRPsResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
@@ -1875,6 +1996,36 @@
           <text class="result-label">转发器工作区回退</text>
           <text class="result-value">{{results.actualTransponderCapacityResult}} dB</text>
         </view>
+        <!-- GEO 专属：链路时延 -->
+        <view wx:if="{{orbitType === 'GEO'}}"
+              class="result-item {{markedParams.indexOf('linkDelayResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="linkDelayResult">
+          <text class="result-label">链路时延（单程）</text>
+          <text class="result-value">{{results.linkDelayResult}} ms</text>
+        </view>
+        <!-- NGSO 专属：链路时延 + 最大多普勒频移 -->
+        <view wx:if="{{orbitType === 'NGSO'}}"
+              class="result-item {{markedParams.indexOf('linkDelayResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="linkDelayResult">
+          <text class="result-label">链路时延（单程）</text>
+          <text class="result-value">{{results.linkDelayResult}} ms</text>
+        </view>
+        <view wx:if="{{orbitType === 'NGSO'}}"
+              class="result-item {{markedParams.indexOf('maxDopplerUplinkResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="maxDopplerUplinkResult">
+          <text class="result-label">上行最大多普勒频移</text>
+          <text class="result-value">±{{results.maxDopplerUplinkResult}} kHz</text>
+        </view>
+        <view wx:if="{{orbitType === 'NGSO'}}"
+              class="result-item {{markedParams.indexOf('maxDopplerDownlinkResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="maxDopplerDownlinkResult">
+          <text class="result-label">下行最大多普勒频移</text>
+          <text class="result-value">±{{results.maxDopplerDownlinkResult}} kHz</text>
+        </view>
       </view>
     </view>
 
@@ -1901,6 +2052,13 @@
               data-param="allocBandwidthResult">
           <text class="result-label">载波带宽</text>
           <text class="result-value">{{results.allocBandwidthResult}} kHz</text>
+        </view>
+        <!-- 频谱效率 η = R_info / B_alloc -->
+        <view class="result-item {{markedParams.indexOf('spectralEfficiencyResult') > -1 ? 'result-item-marked' : ''}}" 
+              bindtap="toggleHighlight" 
+              data-param="spectralEfficiencyResult">
+          <text class="result-label">频谱效率</text>
+          <text class="result-value">{{results.spectralEfficiencyResult}} bit/s/Hz</text>
         </view>
         <view class="result-item {{markedParams.indexOf('uplinkPolarizationResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 

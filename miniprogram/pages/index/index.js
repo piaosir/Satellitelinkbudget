@@ -1,9 +1,10 @@
 // index.js
 const app = getApp();
-const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE, DVBS2X_MODCOD_TABLE } = require('../../utils/constants');
+const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE, DVBS2X_MODCOD_TABLE, NR_NTN_MODCOD_TABLE, NB_IOT_NTN_MODCOD_TABLE } = require('../../utils/constants');
 const { validateAllParams } = require('../../utils/validator');
 const { formatResultsForDisplay } = require('../../utils/formatter');
-const { calculateLinkBudget } = require('../../utils/linkCalculator');
+const { calculateLinkBudget: calculateLinkBudgetGEO } = require('../../utils/linkCalculator');
+const { calculateLinkBudget: calculateLinkBudgetNGSO, slantRangeFromAltitude, altitudeFromSlantRange } = require('../../utils/linkCalculatorNGSO');
 const { getAllCities, getDisplayOrderCities, searchCities, getCityByName } = require('../../utils/cities');
 const { estimateRainRate, getNearestCityInfo } = require('../../utils/rainRate');
 const { calculateSunOutage, BAND_PARAMS } = require('../../utils/sunOutageCalculator');
@@ -87,6 +88,20 @@ Page({
     ],
     satelliteIndex: 0,
     
+    // 轨道类型：GEO（地球静止轨道）/ NGSO（非地球静止轨道）
+    orbitType: 'GEO',
+
+    // NGSO 轨道分类（LEO/MEO/HEO）及典型轨道高度参考（km）
+    // LEO: 星网(GW-2)  MEO: 北斗 MEO  HEO: 中国 HEO 典型远地点
+    ngsoOrbitClassOptions: [
+      { key: 'LEO', label: 'LEO', altitude: 1145 },
+      { key: 'MEO', label: 'MEO', altitude: 21528 },
+      { key: 'HEO', label: 'HEO', altitude: 39000 }
+    ],
+    // 默认 LEO
+    ngsoOrbitClassIndex: 0,
+    ngsoOrbitClass: 'LEO',
+
     // 卫星参数
     satelliteParams: {},
     satelliteParamsExpandState: 'full', // 'full', 'partial', 'collapsed'
@@ -102,6 +117,9 @@ Page({
     
     // 噪声比模式
     noiseRatioMode: 'ebno', // 'ebno' 或 'esno'
+
+    // ISL 输入模式：'cno' 输入 C/N₀(dBHz) | 'snr' 输入 SNR(dB)
+    islInputMode: 'cno',
     
     // 余量相关
     marginValue: '3.00', // 当前余量值
@@ -412,13 +430,46 @@ Page({
           noiseRatioMode: app.globalData.noiseRatioMode
         });
       }
+
+      // 从全局数据恢复 ISL 输入模式
+      if (app.globalData.islInputMode) {
+        this.setData({
+          islInputMode: app.globalData.islInputMode
+        });
+      }
       
       // 从全局数据恢复参数
       if (app.globalData.satelliteParams) {
         this.setData({
           satelliteParams: app.globalData.satelliteParams
         });
-        
+
+        // 同步轨道类型：GEO/NGSO（兼容旧配置无 orbitType 字段，默认 GEO）
+        // 优先使用刚加载配置时设置的 app.globalData.orbitType（configs 页加载/编辑时会同步）
+        const restoredOrbitType = app.globalData.orbitType
+          || app.globalData.satelliteParams.orbitType
+          || 'GEO';
+        if (restoredOrbitType !== this.data.orbitType) {
+          this.setData({ orbitType: restoredOrbitType });
+        }
+        if (!app.globalData.satelliteParams.orbitType) {
+          app.globalData.satelliteParams.orbitType = restoredOrbitType;
+          this.setData({ 'satelliteParams.orbitType': restoredOrbitType });
+        }
+        app.globalData.orbitType = restoredOrbitType;
+
+        // 同步 NGSO 轨道分类（LEO/MEO/HEO）
+        if (restoredOrbitType === 'NGSO') {
+          const ngsoClass = app.globalData.satelliteParams.ngsoOrbitClass || 'LEO';
+          const ngsoIdx = this.data.ngsoOrbitClassOptions.findIndex(o => o.key === ngsoClass);
+          this.setData({
+            ngsoOrbitClass: ngsoClass,
+            ngsoOrbitClassIndex: ngsoIdx >= 0 ? ngsoIdx : 0,
+            'satelliteParams.ngsoOrbitClass': ngsoClass
+          });
+          app.globalData.satelliteParams.ngsoOrbitClass = ngsoClass;
+        }
+
         // 同步更新卫星选择器索引
         const satelliteName = app.globalData.satelliteParams.satelliteName;
         if (satelliteName) {
@@ -436,6 +487,9 @@ Page({
             this.setData({ frequencyBandIndex: bandIndex });
           }
         }
+
+        // 同步 ISL 显示值（根据 islInputMode 计算 cIslDisplay）
+        this.syncCIslDisplay();
       }
       
       if (app.globalData.linkParams && app.globalData.linkParams[this.data.currentLinkNum]) {
@@ -455,6 +509,10 @@ Page({
             modcodList = DVBS2_MODCOD_TABLE;
           } else if (dvbStandard === 'DVB-S2X') {
             modcodList = DVBS2X_MODCOD_TABLE;
+          } else if (dvbStandard === '3GPP NR-NTN') {
+            modcodList = NR_NTN_MODCOD_TABLE;
+          } else if (dvbStandard === '3GPP NB-IoT NTN') {
+            modcodList = NB_IOT_NTN_MODCOD_TABLE;
           }
           const modcodIdx = (linkParams.modcodIndex >= 0 && linkParams.modcodIndex < modcodList.length)
             ? linkParams.modcodIndex : 0;
@@ -659,6 +717,195 @@ Page({
     app.globalData.noiseRatioMode = this.data.noiseRatioMode;
   },
 
+  // 切换轨道类型 GEO ↔ NGSO
+  toggleOrbitType() {
+    const next = this.data.orbitType === 'GEO' ? 'NGSO' : 'GEO';
+    this.applyOrbitTypeChange(next);
+  },
+
+  // 分段控件点击
+  onOrbitTypeChange(e) {
+    const type = e.currentTarget.dataset.type;
+    if (type && type !== this.data.orbitType) {
+      this.applyOrbitTypeChange(type);
+    }
+  },
+
+  // 应用轨道类型切换：NGSO 默认上行 RHCP / 下行 LHCP + LEO 典型几何
+  applyOrbitTypeChange(type) {
+    const currentType = this.data.orbitType; // 切换前的类型
+
+    // ── 切换前：把当前 satelliteParams 存入对应 slot ──
+    const fromSlot = currentType === 'GEO' ? 'geoSatelliteParams' : 'ngsoSatelliteParams';
+    app.globalData[fromSlot] = Object.assign({}, this.data.satelliteParams);
+
+    // ── 如果目标 slot 已有记录，直接恢复并同步 UI，无需走默认值流程 ──
+    const toSlot = type === 'GEO' ? 'geoSatelliteParams' : 'ngsoSatelliteParams';
+    const savedParams = app.globalData[toSlot];
+    const hasSaved = savedParams && Object.keys(savedParams).length > 0;
+
+    if (hasSaved) {
+      const restored = Object.assign({}, savedParams, { orbitType: type });
+      app.globalData.satelliteParams = restored;
+      app.globalData.orbitType = type;
+
+      const update = { orbitType: type, satelliteParams: restored };
+
+      // 同步 NGSO 轨道子类选择器
+      if (type === 'NGSO') {
+        const ngsoClass = restored.ngsoOrbitClass || 'LEO';
+        const ngsoIdx = this.data.ngsoOrbitClassOptions.findIndex(o => o.key === ngsoClass);
+        update.ngsoOrbitClass = ngsoClass;
+        update.ngsoOrbitClassIndex = ngsoIdx >= 0 ? ngsoIdx : 0;
+      }
+      // 同步卫星下拉选择器索引
+      if (restored.satelliteName) {
+        const satIndex = this.data.satellites.findIndex(s => s.name === restored.satelliteName);
+        if (satIndex !== -1) update.satelliteIndex = satIndex;
+      }
+      // 同步频段选择器索引
+      if (restored.frequencyBand) {
+        const bandIndex = FREQUENCY_BAND_OPTIONS.findIndex(o => o.value === restored.frequencyBand);
+        if (bandIndex !== -1) update.frequencyBandIndex = bandIndex;
+      }
+      this.setData(update);
+      this.syncCIslDisplay();
+      return;
+    }
+
+    // ── 无保存记录：走原有默认逻辑 ──
+    const update = { orbitType: type, 'satelliteParams.orbitType': type };
+    // GEO 时清除 ngsoOrbitClass；NGSO 在下面分支里写入
+    if (type === 'GEO') {
+      update['satelliteParams.ngsoOrbitClass'] = '';
+      if (app.globalData.satelliteParams) {
+        app.globalData.satelliteParams.ngsoOrbitClass = '';
+      }
+    }
+    // 同步到全局数据，配置/历史保存时会随 satelliteParams 一并写入
+    if (app.globalData.satelliteParams) {
+      app.globalData.satelliteParams.orbitType = type;
+    }
+    app.globalData.orbitType = type;
+    if (type === 'NGSO') {
+      const polOpts = this.data.polarizationOptions;
+      const upIdx = polOpts.findIndex(o => o.value === 'RHCP');
+      const downIdx = polOpts.findIndex(o => o.value === 'LHCP');
+      if (upIdx >= 0) {
+        update.uplinkPolarizationIndex = upIdx;
+        update['linkParams.uplinkPolarization'] = 'RHCP';
+      }
+      if (downIdx >= 0) {
+        update.downlinkPolarizationIndex = downIdx;
+        update['linkParams.downlinkPolarization'] = 'LHCP';
+      }
+
+      // LEO 典型场景：仰角 25°，轨道高度 1145 km（星网 GW-2）
+      const leoIdx = this.data.ngsoOrbitClassOptions.findIndex(o => o.key === 'LEO');
+      const leoOpt = leoIdx >= 0 ? this.data.ngsoOrbitClassOptions[leoIdx] : null;
+      if (leoOpt) {
+        const el = 25;
+        const range = slantRangeFromAltitude(leoOpt.altitude, el);
+        update.ngsoOrbitClassIndex = leoIdx;
+        update.ngsoOrbitClass = 'LEO';
+        update['satelliteParams.ngsoOrbitClass'] = 'LEO';
+        if (app.globalData.satelliteParams) {
+          app.globalData.satelliteParams.ngsoOrbitClass = 'LEO';
+        }
+        update['linkParams.minElevation'] = String(el);
+        update['linkParams.rxMinElevation'] = String(el);
+        update['linkParams.orbitAltitude'] = String(leoOpt.altitude);
+        update['linkParams.rxOrbitAltitude'] = String(leoOpt.altitude);
+        update['linkParams.slantRange'] = range.toFixed(1);
+        update['linkParams.rxSlantRange'] = range.toFixed(1);
+        update['linkParams.distanceMode'] = 'altitude';
+        update['linkParams.rxDistanceMode'] = 'altitude';
+      }
+    }
+    this.setData(update);
+  },
+
+  // 根据当前轨道类型路由到对应的链路预算计算模型
+  calculateLinkBudget(satelliteParams, linkParams) {
+    if (this.data.orbitType === 'NGSO') {
+      return calculateLinkBudgetNGSO(satelliteParams, linkParams);
+    }
+    return calculateLinkBudgetGEO(satelliteParams, linkParams);
+  },
+
+  // NGSO：切换"轨道高度 ⇄ 星地斜距"输入模式
+  // 切换时根据当前仰角将已有数值做等价换算（类比 Eb/N0 ⇄ Es/N0）
+  onDistanceModeToggle(e) {
+    const type = e.currentTarget.dataset.type; // 'uplink' | 'downlink'
+    const isDown = type === 'downlink';
+    const modeField = isDown ? 'rxDistanceMode' : 'distanceMode';
+    const altField = isDown ? 'rxOrbitAltitude' : 'orbitAltitude';
+    const rangeField = isDown ? 'rxSlantRange' : 'slantRange';
+    const elField = isDown ? 'rxMinElevation' : 'minElevation';
+
+    const lp = this.data.linkParams || {};
+    const current = lp[modeField];
+    const next = current === 'slantRange' ? 'altitude' : 'slantRange';
+
+    // 当前仰角（缺省 10°）
+    const elInput = parseFloat(lp[elField]);
+    const el = (!isNaN(elInput) && isFinite(elInput)) ? elInput : 10;
+
+    const update = { [`linkParams.${modeField}`]: next };
+
+    if (next === 'slantRange') {
+      // altitude -> slantRange：用已有轨道高度 + 当前仰角换算斜距
+      const h = parseFloat(lp[altField]);
+      if (!isNaN(h) && isFinite(h) && h > 0) {
+        const d = slantRangeFromAltitude(h, el);
+        update[`linkParams.${rangeField}`] = d.toFixed(1);
+      }
+    } else {
+      // slantRange -> altitude：用已有斜距 + 当前仰角反算轨道高度
+      const d = parseFloat(lp[rangeField]);
+      if (!isNaN(d) && isFinite(d) && d > 0) {
+        const h = altitudeFromSlantRange(d, el);
+        update[`linkParams.${altField}`] = h.toFixed(1);
+      }
+    }
+
+    this.setData(update);
+  },
+
+  // NGSO：选择轨道分类（LEO/MEO/HEO）→ 自动填入典型轨道高度 / 斜距
+  onNgsoOrbitClassChange(e) {
+    const idx = parseInt(e.detail.value, 10);
+    const opt = this.data.ngsoOrbitClassOptions[idx];
+    if (!opt) return;
+
+    const lp = this.data.linkParams || {};
+    // 取上/下行当前仰角（缺省 10°）
+    const txElInput = parseFloat(lp.minElevation);
+    const rxElInput = parseFloat(lp.rxMinElevation);
+    const txEl = (!isNaN(txElInput) && isFinite(txElInput)) ? txElInput : 10;
+    const rxEl = (!isNaN(rxElInput) && isFinite(rxElInput)) ? rxElInput : 10;
+
+    // HEO 场景：上行站为远地点高轨（39000km），下行站为近地点低轨（1000km）
+    const txH = opt.key === 'HEO' ? 39000 : opt.altitude;
+    const rxH = opt.key === 'HEO' ? 1000 : opt.altitude;
+    const txRange = slantRangeFromAltitude(txH, txEl);
+    const rxRange = slantRangeFromAltitude(rxH, rxEl);
+
+    // 同时写入 altitude 与 slantRange 两组字段，保证切换模式后也有值
+    this.setData({
+      ngsoOrbitClassIndex: idx,
+      ngsoOrbitClass: opt.key,
+      'satelliteParams.ngsoOrbitClass': opt.key,
+      'linkParams.orbitAltitude': String(txH),
+      'linkParams.rxOrbitAltitude': String(rxH),
+      'linkParams.slantRange': txRange.toFixed(1),
+      'linkParams.rxSlantRange': rxRange.toFixed(1)
+    });
+    if (app.globalData.satelliteParams) {
+      app.globalData.satelliteParams.ngsoOrbitClass = opt.key;
+    }
+  },
+
   // 折叠/展开卫星参数 - 三态循环
   toggleSatelliteParams() {
     const states = ['full', 'partial', 'collapsed'];
@@ -718,7 +965,30 @@ Page({
   onSatelliteParamChange(e) {
     const field = e.currentTarget.dataset.field;
     const value = e.detail.value;
-    
+
+    // cIslDisplay 是 ISL 输入模式下的显示字段，需特殊处理：
+    // 同时将实际 SNR(dB) 写入 cIsl 供计算器使用
+    if (field === 'cIslDisplay') {
+      const displayVal = parseFloat(value);
+      const bwMHz = parseFloat(this.data.satelliteParams.transponderBandwidth) || 36;
+      const bwHz = bwMHz * 1e6;
+      let cIslSnr;
+      if (!isNaN(displayVal)) {
+        cIslSnr = this.data.islInputMode === 'cno'
+          ? String((displayVal - 10 * Math.log10(bwHz)).toFixed(4))
+          : value;
+      } else {
+        cIslSnr = '';
+      }
+      this.setData({
+        'satelliteParams.cIslDisplay': value,
+        'satelliteParams.cIsl': cIslSnr
+      });
+      this.updateRealtimeParams();
+      app.globalData.satelliteParams = this.data.satelliteParams;
+      return;
+    }
+
     this.setData({
       [`satelliteParams.${field}`]: value
     });
@@ -1091,6 +1361,10 @@ Page({
       modcodList = DVBS2_MODCOD_TABLE;
     } else if (standard === 'DVB-S2X') {
       modcodList = DVBS2X_MODCOD_TABLE;
+    } else if (standard === '3GPP NR-NTN') {
+      modcodList = NR_NTN_MODCOD_TABLE;
+    } else if (standard === '3GPP NB-IoT NTN') {
+      modcodList = NB_IOT_NTN_MODCOD_TABLE;
     }
 
     updateData.currentModcodList = modcodList;
@@ -1254,6 +1528,35 @@ Page({
     wx.vibrateShort({
       type: 'light'
     });
+  },
+
+  // 同步 ISL 显示值：根据 islInputMode 和 cIsl(SNR) 计算 cIslDisplay
+  syncCIslDisplay() {
+    const cIslSnr = parseFloat(this.data.satelliteParams.cIsl);
+    const bwMHz = parseFloat(this.data.satelliteParams.transponderBandwidth) || 36;
+    const bwHz = bwMHz * 1e6;
+    let display;
+    if (!isNaN(cIslSnr)) {
+      display = this.data.islInputMode === 'cno'
+        ? String((cIslSnr + 10 * Math.log10(bwHz)).toFixed(2))
+        : String(cIslSnr);
+    } else {
+      // cIsl 未填时，显示默认值
+      display = this.data.islInputMode === 'cno'
+        ? String((30 + 10 * Math.log10(bwHz)).toFixed(2))
+        : '';
+    }
+    this.setData({ 'satelliteParams.cIslDisplay': display });
+  },
+
+  // 切换 ISL 输入模式：C/N₀(dBHz) ↔ SNR(dB)
+  toggleIslInputMode() {
+    const newMode = this.data.islInputMode === 'cno' ? 'snr' : 'cno';
+    this.setData({ islInputMode: newMode }, () => {
+      this.syncCIslDisplay();
+    });
+    app.globalData.islInputMode = newMode;
+    wx.vibrateShort({ type: 'light' });
   },
 
   // ============ 城市选择相关方法 ============
@@ -1509,7 +1812,7 @@ Page({
         noiseRatioMode: this.data.noiseRatioMode
       };
       
-      const response = calculateLinkBudget(
+      const response = this.calculateLinkBudget(
         this.data.satelliteParams,
         linkParamsWithMode
       );
@@ -1579,7 +1882,7 @@ Page({
         noiseRatioMode: this.data.noiseRatioMode
       };
       
-      const response = calculateLinkBudget(
+      const response = this.calculateLinkBudget(
         this.data.satelliteParams,
         linkParamsWithMode
       );
@@ -1615,6 +1918,10 @@ Page({
 
   // 检查仰角警告
   checkElevationWarnings(results) {
+    // NGSO 模式下仰角由用户直接输入（最低仰角），不做提醒
+    if (this.data.orbitType === 'NGSO') {
+      return;
+    }
     const warnings = [];
     
     // 检查发信站仰角
@@ -1703,9 +2010,13 @@ Page({
     }
     
     if (editingConfigId) {
+      // 构造轨道类型标记，用于弹窗标题，和配置列表保持一致
+      const _orbitType = this.data.orbitType || 'GEO';
+      const _ngsoClass = this.data.ngsoOrbitClass || 'LEO';
+      const _orbitTag = _orbitType === 'NGSO' ? `[${_ngsoClass}]` : '[GEO]';
       // 如果正在编辑现有配置，询问用户是更新还是另存为
       wx.showActionSheet({
-        itemList: [`更新"${editingConfigName}"`, '另存为新配置', '放弃更改'],
+        itemList: [`更新 ${_orbitTag} "${editingConfigName}"`, '另存为新配置', '放弃更改'],
         success: (res) => {
           if (res.tapIndex === 0) {
             // 更新原配置
@@ -2500,7 +2811,7 @@ Page({
         };
         
         // 执行计算
-        const results = calculateLinkBudget(
+        const results = this.calculateLinkBudget(
           this.data.satelliteParams,
           tempLinkParams
         );
@@ -2658,7 +2969,7 @@ Page({
       };
       
       // 调用计算函数
-      const results = calculateLinkBudget(this.data.satelliteParams, linkParamsWithMargin);
+      const results = this.calculateLinkBudget(this.data.satelliteParams, linkParamsWithMargin);
       
       if (results.success) {
         // 根据模式决定是否更新符号率和载波带宽
@@ -2851,7 +3162,7 @@ Page({
           noiseRatioMode: this.data.noiseRatioMode
         };
         
-        const results = calculateLinkBudget(
+        const results = this.calculateLinkBudget(
           this.data.satelliteParams,
           tempLinkParams
         );
@@ -2986,7 +3297,7 @@ Page({
           noiseRatioMode: this.data.noiseRatioMode
         };
         
-        const results = calculateLinkBudget(
+        const results = this.calculateLinkBudget(
           this.data.satelliteParams,
           tempLinkParams
         );
@@ -3080,6 +3391,8 @@ Page({
         satelliteName: this.data.satelliteParams.satelliteName || '未命名',
         orbitPosition: this.data.satelliteParams.orbitPosition,
         frequencyBand: this.data.satelliteParams.frequencyBand,
+        orbitType: this.data.orbitType || 'GEO',
+        ngsoOrbitClass: this.data.orbitType === 'NGSO' ? (this.data.ngsoOrbitClass || '') : '',
         txLocation: this.data.linkParams.earthStationLocation || '发信站',
         rxLocation: this.data.linkParams.rxEarthStationLocation || '收信站',
         infoRate: this.data.linkParams.infoRate,
@@ -3368,18 +3681,45 @@ Page({
       return;
     }
 
+    // 恢复轨道类型（GEO/NGSO）。旧记录无标注 → 默认 GEO
+    const recordOrbitType = record.orbitType
+      || (record.satelliteParams && record.satelliteParams.orbitType)
+      || 'GEO';
+    // NGSO 轨道子类 LEO/MEO/HEO
+    const recordNgsoClass = recordOrbitType === 'NGSO'
+      ? (record.ngsoOrbitClass
+          || (record.satelliteParams && record.satelliteParams.ngsoOrbitClass)
+          || 'LEO')
+      : '';
+    const restoredSatelliteParams = Object.assign({}, record.satelliteParams, {
+      orbitType: recordOrbitType,
+      ngsoOrbitClass: recordNgsoClass
+    });
+
+    // 同步 NGSO 轨道子类选择器索引
+    const ngsoIdx = recordNgsoClass
+      ? this.data.ngsoOrbitClassOptions.findIndex(o => o.key === recordNgsoClass)
+      : 0;
+
     // 恢复参数
     this.setData({
-      satelliteParams: record.satelliteParams,
+      satelliteParams: restoredSatelliteParams,
       linkParams: record.linkParams,
       marginValue: record.marginValue,
       noiseRatioMode: record.noiseRatioMode,
+      orbitType: recordOrbitType,
+      ngsoOrbitClass: recordNgsoClass || this.data.ngsoOrbitClass,
+      ngsoOrbitClassIndex: ngsoIdx >= 0 ? ngsoIdx : 0,
       showHistoryPanel: false
     });
-    
+
     // 更新全局数据
-    app.globalData.satelliteParams = record.satelliteParams;
+    app.globalData.satelliteParams = restoredSatelliteParams;
+    // 同步写入对应 slot，确保切换轨道类型时能正确恢复
+    const _hSlot = recordOrbitType === 'GEO' ? 'geoSatelliteParams' : 'ngsoSatelliteParams';
+    app.globalData[_hSlot] = Object.assign({}, restoredSatelliteParams);
     app.globalData.linkParams[this.data.currentLinkNum] = record.linkParams;
+    app.globalData.orbitType = recordOrbitType;
     
     // 更新实时参数
     this.updateRealtimeParams();
@@ -3460,12 +3800,26 @@ Page({
     try {
       // 从本地存储读取现有配置
       const configs = wx.getStorageSync('savedConfigs') || [];
-      
+
+      // 将历史记录的轨道类型注入 satelliteParams，确保配置侧能识别 NGSO
+      const recordOrbitType = record.orbitType
+        || (record.satelliteParams && record.satelliteParams.orbitType)
+        || 'GEO';
+      const recordNgsoClass = recordOrbitType === 'NGSO'
+        ? (record.ngsoOrbitClass
+            || (record.satelliteParams && record.satelliteParams.ngsoOrbitClass)
+            || 'LEO')
+        : '';
+      const satelliteParamsForConfig = Object.assign({}, record.satelliteParams, {
+        orbitType: recordOrbitType,
+        ngsoOrbitClass: recordNgsoClass
+      });
+
       // 创建新配置
       const newConfig = {
         _id: `config_${Date.now()}`,
         configName: configName,
-        satelliteParams: record.satelliteParams,
+        satelliteParams: satelliteParamsForConfig,
         linkParams: record.linkParams,
         calculationResults: {},
         noiseRatioMode: record.noiseRatioMode || 'ebno',

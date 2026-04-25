@@ -1,5 +1,12 @@
-// linkCalculator.js
-// 卫星链路本地计算模块
+// linkCalculatorNGSO.js
+// NGSO（非地球静止轨道）卫星链路本地计算模块
+// 基于 linkCalculator.js，针对 NGSO 链路做了以下调整：
+// 1. 绕过 GEO 专属的轨位/几何计算，直接使用用户输入的最低仰角
+// 2. 根据用户选择使用 “轨道高度” 或 “星地斜距” 计算链路距离
+//    - 轨道高度模式采用球形地球模型下的精确公式：
+//      d = -Re·sin(el) + sqrt(Re²·sin²(el) + h² + 2·Re·h)
+// 3. 在最后合并上下行得到总 C/T 时引入星间链路 (ISL)
+// 4. 星地经度差在 NGSO 链路计算中的作用说明：详见文件末尾分析注释
 
 const validator = require('./validator.js');
 
@@ -219,6 +226,69 @@ function calculateITU465Isolation(diameter, wavelength, efficiency, phi) {
 }
 
 /**
+ * NGSO 专用：由轨道高度 + 最低仰角计算星地斜距（球形地球精确几何）
+ *
+ * 推导：在由 地球中心 O、地面站 G、卫星 S 构成的三角形中
+ *   |OG| = Re        （地球半径）
+ *   |OS| = Re + h    （卫星地心距）
+ *   在 G 点从地平面测得的仰角为 el，则向量 GS 与地平切线夹角为 el
+ *   ∠OGS = 90° + el
+ * 由余弦定理：
+ *   |OS|² = |OG|² + |GS|² − 2·|OG|·|GS|·cos(∠OGS)
+ *   (Re+h)² = Re² + d² + 2·Re·d·sin(el)
+ * 解关于 d 的一元二次方程（取正根）：
+ *   d = -Re·sin(el) + sqrt(Re²·sin²(el) + h² + 2·Re·h)
+ *
+ * @param {number} orbitAltitudeKm 轨道高度 (km)
+ * @param {number} elevationDeg 仰角 (°)
+ * @returns {number} 星地斜距 (km)
+ */
+function slantRangeFromAltitude(orbitAltitudeKm, elevationDeg) {
+  const Re = 6378.137; // WGS-84 赤道半径 km（与 GEO 计算保持一致）
+  const h = Math.max(0, Number(orbitAltitudeKm) || 0);
+  const el = Math.max(0, Math.min(90, Number(elevationDeg) || 0)) * Math.PI / 180;
+  const sinEl = Math.sin(el);
+  return -Re * sinEl + Math.sqrt(Re * Re * sinEl * sinEl + h * h + 2 * Re * h);
+}
+
+/**
+ * NGSO 专用：由星地斜距 + 仰角反算轨道高度（slantRangeFromAltitude 的逆运算）
+ * (Re+h)² = Re² + d² + 2·Re·d·sin(el)  ⇒  h = sqrt(Re² + d² + 2·Re·d·sin(el)) − Re
+ * @param {number} slantRangeKm 斜距 (km)
+ * @param {number} elevationDeg 仰角 (°)
+ * @returns {number} 轨道高度 (km)
+ */
+function altitudeFromSlantRange(slantRangeKm, elevationDeg) {
+  const Re = 6378.137;
+  const d = Math.max(0, Number(slantRangeKm) || 0);
+  const el = Math.max(0, Math.min(90, Number(elevationDeg) || 0)) * Math.PI / 180;
+  const sinEl = Math.sin(el);
+  return Math.sqrt(Re * Re + d * d + 2 * Re * d * sinEl) - Re;
+}
+
+/**
+ * NGSO 专用：根据输入模式统一解析星地斜距
+ * @param {string} mode 'slantRange' | 'altitude'
+ * @param {number|string} slantRangeInput 用户输入的斜距(km)
+ * @param {number|string} altitudeInput 用户输入的轨道高度(km)
+ * @param {number} elevationDeg 最低仰角(°)
+ * @param {number} defaultAltitude 缺省轨道高度
+ * @returns {number} 斜距 (km)
+ */
+function resolveNgsoSlantRange(mode, slantRangeInput, altitudeInput, elevationDeg, defaultAltitude = 1200) {
+  if (mode === 'slantRange') {
+    const d = parseFloat(slantRangeInput);
+    if (!isNaN(d) && isFinite(d) && d > 0) return d;
+    // 回退：按缺省高度+当前仰角推算
+    return slantRangeFromAltitude(defaultAltitude, elevationDeg);
+  }
+  // altitude 模式
+  const h = parseFloat(altitudeInput);
+  const hUse = (!isNaN(h) && isFinite(h) && h > 0) ? h : defaultAltitude;
+  return slantRangeFromAltitude(hUse, elevationDeg);
+}
+
+/**
  * 卫星链路预算计算主函数
  */
 function calculateLinkBudget(satParams, linkParams) {
@@ -340,6 +410,15 @@ function performCalculations(satParams, inputs) {
   const deltaTheta = satParams.deltaTheta !== undefined && satParams.deltaTheta !== '' && satParams.deltaTheta !== null
     ? parseFloat(satParams.deltaTheta) 
     : 3; // 度 - 角度偏差
+
+  // ============ NGSO 专属：星间链路(ISL) 参数 ============
+  // cIsl: ISL SNR (dB，解调带宽内，用户输入）；计算时内部转换为 C/T (dBW/K)
+  // islHops: 星间链路跳数（0 表示无 ISL）
+  const cIsl = (satParams.cIsl !== undefined && satParams.cIsl !== '' && satParams.cIsl !== null)
+    ? parseFloat(satParams.cIsl) : 30;
+  const islHopsRaw = (satParams.islHops !== undefined && satParams.islHops !== '' && satParams.islHops !== null)
+    ? parseFloat(satParams.islHops) : 0;
+  const islHops = (isFinite(islHopsRaw) && islHopsRaw >= 0) ? Math.floor(islHopsRaw) : 0;
   const aciUplinkFactor = satParams.aciUplinkFactor !== undefined && satParams.aciUplinkFactor !== '' && satParams.aciUplinkFactor !== null
     ? parseFloat(satParams.aciUplinkFactor) 
     : 30; // dB
@@ -449,97 +528,78 @@ function performCalculations(satParams, inputs) {
     esno = ebno + 10 * Math.log10(k);
   }
   
-  // ============ 上行站几何计算 ============
+  // ============ 上行站几何计算（NGSO） ============
+  // NGSO 模式下，仰角由用户直接输入（最低仰角），不再基于 orbitPosition 反算
   const earthLatRad = earthLat * CONSTANTS.PI / 180;
-  
-  // 仰角计算
-  const deltaLonRad_elev = (orbitPosition - earthLon) * CONSTANTS.PI / 180;
-  const cosTerm_elev = Math.cos(earthLatRad) * Math.cos(deltaLonRad_elev);
-  const elevationRad = Math.atan(
-    (cosTerm_elev - 0.15127) / Math.sqrt(1 - Math.pow(cosTerm_elev, 2))
-  );
-  const elevation = elevationRad * 180 / CONSTANTS.PI;
-  
+
+  const minElevationInput = (inputs.minElevation !== '' && inputs.minElevation !== null && inputs.minElevation !== undefined)
+    ? parseFloat(inputs.minElevation) : NaN;
+  const elevation = (!isNaN(minElevationInput) && isFinite(minElevationInput))
+    ? minElevationInput
+    : 10; // 缺省 10°
+  const elevationRad = elevation * CONSTANTS.PI / 180;
+
   // 验证发信站仰角
   const txElevationValidation = validator.validateElevation(elevation, '发信站');
-  
-  // 方位角计算
-  let azimuth;
-  if (earthLat > 0) {
-    const temp = Math.abs(Math.atan(
-      Math.tan((earthLon - orbitPosition) * CONSTANTS.PI / 180) / Math.sin(earthLatRad)
-    ) * 180 / CONSTANTS.PI);
-    azimuth = (orbitPosition > earthLon) ? 180 - temp : 180 + temp;
-  } else {
-    const temp = Math.abs(Math.atan(
-      Math.tan((earthLon - orbitPosition) * CONSTANTS.PI / 180) / Math.sin(earthLatRad)
-    ) * 180 / CONSTANTS.PI);
-    azimuth = (orbitPosition > earthLon) ? temp : 360 - temp;
-  }
-  
-  // 极化角计算
-  const uplinkPolarizationAngle = calculatePolarizationAngle(earthLon, earthLat, orbitPosition);
-  
+
+  // 方位角 / 极化角：NGSO 下卫星位置时变，此处不再依赖 orbitPosition 做 GEO 式反算
+  // 保留占位以兼容原结果结构
+  const azimuth = 0;
+  const uplinkPolarizationAngle = 0;
+
   // 波束宽度
   const beamWidth = (70 * wavelength) / antennaDiameter;
-  
+
   // 上行天线增益
-  const txAntennaGain = 20 * Math.log10((CONSTANTS.PI * antennaDiameter) / wavelength) + 
+  const txAntennaGain = 20 * Math.log10((CONSTANTS.PI * antennaDiameter) / wavelength) +
                         10 * Math.log10(antennaEfficiency);
-  
-  // 上行站星地距离
-  const deltaLonRad_dist = (earthLon - orbitPosition) * CONSTANTS.PI / 180;
-  const cosTerm_dist = Math.cos(earthLatRad) * Math.cos(deltaLonRad_dist);
-  
-  // 使用余弦定理精确计算星地距离
-  const earthRadius = CONSTANTS.EARTH_RADIUS;
-  const orbitRadius = CONSTANTS.EARTH_RADIUS + CONSTANTS.SATELLITE_ALTITUDE;
-  const slantRange = Math.sqrt(Math.pow(earthRadius, 2) + Math.pow(orbitRadius, 2) - 2 * earthRadius * orbitRadius * cosTerm_dist);
-  
-  // 上行自由空间损耗
-  const uplinkFSL = 20 * (Math.log10(uplinkFrequency) + Math.log10(slantRange * 1000)) + 
-                    20 * Math.log10((4 * CONSTANTS.PI) / 0.299792458);
-  
-  // ============ 接收站几何计算 ============
-  const rxDeltaLonRad = (orbitPosition - rxLongitude) * CONSTANTS.PI / 180;
-  const rxEarthLatRad = rxLatitude * CONSTANTS.PI / 180;
-  const rxCosTerm = Math.cos(rxEarthLatRad) * Math.cos(rxDeltaLonRad);
-  const rxElevationRad = Math.atan(
-    (rxCosTerm - 0.15127) / Math.sqrt(1 - Math.pow(rxCosTerm, 2))
+
+  // 上行站星地距离（NGSO）
+  // 根据用户选择的输入模式：
+  //   - distanceMode === 'slantRange'：直接使用输入的斜距
+  //   - distanceMode === 'altitude'（默认）：由轨道高度 + 最低仰角精确换算
+  const distanceMode = inputs.distanceMode || 'altitude';
+  const slantRange = resolveNgsoSlantRange(
+    distanceMode,
+    inputs.slantRange,
+    inputs.orbitAltitude,
+    elevation,
+    1200
   );
-  const rxElevation = rxElevationRad * 180 / CONSTANTS.PI;
-  
+
+  // 上行自由空间损耗
+  const uplinkFSL = 20 * (Math.log10(uplinkFrequency) + Math.log10(slantRange * 1000)) +
+                    20 * Math.log10((4 * CONSTANTS.PI) / 0.299792458);
+
+  // ============ 接收站几何计算（NGSO） ============
+  const rxMinElevationInput = (inputs.rxMinElevation !== '' && inputs.rxMinElevation !== null && inputs.rxMinElevation !== undefined)
+    ? parseFloat(inputs.rxMinElevation) : NaN;
+  const rxElevation = (!isNaN(rxMinElevationInput) && isFinite(rxMinElevationInput))
+    ? rxMinElevationInput
+    : 10;
+  const rxElevationRad = rxElevation * CONSTANTS.PI / 180;
+
   // 验证收信站仰角
   const rxElevationValidation = validator.validateElevation(rxElevation, '收信站');
-  
-  // 接收站方位角
-  let rxAzimuth;
-  if (rxLatitude > 0) {
-    const temp = Math.abs(Math.atan(
-      Math.tan(rxDeltaLonRad) / Math.sin(rxEarthLatRad)
-    ) * 180 / CONSTANTS.PI);
-    rxAzimuth = (orbitPosition > rxLongitude) ? 180 - temp : 180 + temp;
-  } else {
-    const temp = Math.abs(Math.atan(
-      Math.tan(rxDeltaLonRad) / Math.sin(rxEarthLatRad)
-    ) * 180 / CONSTANTS.PI);
-    rxAzimuth = (orbitPosition > rxLongitude) ? temp : 360 - temp;
-  }
-  
-  // 接收站极化角
-  const downlinkPolarizationAngle = calculatePolarizationAngle(rxLongitude, rxLatitude, orbitPosition);
-  
-  // 接收站星地距离
-  const rxDeltaLonRad_dist = (rxLongitude - orbitPosition) * CONSTANTS.PI / 180;
-  const rxCosTerm_dist = Math.cos(rxLatitude * CONSTANTS.PI / 180) * Math.cos(rxDeltaLonRad_dist);
-  
-  // 使用余弦定理精确计算星地距离
-  const rxSlantRange = Math.sqrt(Math.pow(earthRadius, 2) + Math.pow(orbitRadius, 2) - 2 * earthRadius * orbitRadius * rxCosTerm_dist);
-  
+
+  // 方位角 / 极化角：NGSO 下不做 GEO 式反算
+  const rxAzimuth = 0;
+  const downlinkPolarizationAngle = 0;
+
+  // 接收站星地距离（NGSO）
+  const rxDistanceMode = inputs.rxDistanceMode || 'altitude';
+  const rxSlantRange = resolveNgsoSlantRange(
+    rxDistanceMode,
+    inputs.rxSlantRange,
+    inputs.rxOrbitAltitude,
+    rxElevation,
+    1200
+  );
+
   // 下行自由空间损耗
-  const downlinkFSL = 20 * (Math.log10(downlinkFrequency) + Math.log10(rxSlantRange * 1000)) + 
+  const downlinkFSL = 20 * (Math.log10(downlinkFrequency) + Math.log10(rxSlantRange * 1000)) +
                       20 * Math.log10((4 * CONSTANTS.PI) / 0.299792458);
-  
+
   // 接收天线增益
   const rxAntennaGain = 20 * Math.log10((CONSTANTS.PI * rxAntennaDiameter) / rxWavelength) + 
                         10 * Math.log10(rxAntennaEfficiency);
@@ -556,7 +616,7 @@ function performCalculations(satParams, inputs) {
   const uplinkUnavailability = uplinkAvailability / 100;
   const freqKey = findClosestFrequency(uplinkFrequency);
   const A001 = calculateSinglePathRainAttenuation(
-    rainRate, freqKey, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude
+    rainRate, freqKey, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude, elevation
   );
   
   const C0 = uplinkFrequency < 10 ? 0.12 : 
@@ -571,7 +631,7 @@ function performCalculations(satParams, inputs) {
   const downlinkFreqKey = findClosestFrequency(downlinkFrequency);
   const downlinkA001 = calculateSinglePathRainAttenuation(
     rxRainRate, downlinkFreqKey, downlinkPolarization, 
-    rxLatitude, rxLongitude, orbitPosition, rxAltitude
+    rxLatitude, rxLongitude, orbitPosition, rxAltitude, rxElevation
   );
   
   const dC0 = downlinkFrequency < 10 ? 0.12 : 
@@ -607,6 +667,10 @@ function performCalculations(satParams, inputs) {
   // ============ 载波与带宽计算 ============
   const noiseBW = symbolRate * 1; // kHz
   const RXnoiseBW = 10 * Math.log10(noiseBW * 1000); // dBHz
+
+  // ISL SNR → C/T 换算：C/T = SNR + 10·log10(B_Hz) + 10·log10(k)
+
+  const cIsl_CT = cIsl + 10 * Math.log10(transponderBandwidth * 1e6) + CONSTANTS.BOLTZMANN;
   
   // 载波门限值C/T
   const carrierThreshold = ebno + CONSTANTS.BOLTZMANN + 10 * Math.log10(infoRate * 1000);
@@ -679,10 +743,13 @@ function performCalculations(satParams, inputs) {
   const downlinkTotalCT = 10 * Math.log10(downlinkTotalCTLinear);
   
   // 最后合并上下行得到总C/T
-  const totalCTLinear = 1 / (
-    Math.pow(10, -uplinkTotalCT / 10) +
-    Math.pow(10, -downlinkTotalCT / 10)
-  );
+  // NGSO 专属：在此处引入星间链路 (ISL) 贡献
+  //   用户输入单跳 C/N，已在上方转换为 C/T（cIsl_CT），多跳按线性倒数累加
+  //   islHops = 0 时不引入任何项（保持兼容 GEO 行为）
+  const invTotalCT = Math.pow(10, -uplinkTotalCT / 10)
+                   + Math.pow(10, -downlinkTotalCT / 10)
+                   + (islHops > 0 ? islHops * Math.pow(10, -cIsl_CT / 10) : 0);
+  const totalCTLinear = 1 / invTotalCT;
   const totalCT = 10 * Math.log10(totalCTLinear);
   
   // ============ UPC补偿计算 ============
@@ -745,10 +812,11 @@ function performCalculations(satParams, inputs) {
   );
   const rainDownlinkTotalCT = 10 * Math.log10(rainDownlinkTotalCTLinear);
   
-  // 合并上下行得到下行雨卫星总C/T
+  // 合并上下行得到下行雨卫星总C/T（含ISL，与晴天 totalCT 保持一致）
   const totalInterferenceLinear = 1 / (
     Math.pow(10, -rainUplinkTotalCT / 10) +
-    Math.pow(10, -rainDownlinkTotalCT / 10)
+    Math.pow(10, -rainDownlinkTotalCT / 10) +
+    (islHops > 0 ? islHops * Math.pow(10, -cIsl_CT / 10) : 0)
   );
   
   // 下行雨卫星总C/T
@@ -1404,13 +1472,27 @@ function performCalculations(satParams, inputs) {
   results.BOoResult = BOo;
   results.antennaGainResult = antennaGain.toFixed(2);
   results.transponderBandwidthResult = transponderBandwidth;
-  // 轨道高度（GEO 地球静止轨道固定：35786 km）
-  results.orbitAltitudeResult = CONSTANTS.SATELLITE_ALTITUDE.toFixed(0);
-  // 链路时延（GEO单程端到端传播时延）
+  // 链路时延（NGSO单程端到端传播时延）
   // τ = (d_up + d_down) / c，d_up/d_down 为上/下行星地斜距(km)，c = 299792.458 km/s
-  // 参考：ITU-R S.1711 / Roddy "Satellite Communications" Ch.2
   const linkDelay = (slantRange + rxSlantRange) / 299792.458 * 1000; // ms
   results.linkDelayResult = linkDelay.toFixed(1);
+  // 最大多普勒频移（NGSO专属）
+  // 轨道速度：v = sqrt(μ / (Re + h))，μ = 3.986004418e5 km³/s²，Re = 6378.137 km
+  // 最大多普勒：f_d_max = v / c * f_carrier（当卫星速度方向与星地连线重合时取最大值）
+  // 参考：Pratt "Satellite Communications" Ch.2 / ITU-R S.1711
+  const MU_EARTH = 3.986004418e5; // km³/s²
+  const RE_KM = 6378.137;         // km
+  const C_KM_S = 299792.458;      // km/s
+  const h_orbit = altitudeFromSlantRange(slantRange, elevation); // km，由斜距+仰角反算轨道高度
+  const v_sat = Math.sqrt(MU_EARTH / (RE_KM + h_orbit)); // km/s
+  // 上行最大多普勒(kHz)：v/c * f_uplink(GHz) * 1e6
+  const maxDopplerUplink = v_sat / C_KM_S * uplinkFrequency * 1e6; // kHz
+  // 下行最大多普勒(kHz)：v/c * f_downlink(GHz) * 1e6
+  const maxDopplerDownlink = v_sat / C_KM_S * downlinkFrequency * 1e6; // kHz
+  results.orbitAltitudeResult = h_orbit.toFixed(1);      // km，供参考
+  results.orbitVelocityResult = v_sat.toFixed(3);        // km/s，供参考
+  results.maxDopplerUplinkResult = maxDopplerUplink.toFixed(1);   // kHz
+  results.maxDopplerDownlinkResult = maxDopplerDownlink.toFixed(1); // kHz
   
   // 通信参数
   results.uplinkFrequencyResult = uplinkFrequency.toFixed(2);
@@ -1431,7 +1513,6 @@ function performCalculations(satParams, inputs) {
   results.symbolRateResult = symbolRate.toFixed(2);
   results.allocBandwidthResult = allocBandwidth;
   // 频谱效率 η = R_info(bps) / B_alloc(Hz) = infoRate(kbps) / allocBandwidth(kHz)
-  // 参考：ITU-R S.524 、 Pratt 《Satellite Communications》
   const spectralEfficiency = (allocBandwidth > 0) ? (infoRate / allocBandwidth) : 0; // bps/Hz
   results.spectralEfficiencyResult = spectralEfficiency.toFixed(3);
   results.noiseBW = noiseBW.toFixed(2);
@@ -1961,18 +2042,26 @@ function getCoefficients(freq, pol) {
 /**
  * 计算单路径降雨衰减 - 完全按照 index.html 实现
  */
-function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude, orbitPos, altitude) {
+function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude, orbitPos, altitude, elevationDegOverride) {
   if (R001 === 0 || R001 === null || R001 === undefined) {
     return 0;
   }
-  
+
   // 步骤 1: 计算卫星仰角
-  const earthLatRad = latitude * CONSTANTS.PI / 180;
-  const deltaLonRad_elev = (orbitPos - longitude) * CONSTANTS.PI / 180;
-  const cosTerm_elev = Math.cos(earthLatRad) * Math.cos(deltaLonRad_elev);
-  const denominator = Math.sqrt(Math.max(1e-10, 1 - Math.pow(cosTerm_elev, 2))); // 防止除零
-  const elevationRad = Math.atan((cosTerm_elev - 0.15127) / denominator);
-  const elevationDeg = elevationRad * 180 / CONSTANTS.PI;
+  //   — 若提供了 elevationDegOverride（NGSO 使用用户输入的最低仰角），则直接采用
+  //   — 否则按 GEO 几何由经纬度 + 轨道经度反算仰角（原行为，保持 GEO 路径向后兼容）
+  let elevationRad, elevationDeg;
+  if (elevationDegOverride !== undefined && elevationDegOverride !== null && isFinite(elevationDegOverride)) {
+    elevationDeg = Math.max(0, Math.min(90, Number(elevationDegOverride)));
+    elevationRad = elevationDeg * CONSTANTS.PI / 180;
+  } else {
+    const earthLatRad = latitude * CONSTANTS.PI / 180;
+    const deltaLonRad_elev = (orbitPos - longitude) * CONSTANTS.PI / 180;
+    const cosTerm_elev = Math.cos(earthLatRad) * Math.cos(deltaLonRad_elev);
+    const denominator = Math.sqrt(Math.max(1e-10, 1 - Math.pow(cosTerm_elev, 2))); // 防止除零
+    elevationRad = Math.atan((cosTerm_elev - 0.15127) / denominator);
+    elevationDeg = elevationRad * 180 / CONSTANTS.PI;
+  }
   
   // 步骤 2: 根据纬度确定雨高（按照 ITU-R P.839 建议）
   let h0;
@@ -2075,5 +2164,7 @@ function calculateSatelliteAngle(userLat, userLon, satLon) {
 
 module.exports = {
   calculateLinkBudget,
-  calculateSatelliteAngle
+  calculateSatelliteAngle,
+  slantRangeFromAltitude,
+  altitudeFromSlantRange
 };

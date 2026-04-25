@@ -7,6 +7,76 @@
   background: #f1f5f9;
 }
 
+/* ====== 顶部轨道类型标识 Banner ====== */
+.orbit-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14rpx 24rpx;
+  border-bottom: 1rpx solid rgba(255, 255, 255, 0.25);
+}
+
+.orbit-banner-geo {
+  background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
+}
+
+.orbit-banner-ngso {
+  background: linear-gradient(90deg, #047857 0%, #10b981 100%);
+}
+
+.orbit-banner-left {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.orbit-banner-tag {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.18);
+  padding: 4rpx 12rpx;
+  border-radius: 6rpx;
+  margin-right: 12rpx;
+}
+
+.orbit-banner-label {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 1rpx;
+}
+
+.orbit-banner-desc {
+  font-size: 22rpx;
+  color: rgba(255, 255, 255, 0.9);
+  margin-left: 16rpx;
+  text-align: right;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ====== 卫星分组标题中的轨道类型小徽章 ====== */
+.orbit-chip {
+  font-size: 20rpx;
+  font-weight: 500;
+  padding: 2rpx 12rpx;
+  border-radius: 20rpx;
+  margin-left: 12rpx;
+  line-height: 1.6;
+}
+
+.orbit-chip-geo {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.orbit-chip-ngso {
+  color: #047857;
+  background: #d1fae5;
+}
+
 /* ====== 搜索栏 ====== */
 .search-bar {
   padding: 16rpx 20rpx 8rpx;

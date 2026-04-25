@@ -4,6 +4,12 @@ Page({
     results: {},
     txLocation: '',
     rxLocation: '',
+    orbitType: 'GEO',
+    // NGSO 子类（LEO/MEO/HEO），仅当 orbitType === 'NGSO' 时有效
+    ngsoOrbitClass: '',
+    // 用于页面顶部 Banner 显示的轨道类型标签，如 "GEO" / "NGSO · LEO"
+    orbitTypeLabel: 'GEO',
+    orbitTypeDesc: '同步轨道（地球同步）',
     markedParams: [],
     // 分组折叠状态，默认全部展开
     expandedSections: {
@@ -55,11 +61,32 @@ Page({
     const prevPage = pages[pages.length - 2];
     
     if (prevPage && prevPage.data) {
+      const orbitType = prevPage.data.orbitType || 'GEO';
+      const ngsoClass = (prevPage.data.satelliteParams && prevPage.data.satelliteParams.ngsoOrbitClass)
+        || prevPage.data.ngsoOrbitClass
+        || '';
+      // 计算用于顶部 Banner 的标签与描述
+      let orbitTypeLabel = 'GEO';
+      let orbitTypeDesc = '同步轨道（地球同步轨道，约 35786 km）';
+      if (orbitType === 'NGSO') {
+        const cls = (ngsoClass || 'LEO').toUpperCase();
+        const descMap = {
+          LEO: '低地球轨道（约 300–2000 km）',
+          MEO: '中地球轨道（约 2000–35786 km）',
+          HEO: '高椭圆轨道（远地点 > 35786 km）'
+        };
+        orbitTypeLabel = 'NGSO · ' + cls;
+        orbitTypeDesc = descMap[cls] || '非地球同步轨道';
+      }
       this.setData({
         results: prevPage.data.results || {},
         markedParams: prevPage.data.markedParams || [],
         txLocation: prevPage.data.linkParams && prevPage.data.linkParams.earthStationLocation || '',
-        rxLocation: prevPage.data.linkParams && prevPage.data.linkParams.rxEarthStationLocation || ''
+        rxLocation: prevPage.data.linkParams && prevPage.data.linkParams.rxEarthStationLocation || '',
+        orbitType: orbitType,
+        ngsoOrbitClass: ngsoClass,
+        orbitTypeLabel: orbitTypeLabel,
+        orbitTypeDesc: orbitTypeDesc
       });
     }
   },

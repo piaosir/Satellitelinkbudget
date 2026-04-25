@@ -478,13 +478,14 @@ page {
 /* 切换按钮 - 工业风格 */
 .toggle-btn-emoji {
   padding: 0;
-  font-size: 24rpx;
+  font-size: 22rpx;
   background: transparent;
   color: #6b7280;
   border: none;
   white-space: nowrap;
-  flex: 1;
-  max-width: 44rpx;
+  flex: 0 0 auto;
+  width: 28rpx;
+  max-width: 28rpx;
   min-height: 22rpx;
   line-height: 1.2;
   display: flex;
@@ -1195,6 +1196,53 @@ page {
   color: #9ca3af;
   font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+.history-header-right {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+}
+
+/* 轨道类型标签 - 与配置管理页统一的扁平描边风格 */
+.orbit-tag {
+  font-size: 20rpx;
+  font-weight: 600;
+  padding: 2rpx 12rpx;
+  border-radius: 4rpx;
+  letter-spacing: 1rpx;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  border: 1px solid transparent;
+  line-height: 1.6;
+}
+
+.orbit-tag-geo {
+  background: rgba(0, 0, 0, 0.78);
+  color: #ffffff;
+  border-color: rgba(0, 0, 0, 0.78);
+}
+
+.orbit-tag-ngso {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+.orbit-tag-LEO {
+  background: rgba(46, 125, 50, 0.18);
+  color: #1b5e20;
+  border-color: rgba(46, 125, 50, 0.45);
+}
+
+.orbit-tag-MEO {
+  background: rgba(25, 118, 210, 0.18);
+  color: #0d47a1;
+  border-color: rgba(25, 118, 210, 0.45);
+}
+
+.orbit-tag-HEO {
+  background: rgba(216, 67, 21, 0.18);
+  color: #bf360c;
+  border-color: rgba(216, 67, 21, 0.45);
 }
 
 .history-item-body {

@@ -935,9 +935,12 @@ Page({
 
   // 确认覆盖配置
   confirmOverwriteConfig(config) {
+    const _orbitType = (config.satelliteParams && config.satelliteParams.orbitType) || 'GEO';
+    const _ngsoClass = (config.satelliteParams && config.satelliteParams.ngsoOrbitClass) || 'LEO';
+    const _orbitTag = _orbitType === 'NGSO' ? `[${_ngsoClass}]` : '[GEO]';
     wx.showModal({
       title: '确认覆盖',
-      content: `确定要覆盖配置"${config.configName}"吗？此操作不可恢复。`,
+      content: `确定要覆盖 ${_orbitTag} 配置"${config.configName}"吗？此操作不可恢复。`,
       success: async (res) => {
         if (res.confirm) {
           await this.doOverwriteConfig(config);
@@ -1205,6 +1208,8 @@ Page({
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
         app.globalData.highlightedRows = config.highlightedRows || [];
+        // 同步轨道类型（兼容旧配置：未标注则视为 GEO）
+        app.globalData.orbitType = (config.satelliteParams && config.satelliteParams.orbitType) || 'GEO';
         
         // 保存当前编辑的配置ID，用于后续保存更新
         app.globalData.currentEditingConfigId = configId;
@@ -1255,6 +1260,8 @@ Page({
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
         app.globalData.highlightedRows = config.highlightedRows || [];
+        // 同步轨道类型（兼容旧配置：未标注则视为 GEO）
+        app.globalData.orbitType = (config.satelliteParams && config.satelliteParams.orbitType) || 'GEO';
         
         // 保存当前编辑的配置ID，用于后续保存更新
         app.globalData.currentEditingConfigId = configId;
@@ -1332,6 +1339,8 @@ Page({
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
         app.globalData.highlightedRows = config.highlightedRows || [];
+        // 同步轨道类型（兼容旧配置：未标注则视为 GEO）
+        app.globalData.orbitType = (config.satelliteParams && config.satelliteParams.orbitType) || 'GEO';
         
         // 清除编辑状态（纯加载不进入编辑模式）
         app.globalData.currentEditingConfigId = null;
@@ -1381,6 +1390,8 @@ Page({
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
         app.globalData.highlightedRows = config.highlightedRows || [];
+        // 同步轨道类型（兼容旧配置：未标注则视为 GEO）
+        app.globalData.orbitType = (config.satelliteParams && config.satelliteParams.orbitType) || 'GEO';
         
         // 清除编辑状态（纯加载不进入编辑模式）
         app.globalData.currentEditingConfigId = null;

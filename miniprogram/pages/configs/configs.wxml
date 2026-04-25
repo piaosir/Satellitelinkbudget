@@ -89,7 +89,10 @@
         <view class="config-card-content {{item.animating ? 'animating' : ''}} {{selectMode ? 'select-mode' : ''}}" style="transform: translateX({{selectMode ? 0 : (item.offsetX || 0)}}px);">
           <view class="config-row">
             <view class="config-main">
-              <view class="config-name">{{item.configName}}</view>
+              <view class="config-name">
+                <text>{{item.configName}}</text>
+                <text class="orbit-tag {{item.satelliteParams.orbitType === 'NGSO' ? 'orbit-tag-ngso orbit-tag-' + (item.satelliteParams.ngsoOrbitClass || 'LEO') : 'orbit-tag-geo'}}">{{item.satelliteParams.orbitType === 'NGSO' ? (item.satelliteParams.ngsoOrbitClass || 'LEO') : 'GEO'}}</text>
+              </view>
               <view class="config-meta">
                 <text class="config-satellite">{{item.satelliteParams.satelliteName}}</text>
                 <text class="config-sep">·</text>
@@ -362,6 +365,7 @@
       <view class="overwrite-picker-item" wx:for="{{configs}}" wx:key="_id" bindtap="onOverwritePickerSelect" data-index="{{index}}">
         <view class="overwrite-picker-name">
           <text class="overwrite-picker-tag {{item.isLocal ? 'local' : 'cloud'}}">{{item.isLocal ? '本地' : '云端'}}</text>
+          <text class="orbit-tag {{item.satelliteParams.orbitType === 'NGSO' ? 'orbit-tag-ngso orbit-tag-' + (item.satelliteParams.ngsoOrbitClass || 'LEO') : 'orbit-tag-geo'}}">{{item.satelliteParams.orbitType === 'NGSO' ? (item.satelliteParams.ngsoOrbitClass || 'LEO') : 'GEO'}}</text>
           <text>{{item.configName}}</text>
         </view>
         <view class="overwrite-picker-meta">

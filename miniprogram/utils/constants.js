@@ -10,6 +10,7 @@ const MODULATION_FACTORS = {
   '16QAM': 4,
   '16APSK': 4,
   '32APSK': 5,
+  '64QAM': 6,   // 3GPP NR/NR-NTN (TS 38.211)
   '64APSK': 6,
   '128APSK': 7,
   '256APSK': 8
@@ -24,6 +25,7 @@ const MODULATION_OPTIONS = [
   { value: '16QAM', label: '16QAM' },
   { value: '16APSK', label: '16APSK' },
   { value: '32APSK', label: '32APSK' },
+  { value: '64QAM', label: '64QAM' },   // 3GPP NR-NTN (TS 38.211)
   { value: '64APSK', label: '64APSK' },
   { value: '128APSK', label: '128APSK' },
   { value: '256APSK', label: '256APSK' }
@@ -113,12 +115,17 @@ const P838_TABLE = {
   100: { kH: 1.12, kV: 1.06, alphaH: 0.743, alphaV: 0.744 }
 };
 
-// DVB标准选项
+// 通信标准选项
+// DVB-S/S2/S2X: ETSI EN 300 421 / EN 302 307-1 / EN 302 307-2
+// 3GPP NR-NTN: 3GPP TS 38.211/38.212/38.214 Release 17 (TR 38.821)
+// 3GPP NB-IoT NTN: 3GPP TS 36.211/36.212/36.213 Release 17 (TR 36.763)
 const DVB_STANDARD_OPTIONS = [
   { value: 'custom', label: '自定义' },
   { value: 'DVB-S', label: 'DVB-S' },
   { value: 'DVB-S2', label: 'DVB-S2' },
-  { value: 'DVB-S2X', label: 'DVB-S2X' }
+  { value: 'DVB-S2X', label: 'DVB-S2X' },
+  { value: '3GPP NR-NTN', label: '3GPP NR-NTN' },
+  { value: '3GPP NB-IoT NTN', label: '3GPP NB-IoT NTN' }
 ];
 
 // DVB-S MODCOD预设表 (Eb/N₀, RS=188/204, 1+α=1.35)
@@ -241,6 +248,72 @@ const DVBS2X_MODCOD_TABLE = [
   { label: '256APSK 3/4',   modulation: '256APSK', fec: '3/4',   rsCode: '0.9', bandwidthFactor: 1.05, noiseRatioMode: 'esno', threshold: 19.57 }
 ];
 
+// 3GPP NR-NTN MODCOD预设表 (Es/N₀, LDPC, CP-OFDM, bandwidthFactor=1.0)
+// 参考标准: 3GPP TS 38.214 V17.x.x Table 5.1.3.1-1 (MCS Index Table 1, 64QAM)
+// MCS调制阶数与目标码率来自TS 38.214 Release 17; Es/N₀门限基于AWGN信道BLER=10%条件
+// 链路仿真参考: 3GPP TR 38.821 V17.x.x (Non-Terrestrial Networks link budget)
+// rsCode=0.9 综合考虑CP开销(~6.7%)及DMRS/导频开销; bandwidthFactor=1.0(CP-OFDM无滚降滤波器)
+const NR_NTN_MODCOD_TABLE = [
+  // ——— QPSK (MCS 0–9) ———
+  { label: 'MCS0  QPSK  120/1024', modulation: 'QPSK',  fec: '120/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -5.10 },
+  { label: 'MCS1  QPSK  157/1024', modulation: 'QPSK',  fec: '157/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -4.10 },
+  { label: 'MCS2  QPSK  193/1024', modulation: 'QPSK',  fec: '193/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -3.16 },
+  { label: 'MCS3  QPSK  251/1024', modulation: 'QPSK',  fec: '251/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -1.80 },
+  { label: 'MCS4  QPSK  308/1024', modulation: 'QPSK',  fec: '308/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -0.69 },
+  { label: 'MCS5  QPSK  379/1024', modulation: 'QPSK',  fec: '379/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  0.73 },
+  { label: 'MCS6  QPSK  449/1024', modulation: 'QPSK',  fec: '449/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  2.02 },
+  { label: 'MCS7  QPSK  526/1024', modulation: 'QPSK',  fec: '526/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  3.41 },
+  { label: 'MCS8  QPSK  602/1024', modulation: 'QPSK',  fec: '602/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  4.72 },
+  { label: 'MCS9  QPSK  679/1024', modulation: 'QPSK',  fec: '679/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  5.94 },
+  // ——— 16QAM (MCS 10–16) ———
+  { label: 'MCS10 16QAM 340/1024', modulation: '16QAM', fec: '340/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  5.95 },
+  { label: 'MCS11 16QAM 378/1024', modulation: '16QAM', fec: '378/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  6.93 },
+  { label: 'MCS12 16QAM 434/1024', modulation: '16QAM', fec: '434/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  8.12 },
+  { label: 'MCS13 16QAM 490/1024', modulation: '16QAM', fec: '490/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  9.31 },
+  { label: 'MCS14 16QAM 553/1024', modulation: '16QAM', fec: '553/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 10.68 },
+  { label: 'MCS15 16QAM 616/1024', modulation: '16QAM', fec: '616/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 11.93 },
+  { label: 'MCS16 16QAM 658/1024', modulation: '16QAM', fec: '658/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 12.73 },
+  // ——— 64QAM (MCS 17–28) ———
+  { label: 'MCS17 64QAM 438/1024', modulation: '64QAM', fec: '438/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 12.79 },
+  { label: 'MCS18 64QAM 466/1024', modulation: '64QAM', fec: '466/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 13.65 },
+  { label: 'MCS19 64QAM 517/1024', modulation: '64QAM', fec: '517/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 14.93 },
+  { label: 'MCS20 64QAM 567/1024', modulation: '64QAM', fec: '567/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 16.13 },
+  { label: 'MCS21 64QAM 616/1024', modulation: '64QAM', fec: '616/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 17.40 },
+  { label: 'MCS22 64QAM 666/1024', modulation: '64QAM', fec: '666/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 18.62 },
+  { label: 'MCS23 64QAM 719/1024', modulation: '64QAM', fec: '719/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 19.84 },
+  { label: 'MCS24 64QAM 772/1024', modulation: '64QAM', fec: '772/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 21.19 },
+  { label: 'MCS25 64QAM 822/1024', modulation: '64QAM', fec: '822/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 22.40 },
+  { label: 'MCS26 64QAM 873/1024', modulation: '64QAM', fec: '873/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 23.66 },
+  { label: 'MCS27 64QAM 910/1024', modulation: '64QAM', fec: '910/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 24.59 },
+  { label: 'MCS28 64QAM 948/1024', modulation: '64QAM', fec: '948/1024', rsCode: '0.9', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: 25.56 }
+];
+
+// 3GPP NB-IoT NTN MODCOD预设表 (Es/N₀, Turbo码, OFDMA/SC-FDMA, bandwidthFactor=1.0)
+// 参考标准: 3GPP TS 36.213 V17.x.x Table 16.4.1.5.1-1 (NPDSCH MCS, 多载波模式, N_rep=1)
+//           3GPP TR 36.763 V17.x.x (NB-IoT/eMTC NTN 研究项目链路预算)
+// 码率依据: 每子帧可用编码比特数 = (14-3)×12×2 = 264 bits (含DMRS开销扣除)
+// Es/N₀门限: AWGN信道BLER=10%条件下Turbo码仿真结果
+// rsCode=1.0 (NB-IoT无外码; 物理层开销已隐含于fec码率中)
+// bandwidthFactor=1.0 (CP-OFDM/SC-FDMA)
+const NB_IOT_NTN_MODCOD_TABLE = [
+  // I_TBS=0, TBS=16b/SF:  码率≈1/16, 深度覆盖场景
+  { label: 'MCS0  QPSK  1/16 (I_TBS=0)',  modulation: 'QPSK', fec: '1/16', rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -8.80 },
+  // I_TBS=2, TBS=32b/SF:  码率≈1/8
+  { label: 'MCS2  QPSK  1/8  (I_TBS=2)',  modulation: 'QPSK', fec: '1/8',  rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -5.70 },
+  // I_TBS=4, TBS=56b/SF:  码率≈1/5
+  { label: 'MCS4  QPSK  1/5  (I_TBS=4)',  modulation: 'QPSK', fec: '1/5',  rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -4.37 },
+  // I_TBS=5, TBS=72b/SF:  码率≈1/4
+  { label: 'MCS5  QPSK  1/4  (I_TBS=5)',  modulation: 'QPSK', fec: '1/4',  rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -2.50 },
+  // I_TBS=6, TBS=88b/SF:  码率≈1/3
+  { label: 'MCS6  QPSK  1/3  (I_TBS=6)',  modulation: 'QPSK', fec: '1/3',  rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold: -1.26 },
+  // I_TBS=8, TBS=120b/SF: 码率≈1/2
+  { label: 'MCS8  QPSK  1/2  (I_TBS=8)',  modulation: 'QPSK', fec: '1/2',  rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  1.00 },
+  // I_TBS=11, TBS=176b/SF: 码率≈2/3
+  { label: 'MCS11 QPSK  2/3  (I_TBS=11)', modulation: 'QPSK', fec: '2/3',  rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  3.25 },
+  // I_TBS=12, TBS=208b/SF: 码率≈3/4 (最高MCS)
+  { label: 'MCS12 QPSK  3/4  (I_TBS=12)', modulation: 'QPSK', fec: '3/4',  rsCode: '1', bandwidthFactor: 1.0, noiseRatioMode: 'esno', threshold:  4.76 }
+];
+
 // 物理常量
 const CONSTANTS = {
   LIGHT_SPEED: 299792.458, // 光速 km/s
@@ -318,6 +391,8 @@ module.exports = {
   DVBS_MODCOD_TABLE,
   DVBS2_MODCOD_TABLE,
   DVBS2X_MODCOD_TABLE,
+  NR_NTN_MODCOD_TABLE,
+  NB_IOT_NTN_MODCOD_TABLE,
   P838_TABLE,
   CONSTANTS,
   RESULT_LABELS

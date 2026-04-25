@@ -39,6 +39,9 @@ App({
       currentLinkNum: 1,
       // 卫星参数
       satelliteParams: this.getDefaultSatelliteParams(),
+      // GEO / NGSO 独立卫星参数 slot
+      geoSatelliteParams: {},
+      ngsoSatelliteParams: {},
       // 链路参数（支持8条链路）
       linkParams: {},
       // 计算结果
@@ -152,7 +155,11 @@ App({
       aciDownlinkFactor: 30,
       adjDownlinkFactor: 25,
       xpolDownlinkFactor: 26,
-      xpdrIntermodFactor: 21
+      xpdrIntermodFactor: 21,
+
+      // NGSO 专属参数
+      cIsl: 30,
+      islHops: 0
     };
   },
 
@@ -175,6 +182,12 @@ App({
       uplinkPowerControl: '否',
       uplinkAvailability: 99.90,
 
+      // NGSO 发信站专属参数（LEO 典型场景）
+      minElevation: 25,
+      distanceMode: 'altitude', // 'altitude' | 'slantRange'
+      orbitAltitude: 1145,
+      slantRange: 2120,
+
       // 接收站参数
       rxEarthStationLocation: '',
       rxAntennaDiameter: 3.7,
@@ -190,6 +203,12 @@ App({
       rxReceiverNoiseTemp: 75,
       rxFeederLoss: 0.2,
       rxDownlinkAvailability: 99.90,
+
+      // NGSO 收信站专属参数（LEO 典型场景）
+      rxMinElevation: 25,
+      rxDistanceMode: 'altitude', // 'altitude' | 'slantRange'
+      rxOrbitAltitude: 1145,
+      rxSlantRange: 2120,
 
       // 载波参数
       dvbStandard: 'custom',
@@ -215,8 +234,11 @@ App({
   globalData: {
     currentLinkNum: 1,
     satelliteParams: {},
+    geoSatelliteParams: {},
+    ngsoSatelliteParams: {},
     linkParams: {},
     calculationResults: {},
-    highlightedRows: []
+    highlightedRows: [],
+    orbitType: 'GEO'
   }
 });
