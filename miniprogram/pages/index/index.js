@@ -869,6 +869,7 @@ Page({
       }
     }
 
+    wx.vibrateShort({ type: 'light' });
     this.setData(update);
   },
 
