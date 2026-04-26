@@ -413,6 +413,12 @@ function performCalculations(satParams, inputs) {
     ? parseFloat(satParams.deltaTheta) 
     : 3; // 度 - 角度偏差
 
+  // ============ NGSO 专属：轨道倾角 ============
+  // 轨道倾角影响地球自转对多普勒频移的贡献分量：v_E_eff = ω_E·r·cos(i)
+  // i=0°(赤道轨道)：地球自转贡献最大；i=90°(极轨道)：地球自转不参与多普勒
+  const orbitInclination = (satParams.orbitInclination !== undefined && satParams.orbitInclination !== '' && satParams.orbitInclination !== null)
+    ? parseFloat(satParams.orbitInclination) : 50; // 度，默认 50°
+
   // ============ NGSO 专属：星间链路(ISL) 参数 ============
   // cIsl: ISL SNR (dB，解调带宽内，用户输入）；计算时内部转换为 C/T (dBW/K)
   // islHops: 星间链路跳数（0 表示无 ISL）
@@ -1484,28 +1490,32 @@ function performCalculations(satParams, inputs) {
   const linkDelay = (slantRange + islTotalDistance + rxSlantRange) / 299792.458 * 1000; // ms
   results.linkDelayResult = linkDelay.toFixed(1);
   // 最大多普勒频移（NGSO专属，上下行独立计算）
-  // 公式：f_d_max = f_c/c · |v_sat − ω_E·r| · Re·cos(ε_min) / r
-  //   v_sat = sqrt(μ/r)：惯性系轨道速度；ω_E·r：地球自转线速度（GEO时两者相等 → 多普勒=0）
+  // 公式：f_d_max = f_c/c · |v_sat − ω_E·r·cos(i)| · Re·cos(ε_min) / r
+  //   v_sat = sqrt(μ/r)：惯性系轨道速度
+  //   ω_E·r·cos(i)：地球自转在轨道平面内的有效分量（i=0° 赤道轨道时最大，i=90° 极轨时为0）
   //   Re·cos(ε_min)/r：最低仰角处的几何投影系数（由正弦定理推导）
-  // 上下行各自由对应链路的斜距+仰角反算轨道高度，独立代入公式（HEO近/远地点场景尤为必要）
+  // 倾角修正说明：对于倾角 i 的圆形轨道，地球自转对相对径向速度的贡献乘以 cos(i)；
+  //   原始公式(i=0°)高估了顺行赤道轨道以外情况下的多普勒消除量，非赤道倾斜轨道实际
+  //   多普勒比 i=0° 时更大。
   // 参考：Maral & Bousquet "Satellite Communications Systems" 5th Ed §5.1；ITU-R S.1711
   const MU_EARTH = 3.986004418e5; // km³/s²（WGS-84）
   const RE_KM = 6378.137;         // km（WGS-84）
   const C_KM_S = 299792.458;      // km/s
   const OMEGA_E = 7.2921150e-5;   // rad/s（WGS-84）
+  const inclRad = orbitInclination * Math.PI / 180; // 轨道倾角（弧度）
 
   // ── 上行链路 ──
   const h_tx = altitudeFromSlantRange(slantRange, elevation);
   const r_tx = RE_KM + h_tx;
   const v_sat_tx = Math.sqrt(MU_EARTH / r_tx);
-  const v_radial_tx = Math.abs(v_sat_tx - OMEGA_E * r_tx) * RE_KM * Math.cos(elevation * Math.PI / 180) / r_tx;
+  const v_radial_tx = Math.abs(v_sat_tx - OMEGA_E * RE_KM * Math.cos(inclRad)) * RE_KM * Math.cos(elevation * Math.PI / 180) / r_tx;
   const maxDopplerUplink = v_radial_tx / C_KM_S * uplinkFrequency * 1e6;   // kHz
 
   // ── 下行链路 ──
   const h_rx = altitudeFromSlantRange(rxSlantRange, rxElevation);
   const r_rx = RE_KM + h_rx;
   const v_sat_rx = Math.sqrt(MU_EARTH / r_rx);
-  const v_radial_rx = Math.abs(v_sat_rx - OMEGA_E * r_rx) * RE_KM * Math.cos(rxElevation * Math.PI / 180) / r_rx;
+  const v_radial_rx = Math.abs(v_sat_rx - OMEGA_E * RE_KM * Math.cos(inclRad)) * RE_KM * Math.cos(rxElevation * Math.PI / 180) / r_rx;
   const maxDopplerDownlink = v_radial_rx / C_KM_S * downlinkFrequency * 1e6; // kHz
 
   results.orbitAltitudeResult = h_rx.toFixed(1);      // km，下行链路轨道高度
