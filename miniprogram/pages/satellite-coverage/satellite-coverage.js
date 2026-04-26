@@ -169,9 +169,17 @@ Page({
       this._isAndroid = false;
     }
 
-    // 获取从主页面传来的卫星索引
+    // 获取从主页面传来的卫星索引（优先按名称查找，避免两页面列表顺序不同导致错位）
     let satelliteIndex = 0;
-    if (options && options.satelliteIndex !== undefined) {
+    if (options && options.satelliteName) {
+      const name = decodeURIComponent(options.satelliteName);
+      const foundIdx = this.data.satellites.findIndex(s => s.name === name);
+      if (foundIdx !== -1) {
+        satelliteIndex = foundIdx;
+      } else if (options.satelliteIndex !== undefined) {
+        satelliteIndex = parseInt(options.satelliteIndex);
+      }
+    } else if (options && options.satelliteIndex !== undefined) {
       satelliteIndex = parseInt(options.satelliteIndex);
     }
 

@@ -2236,8 +2236,10 @@ Page({
   goToCoverageMap() {
     this.setData({ showVisualPopup: false });
     const satelliteIndex = this.data.satelliteIndex;
+    const satellite = this.data.satellites[satelliteIndex];
+    const satelliteName = encodeURIComponent(satellite ? satellite.name : '');
     wx.navigateTo({
-      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satelliteIndex}`
+      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satelliteIndex}&satelliteName=${satelliteName}`
     });
   },
 
@@ -2297,8 +2299,10 @@ Page({
 
   goToMapPickForAzEl() {
     const satIndex = this.data.azElSatelliteIndex || 0;
+    const sat = this.data.satellites[satIndex];
+    const satelliteName = encodeURIComponent(sat ? sat.name : '');
     wx.navigateTo({
-      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satIndex}&pickMode=1&pickSource=azElTool`
+      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satIndex}&satelliteName=${satelliteName}&pickMode=1&pickSource=azElTool`
     });
   },
 
@@ -2497,8 +2501,10 @@ Page({
 
   goToMapPickForSunOutage() {
     const satIndex = this.data.sunOutageSatelliteIndex || 0;
+    const sat = this.data.satellites[satIndex];
+    const satelliteName = encodeURIComponent(sat ? sat.name : '');
     wx.navigateTo({
-      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satIndex}&pickMode=1&pickSource=sunOutageTool`
+      url: `/pages/satellite-coverage/satellite-coverage?satelliteIndex=${satIndex}&satelliteName=${satelliteName}&pickMode=1&pickSource=sunOutageTool`
     });
   },
 
