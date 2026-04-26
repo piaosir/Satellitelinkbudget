@@ -1483,21 +1483,33 @@ function performCalculations(satParams, inputs) {
   const islTotalDistance = islHops * ISL_HOP_DISTANCE_KM; // ISL段总距离 (km)
   const linkDelay = (slantRange + islTotalDistance + rxSlantRange) / 299792.458 * 1000; // ms
   results.linkDelayResult = linkDelay.toFixed(1);
-  // 最大多普勒频移（NGSO专属）
-  // 轨道速度：v = sqrt(μ / (Re + h))，μ = 3.986004418e5 km³/s²，Re = 6378.137 km
-  // 最大多普勒：f_d_max = v / c * f_carrier（当卫星速度方向与星地连线重合时取最大值）
-  // 参考：Pratt "Satellite Communications" Ch.2 / ITU-R S.1711
-  const MU_EARTH = 3.986004418e5; // km³/s²
-  const RE_KM = 6378.137;         // km
+  // 最大多普勒频移（NGSO专属，上下行独立计算）
+  // 公式：f_d_max = f_c/c · |v_sat − ω_E·r| · Re·cos(ε_min) / r
+  //   v_sat = sqrt(μ/r)：惯性系轨道速度；ω_E·r：地球自转线速度（GEO时两者相等 → 多普勒=0）
+  //   Re·cos(ε_min)/r：最低仰角处的几何投影系数（由正弦定理推导）
+  // 上下行各自由对应链路的斜距+仰角反算轨道高度，独立代入公式（HEO近/远地点场景尤为必要）
+  // 参考：Maral & Bousquet "Satellite Communications Systems" 5th Ed §5.1；ITU-R S.1711
+  const MU_EARTH = 3.986004418e5; // km³/s²（WGS-84）
+  const RE_KM = 6378.137;         // km（WGS-84）
   const C_KM_S = 299792.458;      // km/s
-  const h_orbit = altitudeFromSlantRange(slantRange, elevation); // km，由斜距+仰角反算轨道高度
-  const v_sat = Math.sqrt(MU_EARTH / (RE_KM + h_orbit)); // km/s
-  // 上行最大多普勒(kHz)：v/c * f_uplink(GHz) * 1e6
-  const maxDopplerUplink = v_sat / C_KM_S * uplinkFrequency * 1e6; // kHz
-  // 下行最大多普勒(kHz)：v/c * f_downlink(GHz) * 1e6
-  const maxDopplerDownlink = v_sat / C_KM_S * downlinkFrequency * 1e6; // kHz
-  results.orbitAltitudeResult = h_orbit.toFixed(1);      // km，供参考
-  results.orbitVelocityResult = v_sat.toFixed(3);        // km/s，供参考
+  const OMEGA_E = 7.2921150e-5;   // rad/s（WGS-84）
+
+  // ── 上行链路 ──
+  const h_tx = altitudeFromSlantRange(slantRange, elevation);
+  const r_tx = RE_KM + h_tx;
+  const v_sat_tx = Math.sqrt(MU_EARTH / r_tx);
+  const v_radial_tx = Math.abs(v_sat_tx - OMEGA_E * r_tx) * RE_KM * Math.cos(elevation * Math.PI / 180) / r_tx;
+  const maxDopplerUplink = v_radial_tx / C_KM_S * uplinkFrequency * 1e6;   // kHz
+
+  // ── 下行链路 ──
+  const h_rx = altitudeFromSlantRange(rxSlantRange, rxElevation);
+  const r_rx = RE_KM + h_rx;
+  const v_sat_rx = Math.sqrt(MU_EARTH / r_rx);
+  const v_radial_rx = Math.abs(v_sat_rx - OMEGA_E * r_rx) * RE_KM * Math.cos(rxElevation * Math.PI / 180) / r_rx;
+  const maxDopplerDownlink = v_radial_rx / C_KM_S * downlinkFrequency * 1e6; // kHz
+
+  results.orbitAltitudeResult = h_rx.toFixed(1);      // km，下行链路轨道高度
+  results.orbitVelocityResult = v_sat_rx.toFixed(3);  // km/s，下行惯性系轨道速度
   results.maxDopplerUplinkResult = maxDopplerUplink.toFixed(1);   // kHz
   results.maxDopplerDownlinkResult = maxDopplerDownlink.toFixed(1); // kHz
   
