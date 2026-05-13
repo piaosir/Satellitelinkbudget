@@ -3,6 +3,7 @@
 
 const validator = require('./validator.js');
 const { getIsothermHeight } = require('./isothermHeight.js');
+const { P676_PART1 } = require('./p676Data.js');
 
 /**
  * 解析FEC码率字符串，支持任意形式的分数和小数
@@ -94,10 +95,10 @@ const MODULATION_FACTORS = {
 const P838_TABLE = {
   1: { k_H: 0.000025892705, alpha_H: 0.96907444, k_V: 0.000030797361, alpha_V: 0.85922053 },
   2: { k_H: 0.000084686876, alpha_H: 1.0664189, k_V: 0.000099766062, alpha_V: 0.94896086 },
-  3: { k_H: 0.00013897903, alpha_H: 1.2321603, k_V: 0.00019423185, alpha_V: 1.0687585 },
-  4: { k_H: 0.00010713452, alpha_H: 1.6008816, k_V: 0.0002460772, alpha_V: 1.2475492 },
-  5: { k_H: 0.00021615031, alpha_H: 1.6969267, k_V: 0.00024276375, alpha_V: 1.5317316 },
-  6: { k_H: 0.00070558671, alpha_H: 1.5900457, k_V: 0.00048782451, alpha_V: 1.5727561 },
+  3: { k_H: 0.000138979031, alpha_H: 1.2321603, k_V: 0.000194231849, alpha_V: 1.0687585 },
+  4: { k_H: 0.00010713452, alpha_H: 1.6008816, k_V: 0.000246077198, alpha_V: 1.2475492 },
+  5: { k_H: 0.000216150314, alpha_H: 1.6969267, k_V: 0.000242763745, alpha_V: 1.5317316 },
+  6: { k_H: 0.000705586708, alpha_H: 1.5900457, k_V: 0.000487824508, alpha_V: 1.5727561 },
   7: { k_H: 0.0019149876, alpha_H: 1.4810276, k_V: 0.0014247707, alpha_V: 1.4744899 },
   8: { k_H: 0.0041154302, alpha_H: 1.390512, k_V: 0.0034498248, alpha_V: 1.3797357 },
   9: { k_H: 0.0075346436, alpha_H: 1.3154597, k_V: 0.0066908078, alpha_V: 1.2895105 },
@@ -594,13 +595,10 @@ function performCalculations(satParams, inputs) {
     rainRate, freqKey, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude
   );
   
-  const C0 = uplinkFrequency < 10 ? 0.12 : 
-             0.12 + 0.4 * Math.log10(Math.pow(uplinkFrequency / 10, 0.8));
-  const C1 = Math.pow(0.07, C0) * Math.pow(0.12, 1 - C0);
-  const C2 = 0.855 * C0 + 0.546 * (1 - C0);
-  const C3 = 0.139 * C0 + 0.043 * (1 - C0);
-  const uplinkRainAttenuation = (C1 * Math.pow((1 - uplinkUnavailability) * 100, 
-    -1 * (C2 + C3 * Math.log10((1 - uplinkUnavailability) * 100)))) * A001;
+  // ITU-R P.618-14 公式(8) 换算到目标可用度（p=0 即可用度100% 返回0，即晴天）
+  const uplinkRainAttenuation = scaleRainAttenP618_14(
+    A001, (1 - uplinkUnavailability) * 100, earthLat, elevation
+  );
   
   // 下行降雨衰减
   const downlinkFreqKey = findClosestFrequency(downlinkFrequency);
@@ -609,18 +607,49 @@ function performCalculations(satParams, inputs) {
     rxLatitude, rxLongitude, orbitPosition, rxAltitude
   );
   
-  const dC0 = downlinkFrequency < 10 ? 0.12 : 
-              0.12 + 0.4 * Math.log10(Math.pow(downlinkFrequency / 10, 0.8));
-  const dC1 = Math.pow(0.07, dC0) * Math.pow(0.12, 1 - dC0);
-  const dC2 = 0.855 * dC0 + 0.546 * (1 - dC0);
-  const dC3 = 0.139 * dC0 + 0.043 * (1 - dC0);
-  const downlinkRainAttenuation = (dC1 * Math.pow((1 - rxDownlinkAvailability) * 100,
-    -1 * (dC2 + dC3 * Math.log10((1 - rxDownlinkAvailability) * 100)))) * downlinkA001;
+  const downlinkRainAttenuation = scaleRainAttenP618_14(
+    downlinkA001, (1 - rxDownlinkAvailability) * 100, rxLatitude, rxElevation
+  );
   
   // ============ 云衰减计算 ============
   const uplinkCloudAttenuation = calculateCloudAttenuation(uplinkFrequency, elevation, rainRate);
   const downlinkCloudAttenuation = calculateCloudAttenuation(downlinkFrequency, rxElevation, rxRainRate);
-  
+
+  // ============ 闪烁衰减计算 (ITU-R P.618-14 §2.4.1) ============
+  const uplinkScintillation = calculateScintillationFading(uplinkFrequency, elevation, antennaDiameter, uplinkAvailability, antennaEfficiency);
+  const downlinkScintillation = calculateScintillationFading(downlinkFrequency, rxElevation, rxAntennaDiameter, rxdownlinkAvailability, rxAntennaEfficiency);
+
+  // ============ 总衰减合并 (ITU-R P.618-14 §2.5 公式65/66/67/68) ============
+  // p = 超越概率（不可用概率），%
+  // 截断规则：当 p < 5% 时 AC_eff = AC(5%), AG_eff = AG(5%)；
+  // 当前 AC 和 AG 不依赖 p（固定值），隐式满足截断规则
+  const uplinkP = 100 - uplinkAvailability;       // 上行超越概率 (%)
+  const downlinkP = 100 - rxdownlinkAvailability; // 下行超越概率 (%)
+
+  // 上行总衰减 AT(p)：公式(65) p≤5%；公式(66) p>5%
+  let uplinkTotalAttenuation;
+  if (uplinkP <= 5) {
+    // AT = AG_eff + sqrt((AR + AC_eff)^2 + AS^2)
+    uplinkTotalAttenuation = uplinkAtmosphericAttenuation +
+      Math.sqrt(Math.pow(uplinkRainAttenuation + uplinkCloudAttenuation, 2) + Math.pow(uplinkScintillation, 2));
+  } else {
+    // AT = AG_eff + sqrt(AC_eff^2 + AS^2)
+    uplinkTotalAttenuation = uplinkAtmosphericAttenuation +
+      Math.sqrt(Math.pow(uplinkCloudAttenuation, 2) + Math.pow(uplinkScintillation, 2));
+  }
+
+  // 下行总衰减 AT(p)：公式(65) p≤5%；公式(66) p>5%
+  let downlinkTotalAttenuation;
+  if (downlinkP <= 5) {
+    // AT = AG_eff + sqrt((AR + AC_eff)^2 + AS^2)
+    downlinkTotalAttenuation = downlinkAtmosphericAttenuation +
+      Math.sqrt(Math.pow(downlinkRainAttenuation + downlinkCloudAttenuation, 2) + Math.pow(downlinkScintillation, 2));
+  } else {
+    // AT = AG_eff + sqrt(AC_eff^2 + AS^2)
+    downlinkTotalAttenuation = downlinkAtmosphericAttenuation +
+      Math.sqrt(Math.pow(downlinkCloudAttenuation, 2) + Math.pow(downlinkScintillation, 2));
+  }
+
   // ============ 噪声温度计算 ============
   // 降雨噪声温度
   const rainNoiseTemp = 273.15 * (1 - 1 / Math.pow(10, downlinkRainAttenuation / 10));
@@ -1382,7 +1411,8 @@ function performCalculations(satParams, inputs) {
   results.uplinkRainHeightResult = uplinkRainHeight.toFixed(3);
   results.uplinkCloudAttenuation = uplinkCloudAttenuation.toFixed(2);
   results.uplinkAtmosphericAttenuationResult = uplinkAtmosphericAttenuation.toFixed(2);
-  results.uplinkTotalAttenuationResult = (uplinkRainAttenuation + uplinkCloudAttenuation + uplinkAtmosphericAttenuation).toFixed(2); // 上行总衰减 = 雨衰+云衰+大气衰减
+  results.uplinkScintillationResult = uplinkScintillation.toFixed(2); // 上行闪烁衰减 AS(p) (dB)
+  results.uplinkTotalAttenuationResult = uplinkTotalAttenuation.toFixed(2); // 上行总衰减 AT(p) ITU-R P.618-14 §2.5
   results.uplinkCN = uplinkCN.toFixed(2);
   results.actualUplinkCT = actualUplinkCT.toFixed(2); // 载波上行C/T
   
@@ -1414,7 +1444,8 @@ function performCalculations(satParams, inputs) {
   results.downlinkRainHeightResult = downlinkRainHeight.toFixed(3);
   results.downlinkCloudAttenuation = downlinkCloudAttenuation.toFixed(2);
   results.downlinkAtmosphericAttenuationResult = downlinkAtmosphericAttenuation.toFixed(2);
-  results.downlinkTotalAttenuationResult = (downlinkRainAttenuation + downlinkCloudAttenuation + downlinkAtmosphericAttenuation).toFixed(2); // 下行总衰减 = 雨衰+云衰+大气衰减
+  results.downlinkScintillationResult = downlinkScintillation.toFixed(2); // 下行闪烁衰减 AS(p) (dB)
+  results.downlinkTotalAttenuationResult = downlinkTotalAttenuation.toFixed(2); // 下行总衰减 AT(p) ITU-R P.618-14 §2.5
   results.downlinkCN = downlinkCN.toFixed(2);
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
   results.satellitePFD = satellitePFD.toFixed(2);
@@ -1577,77 +1608,48 @@ function calculatePointingLoss(pointingError, beamWidth) {
 
 // calculateMiscLossByFrequency 已移除，上下行综合损耗改为使用用户输入的"其他损耗"参数
 
-/**
- * 计算大气闪烁衰减 - 根据 ITU-R P.618-14
- * 适用于仰角 > 5° 的情况
- * @param {number} frequencyGHz - 频率 (GHz)
- * @param {number} elevationDeg - 仰角 (度)
- * @param {number} antennaDiameter - 天线直径 (m)
- * @param {number} availability - 链路可用度 (%, 如 99.9)
- * @returns {number} 闪烁衰减 (dB)
- */
-function calculateScintillationFading(frequencyGHz, elevationDeg, antennaDiameter, availability) {
-  // 仰角过低时闪烁效应计算不准确
-  if (elevationDeg < 4) {
-    elevationDeg = 4;
-  }
-  
-  const elevationRad = elevationDeg * CONSTANTS.PI / 180;
-  
-  // 步骤1: 计算参考标准差 σ_ref (ITU-R P.618-14 第2.4.1节)
-  // 使用中等湿度条件下的典型值
-  const Nwet = 42; // 湿项折射率的标准差，典型值42 (可根据地区调整)
-  
-  // 步骤2: 计算有效路径长度 L
-  const hL = 1000; // 湍流层高度 (m)，典型值1000m
-  const L = 2 * hL / (Math.sqrt(Math.sin(elevationRad) * Math.sin(elevationRad) + 2.35e-4) + Math.sin(elevationRad));
-  
-  // 步骤3: 计算天线平均因子 g(x)
-  // x = sqrt(k*D^2/L), k = 2*pi*f/c
-  const wavelengthM = 0.299792458 / frequencyGHz; // 波长 (m)
-  const k = 2 * CONSTANTS.PI / wavelengthM;
-  const Deff = antennaDiameter * Math.sqrt(0.65); // 有效天线直径（考虑效率）
-  const x = Math.sqrt(k * Deff * Deff / L);
-  
-  // 天线平均因子 g(x) 的近似公式
-  let gx;
-  if (x < 0.5) {
-    gx = 1.0;
-  } else if (x < 2) {
-    gx = Math.sqrt(3.86 * Math.pow(x, 2) * Math.pow(1 + 1 / (9 * x * x) - Math.pow(1 + 1 / (x * x), 5/6), 2) + 1) - 1;
-    gx = Math.sqrt(1 - gx / (3.86 * x * x));
-  } else {
-    gx = Math.sqrt(3.86 * Math.pow(x, 2) * Math.pow(11/6, 2) / Math.pow(x * x, 11/6));
-    gx = Math.pow(x, -7/6) * 1.09;
-  }
-  gx = Math.max(0.1, Math.min(gx, 1.0)); // 限制在合理范围
-  
-  // 步骤4: 计算参考闪烁强度标准差 σ
-  const sigma_ref = 3.6e-3 + Nwet * 1e-4; // 参考标准差
-  const sigma = sigma_ref * Math.pow(frequencyGHz, 7/12) * gx / Math.pow(Math.sin(elevationRad), 1.2);
-  
-  // 步骤5: 根据可用度计算闪烁衰减
-  // 使用对数正态分布的百分比因子
-  const p = 100 - availability; // 不可用百分比
-  let a_p;
-  if (p <= 0.01) {
-    a_p = 3.5; // 99.99%可用度
-  } else if (p <= 0.1) {
-    a_p = 3.0; // 99.9%可用度
-  } else if (p <= 1) {
-    a_p = 2.3; // 99%可用度
-  } else if (p <= 5) {
-    a_p = 1.65; // 95%可用度
-  } else {
-    a_p = 1.0; // 90%可用度
-  }
-  
-  const scintillationFading = a_p * sigma;
-  
-  // 限制最大值，避免异常
-  return Math.min(scintillationFading, 3.0);
-}
+function calculateScintillationFading(frequencyGHz, elevationDeg, antennaDiameter, availability, antennaEfficiency, Nwet) {
+  // P.618-14 §2.4.1 适用范围：θ≥5°，4≤f≤55 GHz
+  if (elevationDeg < 5) return 0;
+  if (frequencyGHz < 4 || frequencyGHz > 55) return 0;
 
+  const eta = (antennaEfficiency !== undefined) ? antennaEfficiency : 0.5;
+  const nwet = (Nwet !== undefined) ? Nwet : 42;
+
+  const elevRad = elevationDeg * Math.PI / 180;
+
+  // Step 1: σ_ref（公式42）
+  const sigma_ref = 3.6e-3 + 1e-4 * nwet;
+
+  // Step 2: 有效路径长度 L（公式43），单位 m
+  const hL = 1000;
+  const L = 2 * hL / (Math.sqrt(Math.pow(Math.sin(elevRad), 2) + 2.35e-4) + Math.sin(elevRad));
+
+  // Step 3: 有效天线直径 Deff（公式44），单位 m
+  const Deff = Math.sqrt(eta) * antennaDiameter;
+
+  // Step 4: x（公式46），f 单位 GHz，L 单位 m
+  const x = 1.22 * Deff * Deff * (frequencyGHz / L);
+
+  // Step 5: g(x)（公式45）
+  if (x >= 7.0) return 0;
+  const zeta = (11 / 6) * Math.atan(1 / x);
+  const inner = 3.86 * Math.pow(x * x + 1, 11 / 12) * Math.sin(zeta) - 7.08 * Math.pow(x, 5 / 6);
+  if (inner <= 0) return 0;
+  const gx = Math.sqrt(inner);
+
+  // Step 6: σ（公式47）
+  const sigma = sigma_ref * Math.pow(frequencyGHz, 7 / 12) * gx / Math.pow(Math.sin(elevRad), 1.2);
+
+  // Step 7: a(p)（公式48），p = 超越概率%
+  const p = 100 - availability;
+  if (p < 0.01 || p > 50) return 0; // 超出适用范围
+  const logP = Math.log10(p);
+  const a_p = -0.061 * Math.pow(logP, 3) + 0.072 * Math.pow(logP, 2) - 1.71 * logP + 3.0;
+
+  // Step 8: 闪烁衰减（公式49）
+  return a_p * sigma;
+}
 /**
  * 计算极化角
  */
@@ -1788,117 +1790,125 @@ function calcSpecificAttenWaterVapor(f, rp, rt, rho) {
 }
 
 /**
- * 氧气等效高度 h_o (km) — 频率相关
- * ITU-R P.676-13 Annex 2 Section 2.2, Eq. (32)
+ * 对 P.676-13 Part 1 数据线性插值
+ * Part 1 数据已按频率排序，含 118.75 GHz 特殊行
+ * @param {number} f  频率 (GHz)，范围 1–350
+ * @returns {number[]} [ao, bo, co, d_coef]
+ */
+function interpP676Part1(f) {
+  const data = P676_PART1;
+  const n = data.length;
+  if (f <= data[0][0]) return [data[0][1], data[0][2], data[0][3], data[0][4]];
+  if (f >= data[n - 1][0]) return [data[n-1][1], data[n-1][2], data[n-1][3], data[n-1][4]];
+  // 二分查找
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (data[mid][0] <= f) lo = mid; else hi = mid;
+  }
+  const t = (f - data[lo][0]) / (data[hi][0] - data[lo][0]);
+  return [
+    data[lo][1] + t * (data[hi][1] - data[lo][1]),
+    data[lo][2] + t * (data[hi][2] - data[lo][2]),
+    data[lo][3] + t * (data[hi][3] - data[lo][3]),
+    data[lo][4] + t * (data[hi][4] - data[lo][4])
+  ];
+}
+
+/**
+ * 氧气等效高度 h_o (km)
+ * ITU-R P.676-13 Annex 2 — Part 1 系数表插值
+ *   h_o = ao(f) + bo(f)·Ts + co(f)·Ps + do(f)·ρws    [Eq.(30)]
  *
- * @param {number} f   频率 (GHz)
- * @param {number} rp  气压比
+ * @param {number} f      频率 (GHz)
+ * @param {number} Ts     地面温度 (K)，默认 288.15
+ * @param {number} Ps     地面总气压 (hPa)，默认 1013.25
+ * @param {number} rhoWs  地面水汽密度 (g/m³)，默认 7.5
  * @returns {number} h_o (km)
  */
-function calcEquivHeightOxygen(f, rp) {
-  // t₁: 60 GHz 氧气吸收复合体的等效高度修正
-  const sigma1 = 2.87 + 12.4 * Math.exp(-7.9 * rp);
-  const t1 = 4.64 / (1 + 0.066 * Math.pow(rp, -2.3)) *
-             Math.exp(-Math.pow((f - 59.7) / sigma1, 2));
-
-  // t₂: 118.75 GHz 氧气吸收线修正
-  const t2 = 0.14 * Math.exp(2.12 * rp) /
-             (Math.pow(f - 118.75, 2) + 0.031 * Math.exp(2.2 * rp));
-
-  // t₃: 频率相关修正
-  const t3 = 0.0114 / (1 + 0.14 * Math.pow(rp, -2.6)) * f *
-             (-0.0247 + 0.0001 * f + 1.61e-6 * f * f) /
-             (1 - 0.0169 * f + 4.1e-5 * f * f + 3.2e-7 * f * f * f);
-
-  return 6.1 / (1 + 0.17 * Math.pow(rp, -1.1)) * (1 + t1 + t2 + t3);
+function calcEquivHeightOxygen(f, Ts, Ps, rhoWs) {
+  const [ao, bo, co, d_coef] = interpP676Part1(f);
+  return ao + bo * Ts + co * Ps + d_coef * rhoWs;
 }
 
 /**
- * 水蒸气等效高度 h_w (km) — 频率相关
- * ITU-R P.676-13 Annex 2 Section 2.2, Eq. (33)
+ * 水汽等效高度 h_w (km)
+ * ITU-R P.676-13 Annex 2 方法1（固定系数，与气象参数无关）
+ *   h_w(f) = A·f + B + Σ[aᵢ / ((f−fᵢ)² + bᵢ)]        [Eq.(33)]
  *
- * h_w 在 22.235 GHz 附近显著增大（水蒸气吸收线效应）
- *
- * @param {number} f   频率 (GHz)
- * @param {number} rp  气压比
+ * @param {number} f  频率 (GHz)
  * @returns {number} h_w (km)
  */
-function calcEquivHeightWaterVapor(f, rp) {
-  // σ_w — Eq. (33a)
-  const sigmaW = 1.013 / (1 + Math.exp(-8.6 * (rp - 0.57)));
-
-  return 1.66 * (1
-    + 1.39 * sigmaW / (Math.pow(f - 22.235, 2) + 2.56 * sigmaW)
-    + 3.37 * sigmaW / (Math.pow(f - 183.31, 2) + 4.69 * sigmaW)
-    + 1.58 * sigmaW / (Math.pow(f - 325.1, 2) + 2.89 * sigmaW)
-  );
+function calcEquivHeightWaterVapor(f) {
+  const t1 = 2.6846 / (Math.pow(f - 22.235080,  2) + 2.7649);
+  const t2 = 5.8905 / (Math.pow(f - 183.310087, 2) + 4.9219);
+  const t3 = 2.9810 / (Math.pow(f - 325.152888, 2) + 3.0748);
+  return 5.6585e-5 * f + 1.8348 + t1 + t2 + t3;
 }
 
 /**
- * 计算大气衰减 — ITU-R P.676-13 (12/2022) Annex 2 完整算法
+ * 计算大气气体衰减 — ITU-R P.676-13 (12/2022) Annex 2 更新算法
  *
- * 参考文献:
- *   [1] ITU-R P.676-13, "Attenuation by atmospheric gases and related effects"
- *       Annex 2: Approximate estimation of gaseous attenuation (1-350 GHz)
- *   [2] ITU-R P.835-6, "Reference standard atmospheres"
+ * 算法流程（P.676-13 Annex 2）：
+ *   1) 比衰减: γ_o(f, rp, rt)  — Annex 2 解析公式 Eq.(22)
+ *              γ_w(f, rp, rt, ρws) — Annex 2 解析公式 Eq.(23)
+ *   2) 等效高度（新）:
+ *      h_o = ao(f)·1 + bo(f)·Ts + co(f)·Ps + do(f)·ρws   [Part 1 插值 Eq.(30)]
+ *      h_w = 5.6585×10⁻⁵·f + 1.8348 + Σ[ai/((f-fi)²+bi)] [方法1 Eq.(33)]
+ *   3) 倾斜路径（θ ≥ 5°）:
+ *      AG = (γ_o·h_o + γ_w·h_w) / sin(θ)                 [Eq.(29)/(35)]
+ *      θ < 5°: 球面地球修正（保守外推）
  *
- * 算法流程:
- *   1) 比衰减: γ_o(f) — Eq.(22), γ_w(f) — Eq.(23)
- *      精确建模 22.235GHz 水蒸气吸收线 和 60GHz 氧气吸收复合体
- *   2) 等效高度: h_o(f) — Eq.(32), h_w(f) — Eq.(33)
- *      h_o, h_w 均为频率的函数，在吸收线附近有显著变化
- *   3) 天顶衰减: A_o = γ_o × h_o, A_w = γ_w × h_w  — Eq.(37)
- *   4) 倾斜路径:
- *      θ ≥ 10°: A(θ) = A_zenith / sin(θ)           — Eq.(38)
- *      θ < 10°: 地球曲率修正                         — Eq.(39)
- *        A(θ) = A_o/√(sin²θ+2h_o/R_e) + A_w/√(sin²θ+2h_w/R_e)
- *        R_e = 8500 km (等效地球半径)
- *
- * @param {number} frequencyGHz  频率 (GHz)
- * @param {number} elevationDeg  仰角 (度)
- * @returns {number} 大气衰减 (dB)
+ * @param {number} frequencyGHz  频率 (GHz), 1–350
+ * @param {number} elevationDeg  仰角 (度)，undefined 时返回天顶衰减
+ * @param {number} [Ps]   地面总气压 (hPa)，默认 1013.25
+ * @param {number} [Ts]   地面温度 (K)，默认 288.15
+ * @param {number} [rhoWs] 地面水汽密度 (g/m³)，默认 7.5
+ * @returns {number} 大气衰减 AG (dB)
  */
-function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg) {
-  // 输入防护: 防止 NaN 传播
+function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg, Ps, Ts, rhoWs) {
   if (!isFinite(frequencyGHz) || frequencyGHz <= 0) return 0;
   if (elevationDeg !== undefined && elevationDeg !== null && !isFinite(elevationDeg)) {
-    elevationDeg = undefined; // 回退到天顶衰减
+    elevationDeg = undefined;
   }
 
-  // 标准大气参数 (ITU-R P.835-6)
-  const rp  = 1.0;    // P/1013, 标准大气压
-  const rt  = 1.0;    // 288/(273+15), 标准温度
-  const rho = 7.5;    // 水蒸气密度 (g/m³)
+  // 标准大气默认值 (ITU-R P.835-6)
+  if (!Ps   || !isFinite(Ps))    Ps    = 1013.25; // hPa
+  if (!Ts   || !isFinite(Ts))    Ts    = 288.15;  // K
+  if (!rhoWs || !isFinite(rhoWs)) rhoWs = 7.5;    // g/m³
 
-  // 比衰减 (dB/km) — Section 2.1
+  const rp  = Ps / 1013.25;       // 气压比
+  const rt  = 288.15 / Ts;        // 逆温度比
+
+  // 比衰减 (dB/km)
   const gammaO = calcSpecificAttenOxygen(frequencyGHz, rp, rt);
-  const gammaW = calcSpecificAttenWaterVapor(frequencyGHz, rp, rt, rho);
+  const gammaW = calcSpecificAttenWaterVapor(frequencyGHz, rp, rt, rhoWs);
 
-  // 等效高度 (km) — Section 2.2, Eq.(32)/(33)
-  const ho = calcEquivHeightOxygen(frequencyGHz, rp);
-  const hw = calcEquivHeightWaterVapor(frequencyGHz, rp);
+  // 等效高度 (km) — P.676-13 Annex 2 更新公式
+  const ho = calcEquivHeightOxygen(frequencyGHz, Ts, Ps, rhoWs);
+  const hw = calcEquivHeightWaterVapor(frequencyGHz);
 
-  // 天顶方向衰减 — Eq.(37)
-  const Ao = gammaO * ho;
-  const Aw = gammaW * hw;
+  // 天顶方向衰减 (dB)
+  const Ao = gammaO * Math.max(ho, 0);
+  const Aw = gammaW * Math.max(hw, 0);
 
   if (elevationDeg === undefined || elevationDeg === null || elevationDeg >= 90) {
     return Ao + Aw;
   }
   if (elevationDeg < 0) elevationDeg = 0;
 
-  const sinEl = Math.sin(elevationDeg * Math.PI / 180);
-  const Re = 8500; // 等效地球半径 (km)
-
-  if (elevationDeg >= 10) {
-    // Eq.(38): 余割法则
-    return (Ao + Aw) / sinEl;
+  if (elevationDeg >= 5) {
+    // P.676-13 Eq.(29)/(35): 1/sin(θ)，适用 θ ≥ 5°
+    return (Ao + Aw) / Math.sin(elevationDeg * Math.PI / 180);
   }
 
-  // Eq.(39): θ < 10° 地球曲率修正
-  const oxygenSlant     = Ao / Math.sqrt(sinEl * sinEl + 2 * ho / Re);
-  const waterVaporSlant = Aw / Math.sqrt(sinEl * sinEl + 2 * hw / Re);
-  return oxygenSlant + waterVaporSlant;
+  // θ < 5°: 球面地球修正（Eq.39）
+  const sinEl = Math.sin(elevationDeg * Math.PI / 180);
+  const Re = 8500; // 等效地球半径 (km)
+  const hoSafe = Math.max(ho, 0.1);
+  const hwSafe = Math.max(hw, 0.1);
+  return Ao / Math.sqrt(sinEl * sinEl + 2 * hoSafe / Re) +
+         Aw / Math.sqrt(sinEl * sinEl + 2 * hwSafe / Re);
 }
 
 /**
@@ -1970,29 +1980,68 @@ function findClosestFrequency(freq) {
 }
 
 /**
+ * ITU-R P.618-14 公式(8)：将 A(0.01%) 换算为目标时间百分比 p 的雨衰
+ * @param {number} A001    超过年均 0.01% 时间的衰减（dB）
+ * @param {number} p       目标时间百分比（%），如 0.1 表示 0.1%
+ * @param {number} latDeg  地球站纬度（度）
+ * @param {number} elevDeg 链路仰角（度）
+ * @returns {number} Ap（dB）
+ */
+function scaleRainAttenP618_14(A001, p, latDeg, elevDeg) {
+  // 可用度 100% → p = 0 → 晴天，直接返回 0
+  if (p <= 0 || A001 <= 0) return 0;
+
+  const absLat = Math.abs(latDeg);
+  const elevRad = elevDeg * CONSTANTS.PI / 180;
+  const sinElev = Math.sin(elevRad);
+
+  // 确定修正系数 β（ITU-R P.618-14 Step 10）
+  let beta;
+  if (p >= 1 || absLat >= 36) {
+    beta = 0;
+  } else if (elevDeg >= 25) {
+    // p < 1%、|φ| < 36°、θ ≥ 25°
+    beta = -0.005 * (absLat - 36);
+  } else {
+    // p < 1%、|φ| < 36°、θ < 25°
+    beta = -0.005 * (absLat - 36) + 1.8 - 4.25 * sinElev;
+  }
+
+  // 公式(8): Ap = A0.01 × (p/0.01)^[−(0.655 + 0.033·ln(p) − 0.045·ln(A0.01) − β·(1−p)·sinθ)]
+  const exponent = -(0.655 + 0.033 * Math.log(p) - 0.045 * Math.log(A001)
+                    - beta * (1 - p) * sinElev);
+  return A001 * Math.pow(p / 0.01, exponent);
+}
+
+/**
  * 获取P838系数 - 根据频率和极化
  */
-function getCoefficients(freq, pol) {
+function getCoefficients(freq, pol, elevationDeg) {
   const entry = P838_TABLE[freq];
   if (!entry) {
     return [0, 0];
   }
-  
-  if (pol === 'C') { // 圆极化
-    const k_H = entry.k_H;
-    const alpha_H = entry.alpha_H;
-    const k_V = entry.k_V;
-    const alpha_V = entry.alpha_V;
-    // 公式（4）计算k
-    const k = (k_H + k_V) / 2;
-    // 公式（5）计算alpha
-    const alpha = (k_H * alpha_H + k_V * alpha_V) / (2 * k);
-    return [k, alpha];
-  }
-  
-  return pol === 'H'
-    ? [entry.k_H, entry.alpha_H]
-    : [entry.k_V, entry.alpha_V];
+
+  const { k_H, alpha_H, k_V, alpha_V } = entry;
+
+  // ITU-R P.838-3 极化合成公式：
+  //   k     = (k_H + k_V + (k_H - k_V) * cos²θ * cos2τ) / 2
+  //   alpha = (k_H·αH + k_V·αV + (k_H·αH - k_V·αV) * cos²θ * cos2τ) / (2k)
+  // τ=0°  → H 极化，cos2τ = +1
+  // τ=90° → V 极化，cos2τ = -1
+  // τ=45° → 圆极化，cos2τ =  0（θ项消去，与仰角无关）
+  const theta = (elevationDeg !== undefined && elevationDeg !== null) ? elevationDeg : 0;
+  const cos2Theta = Math.pow(Math.cos(theta * Math.PI / 180), 2);
+
+  let cos2Tau;
+  if (pol === 'H')      cos2Tau =  1;
+  else if (pol === 'V') cos2Tau = -1;
+  else                  cos2Tau =  0; // 圆极化 C
+
+  const k     = (k_H + k_V + (k_H - k_V) * cos2Theta * cos2Tau) / 2;
+  const alpha = (k_H * alpha_H + k_V * alpha_V
+               + (k_H * alpha_H - k_V * alpha_V) * cos2Theta * cos2Tau) / (2 * k);
+  return [k, alpha];
 }
 
 /**
@@ -2015,7 +2064,12 @@ function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude
   const h0 = getIsothermHeight(latitude, longitude);
   const hR = h0 + 0.36; // 雨高（km）
   const absLat = Math.abs(latitude);
-  
+
+  // hR - hs ≤ 0：站址高于雨高，无降雨衰减（P.618-14 Step 2）
+  if (hR - altitude <= 0) {
+    return { A001: 0, hR };
+  }
+
   // 步骤 3: 计算通过雨区的倾斜路径长度
   let Ls;
   if (elevationDeg >= 5) {
@@ -2023,7 +2077,7 @@ function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude
     Ls = (hR - altitude) / Math.sin(elevationRad);
   } else {
     // 对于低仰角使用更准确的公式（考虑地球曲率）
-    const Re = 8495; // 有效地球半径（km）
+    const Re = 8500; // 有效地球半径（km）
     const sinElev = Math.sin(elevationRad);
     Ls = (2 * (hR - altitude)) / (Math.sqrt(sinElev * sinElev + 2 * (hR - altitude) / Re) + sinElev);
   }
@@ -2032,29 +2086,31 @@ function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude
   const LG = Ls * Math.cos(elevationRad);
   
   // 步骤 5: 计算比降雨衰减（specific attenuation）
-  const [k, alpha] = getCoefficients(freq, pol);
+  const [k, alpha] = getCoefficients(freq, pol, elevationDeg);
   const gamma = k * Math.pow(R001, alpha); // 比降雨衰减 (dB/km)
   
   // 步骤 6: 计算水平路径缩减因子
   const r001 = 1 / (1 + 0.78 * Math.sqrt(LG * gamma / freq) - 0.38 * (1 - Math.exp(-2 * LG)));
   
-  // 步骤 7: 计算垂直调整因子
-  let zeta = Math.atan((hR - altitude) / (LG * r001));
-  if (zeta > elevationRad) {
-    zeta = elevationRad;
+  // 步骤 7: 计算垂直调整系数 v0.01（ITU-R P.618-14 Step 7）
+  // 第一步：辅助角 ζ
+  const zetaRad = Math.atan((hR - altitude) / (LG * r001));
+
+  // 第二步：有效雨区路径长度 LR
+  //   ζ > θ → 水平受限路径；否则 → 全斜路径
+  let LR;
+  if (zetaRad > elevationRad) {
+    LR = LG * r001 / Math.cos(elevationRad);
+  } else {
+    LR = (hR - altitude) / Math.sin(elevationRad);
   }
-  const LR = LG * r001 / Math.cos(zeta);
-  
-  // 按照 ITU-R P.618-13 计算垂直调整因子
-  const term = 31 * (1 - Math.exp(-elevationDeg / (1 + elevationDeg))) * Math.sqrt(LR * gamma) / (freq * freq);
-  let v001 = 1 / (1 + Math.sqrt(Math.sin(elevationRad)) * (term - 0.45));
-  
-  // 根据纬度调整垂直因子
-  const chi = 36 - absLat; // 纬度依赖因子
-  if (chi > 0) {
-    const chiRad = chi * CONSTANTS.PI / 180;
-    v001 = (1 + Math.cos(chiRad) * Math.cos(chiRad) * v001) / 2;
-  }
+
+  // 第三步：纬度修正量 χ（度）— 直接代入指数，不做事后二次修正
+  const chi = absLat < 36 ? (36 - absLat) : 0;
+
+  // 第四步：v0.01（P.618-14 关键变化：χ 在 e 的指数内，替代旧版中的 θ）
+  const term = 31 * (1 - Math.exp(-elevationDeg / (1 + chi))) * Math.sqrt(LR * gamma) / (freq * freq);
+  const v001 = 1 / (1 + Math.sqrt(Math.sin(elevationRad)) * (term - 0.45));
   
   // 步骤 8: 计算有效路径长度
   const LE = LR * v001;
