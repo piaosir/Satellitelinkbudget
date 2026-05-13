@@ -9,6 +9,7 @@
 // 4. 星地经度差在 NGSO 链路计算中的作用说明：详见文件末尾分析注释
 
 const validator = require('./validator.js');
+const { getIsothermHeight } = require('./isothermHeight.js');
 
 /**
  * 解析FEC码率字符串，支持任意形式的分数和小数
@@ -98,34 +99,66 @@ const MODULATION_FACTORS = {
 
 // ITU-R P.838 降雨衰减系数表 (完全按照 index.html)
 const P838_TABLE = {
-  1: { k_H: 0.0000387, alpha_H: 0.912, k_V: 0.0000352, alpha_V: 0.880 },
-  2: { k_H: 0.000154, alpha_H: 0.963, k_V: 0.000138, alpha_V: 0.923 },
-  4: { k_H: 0.00014279, alpha_H: 1.352238369, k_V: 0.0002092, alpha_V: 1.211336093 },
-  6: { k_H: 0.000582217, alpha_H: 1.586916682, k_V: 0.000488094, alpha_V: 1.586916682 },
-  7: { k_H: 0.00301, alpha_H: 1.332, k_V: 0.00265, alpha_V: 1.312 },
-  8: { k_H: 0.00454, alpha_H: 1.327, k_V: 0.00395, alpha_V: 1.310 },
-  10: { k_H: 0.0101, alpha_H: 1.276, k_V: 0.00887, alpha_V: 1.264 },
-  11: { k_H: 0.020107088, alpha_H: 1.186292179, k_V: 0.02, alpha_V: 1.158356387 },
-  12: { k_H: 0.02403, alpha_H: 1.16692498, k_V: 0.024375695, alpha_V: 1.13649 },
-  13: { k_H: 0.0361, alpha_H: 1.12532, k_V: 0.0378, alpha_V: 1.0887762 },
-  14: { k_H: 0.04025286, alpha_H: 1.114709104, k_V: 0.042385097, alpha_V: 1.076671696 },
-  15: { k_H: 0.0367, alpha_H: 1.154, k_V: 0.0335, alpha_V: 1.128 },
-  17: { k_H: 0.07045588, alpha_H: 1.0631, k_V: 0.073645, alpha_V: 1.023248061 },
-  20: { k_H: 0.09276, alpha_H: 1.0381, k_V: 0.095, alpha_V: 1.002 },
-  25: { k_H: 0.124, alpha_H: 1.061, k_V: 0.113, alpha_V: 1.030 },
-  30: { k_H: 0.2375, alpha_H: 0.94, k_V: 0.2319, alpha_V: 0.92213 },
-  35: { k_H: 0.263, alpha_H: 0.979, k_V: 0.233, alpha_V: 0.963 },
-  40: { k_H: 0.4431, alpha_H: 0.8673, k_V: 0.4274, alpha_V: 0.8421 },
-  42: { k_H: 0.4865, alpha_H: 0.8539, k_V: 0.4712, alpha_V: 0.8296 },
-  45: { k_H: 0.442, alpha_H: 0.903, k_V: 0.393, alpha_V: 0.897 },
-  50: { k_H: 0.66, alpha_H: 0.8084, k_V: 0.6472, alpha_V: 0.7871 },
-  52: { k_H: 0.7020, alpha_H: 0.7987, k_V: 0.6901, alpha_V: 0.7783 },
-  55: { k_H: 0.7635, alpha_H: 0.7853, k_V: 0.7527, alpha_V: 0.7661 },
-  60: { k_H: 0.8606, alpha_H: 0.7656, k_V: 0.8515, alpha_V: 0.7486 },
-  70: { k_H: 1.0315, alpha_H: 0.7345, k_V: 1.0253, alpha_V: 0.7215 },
-  80: { k_H: 0.975, alpha_H: 0.769, k_V: 0.906, alpha_V: 0.769 },
-  90: { k_H: 1.06, alpha_H: 0.753, k_V: 0.999, alpha_V: 0.754 },
-  100: { k_H: 1.12, alpha_H: 0.743, k_V: 1.06, alpha_V: 0.744 }
+  1: { k_H: 0.000025892705, alpha_H: 0.96907444, k_V: 0.000030797361, alpha_V: 0.85922053 },
+  2: { k_H: 0.000084686876, alpha_H: 1.0664189, k_V: 0.000099766062, alpha_V: 0.94896086 },
+  3: { k_H: 0.00013897903, alpha_H: 1.2321603, k_V: 0.00019423185, alpha_V: 1.0687585 },
+  4: { k_H: 0.00010713452, alpha_H: 1.6008816, k_V: 0.0002460772, alpha_V: 1.2475492 },
+  5: { k_H: 0.00021615031, alpha_H: 1.6969267, k_V: 0.00024276375, alpha_V: 1.5317316 },
+  6: { k_H: 0.00070558671, alpha_H: 1.5900457, k_V: 0.00048782451, alpha_V: 1.5727561 },
+  7: { k_H: 0.0019149876, alpha_H: 1.4810276, k_V: 0.0014247707, alpha_V: 1.4744899 },
+  8: { k_H: 0.0041154302, alpha_H: 1.390512, k_V: 0.0034498248, alpha_V: 1.3797357 },
+  9: { k_H: 0.0075346436, alpha_H: 1.3154597, k_V: 0.0066908078, alpha_V: 1.2895105 },
+  10: { k_H: 0.012166988, alpha_H: 1.2570969, k_V: 0.01129187, alpha_V: 1.215645 },
+  11: { k_H: 0.017718799, alpha_H: 1.2140084, k_V: 0.017307344, alpha_V: 1.1617056 },
+  12: { k_H: 0.023857793, alpha_H: 1.1824726, k_V: 0.02454833, alpha_V: 1.1215943 },
+  13: { k_H: 0.03041288, alpha_H: 1.158639, k_V: 0.032656034, alpha_V: 1.0900799 },
+  14: { k_H: 0.037375011, alpha_H: 1.139556, k_V: 0.041258318, alpha_V: 1.0646263 },
+  15: { k_H: 0.044814639, alpha_H: 1.1232753, k_V: 0.050082454, alpha_V: 1.0439919 },
+  16: { k_H: 0.052817368, alpha_H: 1.1086208, k_V: 0.058991895, alpha_V: 1.02729 },
+  17: { k_H: 0.061455939, alpha_H: 1.0949247, k_V: 0.067968978, alpha_V: 1.0137111 },
+  18: { k_H: 0.070784069, alpha_H: 1.0818267, k_V: 0.077076121, alpha_V: 1.0025047 },
+  19: { k_H: 0.080838515, alpha_H: 1.0691419, k_V: 0.086417626, alpha_V: 0.99301241 },
+  20: { k_H: 0.091642669, alpha_H: 1.0567811, k_V: 0.096111206, alpha_V: 0.98468993 },
+  21: { k_H: 0.1032095, alpha_H: 1.0447058, k_V: 0.10627015, alpha_V: 0.97711019 },
+  22: { k_H: 0.1155435, alpha_H: 1.0329027, k_V: 0.11699376, alpha_V: 0.96995443 },
+  23: { k_H: 0.12864198, alpha_H: 1.0213699, k_V: 0.12836316, alpha_V: 0.96299667 },
+  24: { k_H: 0.14249583, alpha_H: 1.0101105, k_V: 0.1404403, alpha_V: 0.95608638 },
+  25: { k_H: 0.15709015, alpha_H: 0.9991285, k_V: 0.15326853, alpha_V: 0.94913169 },
+  26: { k_H: 0.17240481, alpha_H: 0.98842745, k_V: 0.16687405, alpha_V: 0.94208463 },
+  27: { k_H: 0.18841489, alpha_H: 0.97800963, k_V: 0.18126761, alpha_V: 0.93492872 },
+  28: { k_H: 0.20509125, alpha_H: 0.96787591, k_V: 0.19644632, alpha_V: 0.92766912 },
+  29: { k_H: 0.22240103, alpha_H: 0.95802573, k_V: 0.21239548, alpha_V: 0.92032489 },
+  30: { k_H: 0.24030819, alpha_H: 0.94845732, k_V: 0.22909032, alpha_V: 0.91292323 },
+  31: { k_H: 0.25877402, alpha_H: 0.93916779, k_V: 0.24649762, alpha_V: 0.9054953 },
+  32: { k_H: 0.27775773, alpha_H: 0.93015338, k_V: 0.26457728, alpha_V: 0.89807327 },
+  33: { k_H: 0.29721692, alpha_H: 0.92140958, k_V: 0.2832838, alpha_V: 0.89068829 },
+  34: { k_H: 0.31710806, alpha_H: 0.91293129, k_V: 0.30256755, alpha_V: 0.88336924 },
+  35: { k_H: 0.33738699, alpha_H: 0.90471296, k_V: 0.32237605, alpha_V: 0.876142 },
+  36: { k_H: 0.35800932, alpha_H: 0.89674868, k_V: 0.34265498, alpha_V: 0.86902908 },
+  37: { k_H: 0.37893081, alpha_H: 0.88903227, k_V: 0.36334918, alpha_V: 0.86204954 },
+  38: { k_H: 0.40010772, alpha_H: 0.8815574, k_V: 0.38440346, alpha_V: 0.85521909 },
+  39: { k_H: 0.42149715, alpha_H: 0.8743176, k_V: 0.40576327, alpha_V: 0.84855024 },
+  40: { k_H: 0.44305724, alpha_H: 0.86730633, k_V: 0.42737533, alpha_V: 0.84205265 },
+  41: { k_H: 0.46474746, alpha_H: 0.86051705, k_V: 0.44918808, alpha_V: 0.83573336 },
+  42: { k_H: 0.48652876, alpha_H: 0.85394324, k_V: 0.47115201, alpha_V: 0.82959713 },
+  43: { k_H: 0.50836375, alpha_H: 0.84757842, k_V: 0.49322003, alpha_V: 0.82364674 },
+  44: { k_H: 0.53021678, alpha_H: 0.84141619, k_V: 0.51534758, alpha_V: 0.81788326 },
+  45: { k_H: 0.55205407, alpha_H: 0.83545023, k_V: 0.53749282, alpha_V: 0.81230635 },
+  46: { k_H: 0.57384377, alpha_H: 0.82967436, k_V: 0.55961668, alpha_V: 0.80691446 },
+  47: { k_H: 0.59555596, alpha_H: 0.8240825, k_V: 0.58168291, alpha_V: 0.80170507 },
+  48: { k_H: 0.61716269, alpha_H: 0.81866871, k_V: 0.60365804, alpha_V: 0.79667486 },
+  49: { k_H: 0.638638, alpha_H: 0.81342718, k_V: 0.62551134, alpha_V: 0.79181991 },
+  50: { k_H: 0.65995784, alpha_H: 0.80835228, k_V: 0.64721474, alpha_V: 0.78713577 },
+  51: { k_H: 0.68110011, alpha_H: 0.80343849, k_V: 0.66874277, alpha_V: 0.78261767 },
+  52: { k_H: 0.70204455, alpha_H: 0.79868046, k_V: 0.69007239, alpha_V: 0.77826056 },
+  53: { k_H: 0.72277271, alpha_H: 0.79407301, k_V: 0.71118294, alpha_V: 0.77405922 },
+  54: { k_H: 0.7432679, alpha_H: 0.78961108, k_V: 0.73205596, alpha_V: 0.77000832 },
+  55: { k_H: 0.76351508, alpha_H: 0.78528979, k_V: 0.7526751, alpha_V: 0.76610252 },
+  60: { k_H: 0.86061304, alpha_H: 0.76563228, k_V: 0.85152007, alpha_V: 0.74856482 },
+  70: { k_H: 1.0314779, alpha_H: 0.73446512, k_V: 1.0253337, alpha_V: 0.72153399 },
+  80: { k_H: 1.170445, alpha_H: 0.71149456, k_V: 1.166831, alpha_V: 0.7020764 },
+  90: { k_H: 1.2807147, alpha_H: 0.6943701, k_V: 1.2794572, alpha_V: 0.68761399 },
+  100: { k_H: 1.3671083, alpha_H: 0.68145001, k_V: 1.3680473, alpha_V: 0.67654052 },
 };
 
 /**
@@ -626,7 +659,7 @@ function performCalculations(satParams, inputs) {
   // 上行降雨衰减
   const uplinkUnavailability = uplinkAvailability / 100;
   const freqKey = findClosestFrequency(uplinkFrequency);
-  const A001 = calculateSinglePathRainAttenuation(
+  const { A001, hR: uplinkRainHeight } = calculateSinglePathRainAttenuation(
     rainRate, freqKey, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude, elevation
   );
   
@@ -640,7 +673,7 @@ function performCalculations(satParams, inputs) {
   
   // 下行降雨衰减
   const downlinkFreqKey = findClosestFrequency(downlinkFrequency);
-  const downlinkA001 = calculateSinglePathRainAttenuation(
+  const { A001: downlinkA001, hR: downlinkRainHeight } = calculateSinglePathRainAttenuation(
     rxRainRate, downlinkFreqKey, downlinkPolarization, 
     rxLatitude, rxLongitude, orbitPosition, rxAltitude, rxElevation
   );
@@ -1423,6 +1456,7 @@ function performCalculations(satParams, inputs) {
   results.slantRangeResult = slantRange.toFixed(2);
   results.uplinkFSLResult = uplinkFSL.toFixed(2);
   results.uplinkRainAttenuation = uplinkRainAttenuation.toFixed(2);
+  results.uplinkRainHeightResult = uplinkRainHeight.toFixed(3);
   results.uplinkCloudAttenuation = uplinkCloudAttenuation.toFixed(2);
   results.uplinkAtmosphericAttenuationResult = uplinkAtmosphericAttenuation.toFixed(2);
   results.uplinkTotalAttenuationResult = (uplinkRainAttenuation + uplinkCloudAttenuation + uplinkAtmosphericAttenuation).toFixed(2); // 上行总衰减 = 雨衰+云衰+大气衰减
@@ -1454,6 +1488,7 @@ function performCalculations(satParams, inputs) {
   results.rxSlantRangeResult = rxSlantRange.toFixed(2);
   results.downlinkFSLResult = downlinkFSL.toFixed(2);
   results.downlinkRainAttenuationResult = downlinkRainAttenuation.toFixed(2);
+  results.downlinkRainHeightResult = downlinkRainHeight.toFixed(3);
   results.downlinkCloudAttenuation = downlinkCloudAttenuation.toFixed(2);
   results.downlinkAtmosphericAttenuationResult = downlinkAtmosphericAttenuation.toFixed(2);
   results.downlinkTotalAttenuationResult = (downlinkRainAttenuation + downlinkCloudAttenuation + downlinkAtmosphericAttenuation).toFixed(2); // 下行总衰减 = 雨衰+云衰+大气衰减
@@ -2073,7 +2108,7 @@ function getCoefficients(freq, pol) {
  */
 function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude, orbitPos, altitude, elevationDegOverride) {
   if (R001 === 0 || R001 === null || R001 === undefined) {
-    return 0;
+    return { A001: 0, hR: 0 };
   }
 
   // 步骤 1: 计算卫星仰角
@@ -2092,17 +2127,10 @@ function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude
     elevationDeg = elevationRad * 180 / CONSTANTS.PI;
   }
   
-  // 步骤 2: 根据纬度确定雨高（按照 ITU-R P.839 建议）
-  let h0;
-  const absLat = Math.abs(latitude);
-  if (absLat < 23) {
-    h0 = 4.9; // 热带地区
-  } else if (absLat >= 23.5 && absLat < 45) {
-    h0 = 4.9 - ((absLat - 23.5) * 0.075); // 中纬度地区
-  } else {
-    h0 = 3.45; // 高纬度地区
-  }
+  // 步骤 2: 查询零度等温线高度（ITU-R P.839-4 数据库）
+  const h0 = getIsothermHeight(latitude, longitude);
   const hR = h0 + 0.36; // 雨高（km）
+  const absLat = Math.abs(latitude);
   
   // 步骤 3: 计算通过雨区的倾斜路径长度
   let Ls;
@@ -2150,7 +2178,7 @@ function calculateSinglePathRainAttenuation(R001, freq, pol, latitude, longitude
   // 步骤 9: 计算0.01%时间超过的衰减值
   const A001 = gamma * LE;
   
-  return A001;
+  return { A001, hR };
 }
 
 /**

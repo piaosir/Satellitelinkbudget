@@ -89,7 +89,7 @@
   <scroll-view class="results-scroll" scroll-y scroll-with-animation scroll-top="{{scrollTop}}" style="height: {{scrollViewHeight}}px;">
 
     <!-- ===================== 发信站参数 ===================== -->
-    <view id="sec-tx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','地球站天线口径','地球站经度','地球站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','3dB波束宽度','地球站EIRP','发射天线增益','旁瓣发射增益','旁瓣EIRP','旁瓣功率谱密度','馈线损耗','星地距离','上行自由空间损耗','上行雨衰','上行云衰','上行大气衰减','上行总衰减','功放建议功率','功放建议功率','地球站功率谱密度','国际电联旁瓣功率谱密度建议值','上行C/N'], searchKeyword, results, ['earthAntennaDiameterResult','earthLongitudeResult','earthLatitudeResult','uplinkPolarizationResult','elevationResult','azimuthResult','uplinkPolarizationAngleResult','earthAntennaEfficiencyResult','wavelengthResult','beamWidthResult','stationEIRPResult','txAntennaGainResult','txSidelobeGainResult','txSidelobeEIRPResult','txSidelobePSDResult','feederLossResult','slantRangeResult','uplinkFSLResult','uplinkRainAttenuation','uplinkCloudAttenuation','uplinkAtmosphericAttenuationResult','uplinkTotalAttenuationResult','paRecommendationdBResult','paRecommendation','stationPSDResult','ituPsdLimitHz','uplinkCN'], [txLocation])}}">
+    <view id="sec-tx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','地球站天线口径','地球站经度','地球站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','3dB波束宽度','地球站EIRP','发射天线增益','旁瓣发射增益','旁瓣EIRP','旁瓣功率谱密度','馈线损耗','星地距离','上行自由空间损耗','上行雨层高度','上行雨衰','上行云衰','上行大气衰减','上行总衰减','功放建议功率','功放建议功率','地球站功率谱密度','国际电联旁瓣功率谱密度建议值','上行C/N'], searchKeyword, results, ['earthAntennaDiameterResult','earthLongitudeResult','earthLatitudeResult','uplinkPolarizationResult','elevationResult','azimuthResult','uplinkPolarizationAngleResult','earthAntennaEfficiencyResult','wavelengthResult','beamWidthResult','stationEIRPResult','txAntennaGainResult','txSidelobeGainResult','txSidelobeEIRPResult','txSidelobePSDResult','feederLossResult','slantRangeResult','uplinkFSLResult','uplinkRainHeightResult','uplinkRainAttenuation','uplinkCloudAttenuation','uplinkAtmosphericAttenuationResult','uplinkTotalAttenuationResult','paRecommendationdBResult','paRecommendation','stationPSDResult','ituPsdLimitHz','uplinkCN'], [txLocation])}}">
       <view class="section-header" bindtap="toggleSection" data-section="txStation">
         <view class="section-title-row">
           <view class="section-dot dot-blue"></view>
@@ -177,6 +177,10 @@
             <text class="detail-label">上行自由空间损耗</text>
             <text class="detail-value">{{results.uplinkFSLResult}} dB</text>
           </view>
+          <view class="detail-item {{filter.includes(markedParams, 'uplinkRainHeightResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行雨层高度', searchKeyword, results.uplinkRainHeightResult)}}" bindtap="toggleHighlight" data-param="uplinkRainHeightResult">
+            <text class="detail-label">上行雨层高度@ITU-R P.839</text>
+            <text class="detail-value">{{results.uplinkRainHeightResult}} km</text>
+          </view>
           <view class="detail-item {{filter.includes(markedParams, 'uplinkRainAttenuation') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('上行雨衰', searchKeyword, results.uplinkRainAttenuation)}}" bindtap="toggleHighlight" data-param="uplinkRainAttenuation">
             <text class="detail-label">上行雨衰@ITU-R P.618</text>
             <text class="detail-value">{{results.uplinkRainAttenuation}} dB</text>
@@ -218,7 +222,7 @@
     </view>
 
     <!-- ===================== 收信站参数 ===================== -->
-    <view id="sec-rx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','接收天线口径','接收站经度','接收站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','接收天线增益','接收旁瓣增益','卫星到地面的PFD','ITU PFD限制','接收3dB波束宽度','星地距离','下行自由空间损耗','下行雨衰','下行云衰','下行大气衰减','下行总衰减','G/T','G/T劣化','下行C/N','天线噪声温度','接收机噪声温度','雨噪声温度','系统噪声温度','接收馈线损耗'], searchKeyword, results, ['rxAntennaDiameterResult','rxLongitudeResult','rxLatitudeResult','downlinkPolarizationResult','rxElevationResult','rxAzimuthResult','downlinkPolarizationAngleResult','rxAntennaEfficiencyResult','rxWavelengthResult','rxAntennaGainResult','rxSidelobeGainResult','satellitePFD','ituPfdLimitPerM2','theta3','rxSlantRangeResult','downlinkFSLResult','downlinkRainAttenuationResult','downlinkCloudAttenuation','downlinkAtmosphericAttenuationResult','downlinkTotalAttenuationResult','gOverTeResult','gOverTdegradationResult','downlinkCN','antennaNoiseTempResult','receiverNoiseTempResult','rainNoiseTempResult','systemNoiseTempKResult','systemNoiseTempDbResult','rxFeederLossResult'], [rxLocation])}}">
+    <view id="sec-rx" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['地球站位置','接收天线口径','接收站经度','接收站纬度','极化方式','对卫星仰角','对卫星方位角','对卫星极化角','天线效率','波长','接收天线增益','接收旁瓣增益','卫星到地面的PFD','ITU PFD限制','接收3dB波束宽度','星地距离','下行自由空间损耗','下行雨层高度','下行雨衰','下行云衰','下行大气衰减','下行总衰减','G/T','G/T劣化','下行C/N','天线噪声温度','接收机噪声温度','雨噪声温度','系统噪声温度','接收馈线损耗'], searchKeyword, results, ['rxAntennaDiameterResult','rxLongitudeResult','rxLatitudeResult','downlinkPolarizationResult','rxElevationResult','rxAzimuthResult','downlinkPolarizationAngleResult','rxAntennaEfficiencyResult','rxWavelengthResult','rxAntennaGainResult','rxSidelobeGainResult','satellitePFD','ituPfdLimitPerM2','theta3','rxSlantRangeResult','downlinkFSLResult','downlinkRainHeightResult','downlinkRainAttenuationResult','downlinkCloudAttenuation','downlinkAtmosphericAttenuationResult','downlinkTotalAttenuationResult','gOverTeResult','gOverTdegradationResult','downlinkCN','antennaNoiseTempResult','receiverNoiseTempResult','rainNoiseTempResult','systemNoiseTempKResult','systemNoiseTempDbResult','rxFeederLossResult'], [rxLocation])}}">
       <view class="section-header" bindtap="toggleSection" data-section="rxStation">
         <view class="section-title-row">
           <view class="section-dot dot-green"></view>
@@ -296,6 +300,10 @@
           <view class="detail-item {{filter.includes(markedParams, 'downlinkFSLResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行自由空间损耗', searchKeyword, results.downlinkFSLResult)}}" bindtap="toggleHighlight" data-param="downlinkFSLResult">
             <text class="detail-label">下行自由空间损耗</text>
             <text class="detail-value">{{results.downlinkFSLResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'downlinkRainHeightResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行雨层高度', searchKeyword, results.downlinkRainHeightResult)}}" bindtap="toggleHighlight" data-param="downlinkRainHeightResult">
+            <text class="detail-label">下行雨层高度@ITU-R P.839</text>
+            <text class="detail-value">{{results.downlinkRainHeightResult}} km</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'downlinkRainAttenuationResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('下行雨衰', searchKeyword, results.downlinkRainAttenuationResult)}}" bindtap="toggleHighlight" data-param="downlinkRainAttenuationResult">
             <text class="detail-label">下行雨衰@ITU-R P.618</text>
