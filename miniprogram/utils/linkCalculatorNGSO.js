@@ -900,7 +900,7 @@ function performCalculations(satParams, inputs) {
   // 转发器容量 - 下行降雨
   const RXtransponderCapacity = downlinkComponent - carrierTotalCT;
     // 下行C/N (dB) - 基于实际下行C/T计算
-  const actualDownlinkCT = downlinkTotalCT - RXtransponderCapacity;
+  const actualDownlinkCT = downlinkTotalCT - totalCT + carrierTotalCT;
   const downlinkCN = actualDownlinkCT - CONSTANTS.BOLTZMANN - RXnoiseBW;
   // 下行降雨 - 载波占有卫星有效全向辐射功率
   const RXeirpPerCarrier = EIRPs - BOo - RXtransponderCapacity;
@@ -1492,6 +1492,7 @@ function performCalculations(satParams, inputs) {
   results.uplinkTotalAttenuationResult = uplinkTotalAttenuation.toFixed(2); // 上行总衰减 AT(p) ITU-R P.618-14 §2.5
   results.uplinkCN = uplinkCN.toFixed(2);
   results.actualUplinkCT = actualUplinkCT.toFixed(2); // 载波上行C/T
+  results.actualUplinkCN0 = (actualUplinkCT + 228.6).toFixed(2); // 载波上行C/N₀
   
   // 精细化损耗参数
   results.pointingErrorResult = pointingError.toFixed(3); // 指向误差(度)
@@ -1525,6 +1526,7 @@ function performCalculations(satParams, inputs) {
   results.downlinkTotalAttenuationResult = downlinkTotalAttenuation.toFixed(2); // 下行总衰减 AT(p) ITU-R P.618-14 §2.5
   results.downlinkCN = downlinkCN.toFixed(2);
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
+  results.actualDownlinkCN0 = (actualDownlinkCT + 228.6).toFixed(2); // 载波下行C/N₀
   results.satellitePFD = satellitePFD.toFixed(2);
   results.ituPfdLimit4kHz = ituPfdLimit4kHz.toFixed(2); // ITU PFD限制(dBW/m²/4kHz)
   results.ituPfdLimitPerM2 = ituPfdLimitPerM2.toFixed(2); // ITU PFD限制(转换到载波带宽)
@@ -1627,19 +1629,33 @@ function performCalculations(satParams, inputs) {
   
   // C/T和C/N
   results.uplinkCTResult = uplinkCT.toFixed(2);
+  results.uplinkCN0Result = (uplinkCT + 228.6).toFixed(2);
   results.aciUplinkCTResult = aciUplinkCT.toFixed(2);
+  results.aciUplinkCN0Result = (aciUplinkCT + 228.6).toFixed(2);
   results.adjUplinkCTResult = adjUplinkCT.toFixed(2);
+  results.adjUplinkCN0Result = (adjUplinkCT + 228.6).toFixed(2);
   results.xpolUplinkCTResult = xpolUplinkCT.toFixed(2);
+  results.xpolUplinkCN0Result = (xpolUplinkCT + 228.6).toFixed(2);
   results.hpaIntermodCTResult = hpaIntermodCT.toFixed(2);
+  results.hpaIntermodCN0Result = (hpaIntermodCT + 228.6).toFixed(2);
   results.downlinkCTResult = downlinkCT.toFixed(2);
+  results.downlinkCN0Result = (downlinkCT + 228.6).toFixed(2);
   results.aciDownlinkCTResult = aciDownlinkCT.toFixed(2);
+  results.aciDownlinkCN0Result = (aciDownlinkCT + 228.6).toFixed(2);
   results.adjDownlinkCTResult = adjDownlinkCT.toFixed(2);
+  results.adjDownlinkCN0Result = (adjDownlinkCT + 228.6).toFixed(2);
   results.xpolDownlinkCTResult = xpolDownlinkCT.toFixed(2);
+  results.xpolDownlinkCN0Result = (xpolDownlinkCT + 228.6).toFixed(2);
   results.xpdrIntermodCTResult = xpdrIntermodCT.toFixed(2);
+  results.xpdrIntermodCN0Result = (xpdrIntermodCT + 228.6).toFixed(2);
   results.totalCTResult = totalCT.toFixed(2);
+  results.totalCN0Result = (totalCT + 228.6).toFixed(2);
   results.totalCTRainResult = totalCTRain.toFixed(2);
+  results.totalCN0RainResult = (totalCTRain + 228.6).toFixed(2);
   results.carrierThresholdCT = carrierThreshold.toFixed(2);
+  results.carrierThresholdCN0 = (carrierThreshold + 228.6).toFixed(2);
   results.carrierTotalCT = carrierTotalCT.toFixed(2);
+  results.carrierTotalCN0 = (carrierTotalCT + 228.6).toFixed(2);
   results.carrierTotalCN = carrierTotalCN.toFixed(2);
   results.thresholdCN = thresholdCN.toFixed(2);
   results.linkmargin = linkmargin.toFixed(2);

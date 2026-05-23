@@ -1,6 +1,6 @@
 // index.js
 const app = getApp();
-const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE, DVBS2X_MODCOD_TABLE, NR_NTN_MODCOD_TABLE, NB_IOT_NTN_MODCOD_TABLE } = require('../../utils/constants');
+const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE, DVBS2X_MODCOD_TABLE, DVB_RCS2_MODCOD_TABLE, NR_NTN_MODCOD_TABLE, NB_IOT_NTN_MODCOD_TABLE } = require('../../utils/constants');
 const { validateAllParams } = require('../../utils/validator');
 const { formatResultsForDisplay } = require('../../utils/formatter');
 const { calculateLinkBudget: calculateLinkBudgetGEO } = require('../../utils/linkCalculator');
@@ -118,6 +118,9 @@ Page({
     // 噪声比模式
     noiseRatioMode: 'ebno', // 'ebno' 或 'esno'
 
+    // 帧效率/频谱效率切换模式
+    rsCodeMode: 'spectral', // 'fraction' (帧效率) 或 'spectral' (频谱效率 bps/Hz)
+
     // ISL 输入模式：'cno' 输入 C/N₀(dBHz) | 'snr' 输入 SNR(dB)
     islInputMode: 'cno',
     
@@ -140,6 +143,9 @@ Page({
     
     // 可视化面板
     showVisualPopup: false, // 是否显示可视化功能选择面板
+
+    // 仰角警告置顶提示
+    elevationWarningInfo: { tx: null, rx: null }, // { tx/rx: { level, message, elevation } | null }
 
     // 方位仰角工具
     showAzElToolPopup: false,
@@ -232,7 +238,8 @@ Page({
       paRecommendation: '--',
       gOverTe: '--',
       carrierBandwidth: '--',
-      symbolRate: '--'
+      symbolRate: '--',
+      spectralEfficiency: ''
     },
     
     // 输入框全选控制
@@ -507,6 +514,8 @@ Page({
             modcodList = DVBS_MODCOD_TABLE;
           } else if (dvbStandard === 'DVB-S2') {
             modcodList = DVBS2_MODCOD_TABLE;
+          } else if (dvbStandard === 'DVB-RCS2') {
+            modcodList = DVB_RCS2_MODCOD_TABLE;
           } else if (dvbStandard === 'DVB-S2X') {
             modcodList = DVBS2X_MODCOD_TABLE;
           } else if (dvbStandard === '3GPP NR-NTN') {
@@ -1360,6 +1369,8 @@ Page({
       modcodList = DVBS_MODCOD_TABLE;
     } else if (standard === 'DVB-S2') {
       modcodList = DVBS2_MODCOD_TABLE;
+    } else if (standard === 'DVB-RCS2') {
+      modcodList = DVB_RCS2_MODCOD_TABLE;
     } else if (standard === 'DVB-S2X') {
       modcodList = DVBS2X_MODCOD_TABLE;
     } else if (standard === '3GPP NR-NTN') {
@@ -1448,15 +1459,72 @@ Page({
   // RS编码码率输入处理（支持分数和小数，保持原始输入格式）
   onRsCodeInput(e) {
     let value = e.detail.value.trim();
-    
-    // 保持原始输入值（分数或小数），不进行转换
-    // 计算时再在后台进行转换
+
+    if (this.data.rsCodeMode === 'spectral') {
+      // 频谱效率模式：允许直接输入频谱效率，并反推帧效率供实际计算使用
+      const se = parseFloat(value);
+      if (!isNaN(se) && se > 0) {
+        const modulation = this.data.linkParams.modulation || 'QPSK';
+        const modulationFactor = MODULATION_FACTORS[modulation] || 2;
+        const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+        const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.20;
+        const m = parseFloat(this.data.linkParams.m) || 1;
+        const denominator = modulationFactor * fec;
+
+        if (denominator > 0 && isFinite(denominator)) {
+          const rsCode = se * bandwidthFactor * m / denominator;
+          if (isFinite(rsCode) && rsCode >= 0) {
+            this.setData({
+              'linkParams.rsCode': rsCode.toFixed(6),
+              'realtimeParams.spectralEfficiency': value
+            });
+            this.updateRealtimeParams();
+            // updateRealtimeParams 会用计算值覆盖 SE 显示，还原为用户正在输入的原始值
+            this.setData({ 'realtimeParams.spectralEfficiency': value });
+            return;
+          }
+        }
+      }
+
+      // 保留输入中的中间态（如空字符串、正在输入小数点）
+      this.setData({
+        'realtimeParams.spectralEfficiency': value
+      });
+      return;
+    }
+
+    // 帧效率模式：保持原始输入值（分数或小数），计算时后台解析
     this.setData({
       'linkParams.rsCode': value
     });
-    
-    // 更新实时参数
+
     this.updateRealtimeParams();
+  },
+
+  // 切换帧效率/频谱效率显示模式
+  toggleRsCodeMode() {
+    const currentMode = this.data.rsCodeMode;
+    const newMode = currentMode === 'fraction' ? 'spectral' : 'fraction';
+
+    if (newMode === 'spectral') {
+      // 切换到频谱效率：计算当前帧效率对应的频谱效率并显示
+      const modulation = this.data.linkParams.modulation || 'QPSK';
+      const modulationFactor = MODULATION_FACTORS[modulation] || 2;
+      const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+      const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
+      const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.20;
+      const m = parseFloat(this.data.linkParams.m) || 1;
+      const se = modulationFactor * fec * rsCode / (bandwidthFactor * m);
+      this.setData({
+        rsCodeMode: newMode,
+        'realtimeParams.spectralEfficiency': isNaN(se) ? '' : se.toFixed(4)
+      });
+    } else {
+      // 切换回帧效率：linkParams.rsCode 已保存真实帧效率，直接切回即可
+      this.setData({ rsCodeMode: newMode });
+    }
+
+    wx.vibrateShort({ type: 'light' });
   },
 
   // 切换Eb/N0和Es/N0
@@ -1919,44 +1987,37 @@ Page({
 
   // 检查仰角警告
   checkElevationWarnings(results) {
+    const empty = { tx: null, rx: null };
     // NGSO 模式下仰角由用户直接输入（最低仰角），不做提醒
     if (this.data.orbitType === 'NGSO') {
+      this.setData({ elevationWarningInfo: empty });
       return;
     }
-    const warnings = [];
-    
+
+    let tx = null;
+    let rx = null;
+
     // 检查发信站仰角
-    if (results.elevationValidation) {
-      const txValidation = results.elevationValidation;
-      if (txValidation.level === 'error') {
-        warnings.push(txValidation.message);
-      } else if (txValidation.level === 'warning') {
-        warnings.push(txValidation.message);
-      }
+    if (results.elevationValidation && results.elevationValidation.level !== 'ok') {
+      const v = results.elevationValidation;
+      tx = {
+        level: v.level,
+        message: v.message,
+        elevation: results.elevationResult  // 计算得出的仰角值（字符串，如 "5.23"）
+      };
     }
-    
+
     // 检查收信站仰角
-    if (results.rxElevationValidation) {
-      const rxValidation = results.rxElevationValidation;
-      if (rxValidation.level === 'error') {
-        warnings.push(rxValidation.message);
-      } else if (rxValidation.level === 'warning') {
-        warnings.push(rxValidation.message);
-      }
+    if (results.rxElevationValidation && results.rxElevationValidation.level !== 'ok') {
+      const v = results.rxElevationValidation;
+      rx = {
+        level: v.level,
+        message: v.message,
+        elevation: results.rxElevationResult
+      };
     }
-    
-    // 如果有警告，显示提示
-    if (warnings.length > 0) {
-      // 延迟显示，避免与"计算完成"的toast冲突
-      setTimeout(() => {
-        wx.showModal({
-          title: '仰角提示',
-          content: warnings.join('\n'),
-          showCancel: false,
-          confirmText: '知道了'
-        });
-      }, 1500);
-    }
+
+    this.setData({ elevationWarningInfo: { tx, rx } });
   },
 
   // 显示配置管理菜单
@@ -2985,30 +3046,42 @@ Page({
       const results = this.calculateLinkBudget(this.data.satelliteParams, linkParamsWithMargin);
       
       if (results.success) {
+        // 频谱效率始终从当前 rsCode + 调制/FEC/扩频/滚降参数实时计算
+        const _modulation = this.data.linkParams.modulation || 'QPSK';
+        const _modulationFactor = MODULATION_FACTORS[_modulation] || 2;
+        const _fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
+        const _rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
+        const _bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.20;
+        const _m = parseFloat(this.data.linkParams.m) || 1;
+        const _se = _modulationFactor * _fec * _rsCode / (_bandwidthFactor * _m);
+        const spectralEfficiencyUpdate = {
+          'realtimeParams.spectralEfficiency': isNaN(_se) ? '' : _se.toFixed(4)
+        };
+
         // 根据模式决定是否更新符号率和载波带宽
         if (this.data.rateCalcMode === 'symbolRate') {
           // 符号率优先模式：保持符号率和载波带宽不变，只更新其他参数
-          this.setData({
+          this.setData(Object.assign({
             'realtimeParams.stationEIRP': results.data.stationEIRPResult,
             'realtimeParams.paRecommendation': results.data.paRecommendation,
             'realtimeParams.gOverTe': results.data.gOverTeResult
-          });
+          }, spectralEfficiencyUpdate));
         } else if (this.data.rateCalcMode === 'carrierBandwidth') {
           // 载波带宽优先模式：保持载波带宽不变，符号率由带宽反推，只更新其他参数
-          this.setData({
+          this.setData(Object.assign({
             'realtimeParams.stationEIRP': results.data.stationEIRPResult,
             'realtimeParams.paRecommendation': results.data.paRecommendation,
             'realtimeParams.gOverTe': results.data.gOverTeResult
-          });
+          }, spectralEfficiencyUpdate));
         } else {
           // 信息速率优先模式：正常更新所有参数包括符号率
-          this.setData({
+          this.setData(Object.assign({
             'realtimeParams.stationEIRP': results.data.stationEIRPResult,
             'realtimeParams.paRecommendation': results.data.paRecommendation,
             'realtimeParams.gOverTe': results.data.gOverTeResult,
             'realtimeParams.carrierBandwidth': results.data.allocBandwidthResult,
             'realtimeParams.symbolRate': results.data.symbolRateResult
-          });
+          }, spectralEfficiencyUpdate));
         }
       }
     } catch (e) {
@@ -3396,10 +3469,16 @@ Page({
   saveToHistory(results) {
     try {
       let records = wx.getStorageSync('calculationHistory') || [];
+
+      // 获取并递增全局序号计数器
+      let seqCounter = wx.getStorageSync('historySeqCounter') || 0;
+      seqCounter += 1;
+      wx.setStorageSync('historySeqCounter', seqCounter);
       
       // 创建历史记录条目
       const record = {
         id: Date.now(),
+        seqNo: seqCounter,
         time: this.formatDateTime(new Date()),
         satelliteName: this.data.satelliteParams.satelliteName || '未命名',
         orbitPosition: this.data.satelliteParams.orbitPosition,
@@ -3412,9 +3491,24 @@ Page({
         modulation: this.data.linkParams.modulation,
         margin: this.data.marginValue,
         paRecommendation: results.paRecommendation,
+        paRecommendationdB: results.paRecommendationdBResult,
+        linkmargin: results.linkmargin,
+        carrierTotalCN: results.carrierTotalCN,
+        thresholdCN: results.thresholdCN,
+        bandwidthPct: parseFloat(results.bandwidthUsageRatio).toFixed(3),
+        powerPct: parseFloat(results.powerUsageRatio).toFixed(3),
+        stationEIRP: results.stationEIRPResult,
+        symbolRate: results.symbolRateResult,
+        calcMode: this.data.calcMode,
+        inputPaPower: this.data.inputPaPower,
         // 保存完整参数用于加载
         satelliteParams: JSON.parse(JSON.stringify(this.data.satelliteParams)),
-        linkParams: JSON.parse(JSON.stringify(this.data.linkParams)),
+        linkParams: {
+          ...JSON.parse(JSON.stringify(this.data.linkParams)),
+          calcMode: this.data.calcMode,
+          inputPaPower: this.data.inputPaPower,
+          margin: this.data.marginValue
+        },
         calculationResults: JSON.parse(JSON.stringify(results)),
         marginValue: this.data.marginValue,
         noiseRatioMode: this.data.noiseRatioMode
@@ -3423,9 +3517,9 @@ Page({
       // 添加到开头
       records.unshift(record);
       
-      // 只保留最近20条
-      if (records.length > 20) {
-        records = records.slice(0, 20);
+      // 只保留最近50条
+      if (records.length > 50) {
+        records = records.slice(0, 50);
       }
       
       // 保存到本地
@@ -3490,12 +3584,15 @@ Page({
 
   // 构建历史记录导出configs（含轨道类型标签）
   _buildHistoryExportConfigs(recordsWithResults) {
-    return recordsWithResults.map(record => {
+    const historyRecords = this.data.historyRecords;
+    return recordsWithResults.map((record, fallbackIndex) => {
+      const historyPos = historyRecords.findIndex(r => r.id === record.id);
+      const seqLabel = historyPos >= 0 ? historyPos + 1 : fallbackIndex + 1;
       const orbitLabel = record.orbitType === 'NGSO'
         ? `${record.ngsoOrbitClass || 'LEO'}/NGSO`
         : 'GEO';
       return {
-        configName: `${record.satelliteName}[${orbitLabel}]_${record.time}`,
+        configName: `[${seqLabel}] ${record.satelliteName}[${orbitLabel}]_${record.time}`,
         satelliteParams: record.satelliteParams,
         linkParams: { 1: record.linkParams },
         calculationResults: { 1: record.calculationResults },
@@ -3526,7 +3623,7 @@ Page({
       return;
     }
 
-    wx.showLoading({ title: '生成Excel中...', mask: true });
+    wx.showLoading({ title: '生成Excel参数文档...', mask: true });
 
     try {
       const configs = this._buildHistoryExportConfigs(recordsWithResults);
@@ -3537,9 +3634,9 @@ Page({
         name: 'generateReport',
         data: {
           configs: configs,
-          format: 'excel',
+          format: 'excel-params',
           lang: 'zh',
-          compareMode: true,
+          compareMode: recordsWithResults.length > 1,
           oldFileID: lastExcelFileID
         }
       });

@@ -688,6 +688,53 @@ page {
   color: #ef4444;
 }
 
+/* 仰角警告置顶提示 */
+.elevation-warning-banner {
+  margin-bottom: 10rpx;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12rpx;
+}
+
+.elevation-warning-placeholder {
+  /* 占位，保持对称 */
+}
+
+.elevation-warning-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 2rpx 0;
+  gap: 6rpx;
+}
+
+.elevation-warning-icon {
+  font-size: 20rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.elevation-warning-item.elevation-warning-warning .elevation-warning-icon {
+  color: #d97706;
+}
+
+.elevation-warning-item.elevation-warning-error .elevation-warning-icon {
+  color: #dc2626;
+}
+
+.elevation-warning-text {
+  font-size: 20rpx;
+  font-weight: 500;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.elevation-warning-value {
+  font-weight: 700;
+}
+
 /* 收发站对比区样式 */
 .station-compare-panel {
   display: grid;
@@ -835,6 +882,29 @@ page {
   font-family: "SF Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
+}
+
+/* 详细结果中带告警的仰角行 */
+.result-value-with-warn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8rpx;
+  flex-wrap: nowrap;
+}
+
+.result-elevation-warn {
+  font-size: 18rpx;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.result-elevation-warn.result-elevation-warn-warning {
+  color: #d97706;
+}
+
+.result-elevation-warn.result-elevation-warn-error {
+  color: #dc2626;
 }
 
 /* 城市选择器样式 - 工业风格 */
@@ -1084,14 +1154,14 @@ page {
 .history-list {
   flex: 1;
   padding: 0;
-  background: #f9fafb;
+  background: #ffffff;
   overflow-y: auto;
 }
 
 .history-item-wrapper {
   position: relative;
-  height: 160rpx;
-  margin-bottom: 2rpx;
+  height: 200rpx;
+  border-bottom: 1rpx solid #f3f4f6;
   overflow: hidden;
   display: flex;
   align-items: center;
@@ -1119,6 +1189,20 @@ page {
   border: 3rpx solid #d1d5db;
   background: #ffffff;
   transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.history-select-order {
+  font-size: 18rpx;
+  font-weight: 700;
+  color: #6b7280;
+  line-height: 1;
+}
+
+.history-select-indicator.checked .history-select-order {
+  color: #ffffff;
 }
 
 .history-select-indicator.checked .history-select-checkbox {
@@ -1157,7 +1241,7 @@ page {
   justify-content: center;
   width: 140rpx;
   height: 100%;
-  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  background: #3b82f6;
   color: #fff;
   font-size: 26rpx;
   font-weight: 500;
@@ -1169,7 +1253,7 @@ page {
   justify-content: center;
   width: 140rpx;
   height: 100%;
-  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  background: #ef4444;
   color: #fff;
   font-size: 26rpx;
   font-weight: 500;
@@ -1260,7 +1344,26 @@ page {
 .history-item-body {
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
+  gap: 5rpx;
+}
+
+.history-results-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4rpx;
+  margin-top: 2rpx;
+}
+
+.history-rc {
+  font-size: 23rpx;
+  color: #374151;
+  font-weight: 500;
+}
+
+.history-rc-sep {
+  font-size: 20rpx;
+  color: #d1d5db;
 }
 
 .history-info {
@@ -1275,21 +1378,8 @@ page {
 
 .history-result {
   font-size: 26rpx;
-  color: #111827;
-  font-weight: 600;
-  margin-top: 8rpx;
-  display: flex;
-  align-items: center;
-}
-
-.history-result::before {
-  content: '';
-  display: inline-block;
-  width: 6rpx;
-  height: 20rpx;
-  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
-  margin-right: 10rpx;
-  border-radius: 3rpx;
+  color: #374151;
+  font-weight: 500;
 }
 
 .history-empty {

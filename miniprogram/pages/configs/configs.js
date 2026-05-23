@@ -2572,7 +2572,7 @@ Page({
       return;
     }
 
-    wx.showLoading({ title: '生成Excel中...', mask: true });
+    wx.showLoading({ title: '生成Excel参数文档...', mask: true });
 
     try {
       const configsToExport = await this.getConfigsData(selectedConfigs);
@@ -2591,7 +2591,7 @@ Page({
         name: 'generateReport',
         data: {
           configs: configsToExport,
-          format: 'excel',
+          format: 'excel-params',
           lang: exportLang,
           oldFileID: lastExcelFileID
         }

@@ -37,7 +37,8 @@ Page({
     ],
     activeAnchor: '',
     scrollTop: 0,
-    scrollViewHeight: 0
+    scrollViewHeight: 0,
+    elevationWarningInfo: { tx: null, rx: null }
   },
 
   onReady() {
@@ -78,15 +79,29 @@ Page({
         orbitTypeLabel = 'NGSO · ' + cls;
         orbitTypeDesc = descMap[cls] || '非地球同步轨道';
       }
+      const results = prevPage.data.results || {};
+
+      // 计算仰角告警
+      let txWarn = null, rxWarn = null;
+      if (results.elevationValidation && results.elevationValidation.level !== 'ok') {
+        const v = results.elevationValidation;
+        txWarn = { level: v.level, message: v.message };
+      }
+      if (results.rxElevationValidation && results.rxElevationValidation.level !== 'ok') {
+        const v = results.rxElevationValidation;
+        rxWarn = { level: v.level, message: v.message };
+      }
+
       this.setData({
-        results: prevPage.data.results || {},
+        results: results,
         markedParams: prevPage.data.markedParams || [],
         txLocation: prevPage.data.linkParams && prevPage.data.linkParams.earthStationLocation || '',
         rxLocation: prevPage.data.linkParams && prevPage.data.linkParams.rxEarthStationLocation || '',
         orbitType: orbitType,
         ngsoOrbitClass: ngsoClass,
         orbitTypeLabel: orbitTypeLabel,
-        orbitTypeDesc: orbitTypeDesc
+        orbitTypeDesc: orbitTypeDesc,
+        elevationWarningInfo: { tx: txWarn, rx: rxWarn }
       });
     }
   },

@@ -7,7 +7,14 @@
     }
     return false;
   }
-  module.exports = { includes: includes };
+  function indexOf(arr, val) {
+    if (!arr || !arr.length) return -1;
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] === val) return i;
+    }
+    return -1;
+  }
+  module.exports = { includes: includes, indexOf: indexOf };
 </wxs>
 <view class="container {{isNotIOS ? 'non-ios' : ''}}">
   <!-- 悬浮顶部操作栏 -->
@@ -429,7 +436,9 @@
         data-id="{{item.id}}">
         <!-- 多选指示器 -->
         <view class="history-select-indicator {{utils.includes(selectedHistoryIds, item.id) ? 'checked' : ''}}" wx:if="{{historySelectMode}}">
-          <view class="history-select-checkbox"></view>
+          <view class="history-select-checkbox">
+            <text class="history-select-order">{{index + 1}}</text>
+          </view>
         </view>
         <view class="history-item-content {{item.animating ? 'animating' : ''}} {{historySelectMode ? 'select-mode' : ''}}" 
               style="transform: translateX({{historySelectMode ? 0 : (item.offsetX || 0)}}px);"
@@ -439,7 +448,7 @@
               data-id="{{item.id}}">
           <view class="history-item-main" catchtap="{{historySelectMode ? '' : 'loadHistoryRecord'}}" data-id="{{item.id}}">
             <view class="history-item-header">
-              <text class="history-satellite">{{item.satelliteName}}</text>
+              <text class="history-satellite">{{index + 1}}. {{item.satelliteName}}</text>
               <view class="history-header-right">
                 <text class="orbit-tag {{item.orbitType === 'NGSO' ? 'orbit-tag-ngso orbit-tag-' + (item.ngsoOrbitClass || 'LEO') : 'orbit-tag-geo'}}">{{item.orbitType === 'NGSO' ? (item.ngsoOrbitClass || 'LEO') : 'GEO'}}</text>
                 <text class="history-time">{{item.time}}</text>
@@ -447,8 +456,21 @@
             </view>
             <view class="history-item-body">
               <text class="history-info">{{item.txLocation}} → {{item.rxLocation}}</text>
-              <text class="history-params">{{item.infoRate}}kbps | {{item.modulation}} | 余量{{item.margin}}dB</text>
-              <text class="history-result">功放: {{item.paRecommendation}}W</text>
+              <text class="history-params">{{item.frequencyBand}} | {{item.infoRate}}kbps | {{item.modulation}}</text>
+              <view class="history-results-row" wx:if="{{item.linkmargin}}">
+                <text class="history-rc" wx:if="{{item.calcMode === 'forward'}}">PA {{item.inputPaPower}}W</text>
+                <text class="history-rc" wx:else>功放 {{item.paRecommendation}}W</text>
+                <text class="history-rc-sep">·</text>
+                <text class="history-rc" wx:if="{{item.calcMode === 'forward'}}">余量 {{item.linkmargin}}dB</text>
+                <text class="history-rc" wx:else>目标余量 {{item.margin}}dB</text>
+                <text class="history-rc-sep">·</text>
+                <text class="history-rc">C/N {{item.carrierTotalCN}}dB</text>
+                <text class="history-rc-sep">·</text>
+                <text class="history-rc">带宽 {{item.bandwidthPct}}%</text>
+                <text class="history-rc-sep">·</text>
+                <text class="history-rc">功率 {{item.powerPct}}%</text>
+              </view>
+              <text class="history-result" wx:else>功放: {{item.paRecommendation}}W</text>
             </view>
           </view>
         </view>
@@ -634,7 +656,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">转发器带宽(MHz)</text>
+          <text class="form-label">Tpdr.带宽(MHz)</text>
           <input class="form-input" 
                  type="text"
                  placeholder="36" 
@@ -656,7 +678,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">转发器IBO(dB)</text>
+          <text class="form-label">Tpdr. IBO(dB)</text>
           <input class="form-input" 
                  type="text"
                  placeholder="6" 
@@ -667,7 +689,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">转发器OBO(dB)</text>
+          <text class="form-label">Tpdr. OBO(dB)</text>
           <input class="form-input" 
                  type="text"
                  placeholder="3" 
@@ -772,7 +794,7 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">Xpdr C/IM(dB)</text>
+            <text class="form-label">Tpdr. C/IM(dB)</text>
             <input class="form-input" 
                    type="text"
                    placeholder="21" 
@@ -983,7 +1005,7 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <text class="form-label">降雨率(mm/h)</text>
+              <text class="form-label">R0.01%(mm/h)</text>
               <input class="form-input" 
                      type="text"
                      placeholder="40" 
@@ -1260,7 +1282,7 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <text class="form-label">降雨率(mm/h)</text>
+              <text class="form-label">R0.01%(mm/h)</text>
               <input class="form-input" 
                      type="text"
                      placeholder="40" 
@@ -1432,20 +1454,9 @@
       <!-- 第二行：扩展参数（完全展开时显示） -->
       <view class="grid-4" wx:if="{{carrierParamsExpandState === 'full'}}">
         <view class="form-group">
-          <text class="form-label">帧效率</text>
-          <input class="form-input" 
-                 type="text"
-                 placeholder="188/204" 
-                 value="{{linkParams.rsCode}}"
-                 data-field="rsCode"
-               data-focus-area="carrier"
-               adjust-position="{{true}}"
-               cursor-spacing="120"
-                 bindinput="onRsCodeInput" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-
-        <view class="form-group">
-          <text class="form-label">误码率 (1×10⁻ⁿ)</text>
+          <view class="form-label-row">
+            <text class="form-label">误码率 (1×10⁻ⁿ)</text>
+          </view>
           <input class="form-input" 
                  type="text"
                  placeholder="7" 
@@ -1458,7 +1469,9 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">扩频增益</text>
+          <view class="form-label-row">
+            <text class="form-label">扩频增益</text>
+          </view>
           <input class="form-input" 
                  type="text"
                  placeholder="1.00" 
@@ -1471,7 +1484,9 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">滚降系数(1+α)</text>
+          <view class="form-label-row">
+            <text class="form-label">滚降系数(1+α)</text>
+          </view>
           <input class="form-input" 
                  type="text"
                  placeholder="1.20" 
@@ -1481,6 +1496,22 @@
                adjust-position="{{true}}"
                cursor-spacing="120"
                  bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
+
+        <view class="form-group">
+          <view class="form-label-row">
+            <text class="form-label">{{rsCodeMode === 'spectral' ? '频谱效率(bps/Hz)' : '帧效率'}}</text>
+            <button class="toggle-btn-emoji" bindtap="toggleRsCodeMode">🔄</button>
+          </view>
+          <input class="form-input" 
+                 type="text"
+                 placeholder="{{rsCodeMode === 'spectral' ? '0.9216' : '188/204'}}" 
+                 value="{{rsCodeMode === 'spectral' ? realtimeParams.spectralEfficiency : linkParams.rsCode}}"
+                 data-field="rsCode"
+               data-focus-area="carrier"
+               adjust-position="{{true}}"
+               cursor-spacing="120"
+                 bindinput="onRsCodeInput" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
       </view>
       
@@ -1536,6 +1567,23 @@
     
     <!-- 核心结论区 - 置顶 -->
     <view class="core-results">
+
+      <!-- 仰角警告置顶提示 -->
+      <view wx:if="{{elevationWarningInfo.tx || elevationWarningInfo.rx}}" class="elevation-warning-banner">
+        <!-- 发信站（左） -->
+        <view wx:if="{{elevationWarningInfo.tx}}" class="elevation-warning-item elevation-warning-{{elevationWarningInfo.tx.level}}">
+          <text class="elevation-warning-icon">{{elevationWarningInfo.tx.level === 'error' ? '✕' : '▲'}}</text>
+          <text class="elevation-warning-text">{{elevationWarningInfo.tx.message}}<text wx:if="{{elevationWarningInfo.tx.level !== 'error'}}" class="elevation-warning-value"> ({{elevationWarningInfo.tx.elevation}}°)</text></text>
+        </view>
+        <view wx:else class="elevation-warning-placeholder"></view>
+        <!-- 收信站（右） -->
+        <view wx:if="{{elevationWarningInfo.rx}}" class="elevation-warning-item elevation-warning-{{elevationWarningInfo.rx.level}}">
+          <text class="elevation-warning-icon">{{elevationWarningInfo.rx.level === 'error' ? '✕' : '▲'}}</text>
+          <text class="elevation-warning-text">{{elevationWarningInfo.rx.message}}<text wx:if="{{elevationWarningInfo.rx.level !== 'error'}}" class="elevation-warning-value"> ({{elevationWarningInfo.rx.elevation}}°)</text></text>
+        </view>
+        <view wx:else class="elevation-warning-placeholder"></view>
+      </view>
+
       <view class="core-results-grid">
         <view class="core-result-row">
           <text class="core-result-label">功放建议</text>
@@ -1616,7 +1664,10 @@
               bindtap="toggleHighlight" 
               data-param="elevationResult">
           <text class="result-label">{{orbitType === 'NGSO' ? '最低仰角' : '对卫星仰角'}}</text>
-          <text class="result-value">{{results.elevationResult}}°</text>
+          <view class="result-value-with-warn">
+            <text class="result-value">{{results.elevationResult}}°</text>
+            <text wx:if="{{elevationWarningInfo.tx}}" class="result-elevation-warn result-elevation-warn-{{elevationWarningInfo.tx.level}}">{{elevationWarningInfo.tx.level === 'error' ? '✕' : '▲'}} {{elevationWarningInfo.tx.message}}</text>
+          </view>
         </view>
         <view wx:if="{{orbitType !== 'NGSO'}}" class="result-item {{markedParams.indexOf('azimuthResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
@@ -1787,7 +1838,10 @@
               bindtap="toggleHighlight" 
               data-param="rxElevationResult">
           <text class="result-label">{{orbitType === 'NGSO' ? '最低仰角' : '对卫星仰角'}}</text>
-          <text class="result-value">{{results.rxElevationResult}}°</text>
+          <view class="result-value-with-warn">
+            <text class="result-value">{{results.rxElevationResult}}°</text>
+            <text wx:if="{{elevationWarningInfo.rx}}" class="result-elevation-warn result-elevation-warn-{{elevationWarningInfo.rx.level}}">{{elevationWarningInfo.rx.level === 'error' ? '✕' : '▲'}} {{elevationWarningInfo.rx.message}}</text>
+          </view>
         </view>
         <view wx:if="{{orbitType !== 'NGSO'}}" class="result-item {{markedParams.indexOf('rxAzimuthResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 

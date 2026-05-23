@@ -128,8 +128,20 @@
         </view>
         <!-- 仰角 -->
         <view class="dual-row">
-          <view class="dual-cell"><text class="p-label">{{isNGSO ? t.minElevation : t.elevation}}</text><text class="p-value">{{results.elevationResult}}<text class="p-unit">°</text></text></view>
-          <view class="dual-cell"><text class="p-label">{{isNGSO ? t.minElevation : t.elevation}}</text><text class="p-value">{{results.rxElevationResult}}<text class="p-unit">°</text></text></view>
+          <view class="dual-cell">
+            <text class="p-label">{{isNGSO ? t.minElevation : t.elevation}}</text>
+            <view class="p-value-with-warn">
+              <text class="p-value">{{results.elevationResult}}<text class="p-unit">°</text></text>
+              <text wx:if="{{elevationWarningInfo.tx}}" class="p-elevation-warn p-elevation-warn-{{elevationWarningInfo.tx.level}}">{{elevationWarningInfo.tx.level === 'error' ? '✕' : '▲'}} {{elevationWarningInfo.tx.message}}</text>
+            </view>
+          </view>
+          <view class="dual-cell">
+            <text class="p-label">{{isNGSO ? t.minElevation : t.elevation}}</text>
+            <view class="p-value-with-warn">
+              <text class="p-value">{{results.rxElevationResult}}<text class="p-unit">°</text></text>
+              <text wx:if="{{elevationWarningInfo.rx}}" class="p-elevation-warn p-elevation-warn-{{elevationWarningInfo.rx.level}}">{{elevationWarningInfo.rx.level === 'error' ? '✕' : '▲'}} {{elevationWarningInfo.rx.message}}</text>
+            </view>
+          </view>
         </view>
         <!-- 方位角 / 星地斜距 -->
         <view class="dual-row">
@@ -178,6 +190,7 @@
   <!-- 操作按钮 -->
   <view class="action-bar">
     <button class="action-btn" bindtap="shareReport">{{t.btnShare}}</button>
+    <button class="action-btn" bindtap="exportExcel">{{t.btnExcel}}</button>
     <button class="action-btn primary" bindtap="copyReportText">{{t.btnCopy}}</button>
   </view>
 </view>

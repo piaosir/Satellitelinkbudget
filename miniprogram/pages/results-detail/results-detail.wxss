@@ -310,3 +310,24 @@
   font-variant-numeric: tabular-nums;
   word-break: break-all;
 }
+
+.detail-value-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.detail-el-warn {
+  font-size: 20rpx;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.detail-el-warn.detail-el-warn-warning {
+  color: #d97706;
+}
+
+.detail-el-warn.detail-el-warn-error {
+  color: #dc2626;
+}

@@ -235,6 +235,30 @@ page {
   font-family: 'Times New Roman', 'Consolas', monospace;
 }
 
+/* 仰角告警行 */
+.p-value-with-warn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6rpx;
+  flex-wrap: nowrap;
+}
+
+.p-elevation-warn {
+  font-size: 16rpx;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.p-elevation-warn.p-elevation-warn-warning {
+  color: #d97706;
+}
+
+.p-elevation-warn.p-elevation-warn-error {
+  color: #dc2626;
+}
+
 .p-unit {
   font-size: 14rpx;
   font-weight: 400;

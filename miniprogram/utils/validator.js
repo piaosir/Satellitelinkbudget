@@ -299,7 +299,7 @@ function validateElevation(elevation, stationName = '') {
     return {
       valid: false,
       level: 'error',
-      message: `${prefix}位置错误`
+      message: `${prefix}卫星不可见`
     };
   }
   

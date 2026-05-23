@@ -370,24 +370,26 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
 
   const linkCount = allLinksData.length;
   const C4 = 4; // 每链路4列
+  const SEP = 1; // 配置间隔列
+  const colStep = C4 + SEP;
   const columns = [];
   for (let i = 0; i < linkCount; i++) {
     columns.push({ width: 14 }, { width: 16 }, { width: 14 }, { width: 16 });
+    if (i < linkCount - 1) columns.push({ width: 2 }); // 间隔列
   }
   sheet.columns = columns;
 
   const baseRows = compareMode && linkCount > 1 ? allLinksData[0].rows : null;
 
   // 标题行（合并4列，顶粗线）
-  let ci = 1;
-  for (const ld of allLinksData) {
+  for (let i = 0; i < linkCount; i++) {
+    const ci = i * colStep + 1;
     sheet.mergeCells(1, ci, 1, ci + C4 - 1);
     const cell = sheet.getCell(1, ci);
-    cell.value = `${ld.configTitle}    ${new Date().toISOString().slice(0, 10)}`;
+    cell.value = `${allLinksData[i].configTitle}    ${new Date().toISOString().slice(0, 10)}`;
     cell.font = headerFont;
     cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
     for (let c = ci; c < ci + C4; c++) sheet.getCell(1, c).border = headerBorder;
-    ci += C4;
   }
   sheet.getRow(1).height = 20;
 
@@ -397,11 +399,11 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
 
   for (let ri = 0; ri < maxRows; ri++) {
     const rowNum = ri + 2;
-    ci = 1;
     for (let li = 0; li < linkCount; li++) {
+      const ci = li * colStep + 1;
       const ld = allLinksData[li];
       const rd = ld.rows[ri];
-      if (!rd) { ci += C4; continue; }
+      if (!rd) { continue; }
 
       if (rd[0] === S) {
         sheet.mergeCells(rowNum, ci, rowNum, ci + C4 - 1);
@@ -440,21 +442,24 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
         }
         lastDataRowNum = rowNum;
       }
-      ci += C4;
     }
     const fr = allLinksData[0].rows[ri];
     sheet.getRow(rowNum).height = (fr && fr[0] === S) ? 18 : 17;
   }
 
-  // 底粗线
-  for (let c = 1; c <= linkCount * C4; c++) {
-    sheet.getCell(lastDataRowNum, c).border = lastRowBorder;
+  // 底粗线（各配置分别处理）
+  for (let li = 0; li < linkCount; li++) {
+    const ci = li * colStep + 1;
+    for (let c = ci; c < ci + C4; c++) {
+      sheet.getCell(lastDataRowNum, c).border = lastRowBorder;
+    }
   }
 
   // 汇总行（非对比模式）
   if (!compareMode) {
     const sumRow = lastDataRowNum + 2;
-    sheet.mergeCells(sumRow, 1, sumRow, linkCount * C4);
+    const totalCols = linkCount * colStep - SEP; // 去掉末尾间隔列
+    sheet.mergeCells(sumRow, 1, sumRow, totalCols);
     const sumCell = sheet.getCell(sumRow, 1);
     const totalFmt = formatBandwidth(totalEquivalentBW);
     sumCell.value = isZh
@@ -465,8 +470,6 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
     sumCell.border = { top: topRule, bottom: bottomRule, left: noBorder, right: noBorder };
     sheet.getRow(sumRow).height = 22;
   }
-
-  return { totalEquivalentBW, linkCount };
 }
 
 async function generateExcel(configs, lang, compareMode = false) {
@@ -1030,8 +1033,15 @@ function getFirstLinkParams(config) {
   return nums.length > 0 ? links[nums[0]] : {};
 }
 
-// 生成 Excel 参数设置文档（学术三线表风格，Times New Roman 11pt）
-async function generateExcelParams(configs, lang) {
+// 获取配置中第一条有效计算结果
+function getFirstCalcResults(config) {
+  const results = config.calculationResults || {};
+  const nums = Object.keys(results).filter(k => typeof results[k] === 'object');
+  return nums.length > 0 ? results[nums[0]] : {};
+}
+
+// 生成 Excel 参数设置文档（学术三线表风格，横向多配置并排，配置间隔一列）
+async function generateExcelParams(configs, lang, compareMode = false) {
   const isZh = (lang !== 'en');
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Satellite Link Budget System';
@@ -1040,45 +1050,34 @@ async function generateExcelParams(configs, lang) {
   const sheetName = isZh ? '参数设置' : 'Parameters';
   const sheet = workbook.addWorksheet(sheetName);
 
-  // 紧凑4列
-  sheet.columns = [
-    { width: 16 }, { width: 17 }, { width: 16 }, { width: 17 }
-  ];
-
-  // 值+单位格式化
   const u = (val, unit) => {
     if (val === undefined || val === null || val === '') return '--';
     return unit ? `${val} ${unit}` : String(val);
   };
 
-  // 学术三线表配色 & 字体
   const FONT = 'Times New Roman';
   const headerFont = { bold: true, size: 11, name: FONT, color: { argb: 'FF000000' } };
   const sectionFont = { bold: true, italic: true, size: 11, name: FONT, color: { argb: 'FF000000' } };
   const labelFont = { size: 11, name: FONT, color: { argb: 'FF333333' } };
   const valFont = { size: 11, name: FONT, color: { argb: 'FF000000' } };
-  const dateFont = { size: 10, name: FONT, color: { argb: 'FF666666' } };
-  // 三线表边框：顶粗线、底粗线、节线细线
   const topRule = { style: 'medium', color: { argb: 'FF000000' } };
   const bottomRule = { style: 'medium', color: { argb: 'FF000000' } };
   const thinRule = { style: 'thin', color: { argb: 'FF000000' } };
   const noBorder = { style: 'none' };
-  // 标题行下方：粗线
   const headerBorder = { top: topRule, bottom: thinRule, left: noBorder, right: noBorder };
-  // 分节行：上下细线
   const sectionBorder = { top: thinRule, bottom: thinRule, left: noBorder, right: noBorder };
-  // 普通行：无左右线
   const dataBorder = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
-  // 最后一行：底粗线
   const lastRowBorder = { top: noBorder, bottom: bottomRule, left: noBorder, right: noBorder };
+  const yellowFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+  const S = 'section', D = 'data';
+  const allConfigsData = [];
 
   for (const config of configs) {
     const sat = config.satelliteParams || {};
     const lp = getFirstLinkParams(config);
+    const cr = getFirstCalcResults(config);
     const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : (isZh ? '自定义' : 'Custom');
     const isForward = lp.calcMode === 'forward';
-
-    // NGSO 适配
     const isNGSO = sat.orbitType === 'NGSO';
     const ngsoClass = sat.ngsoOrbitClass || 'LEO';
     const islMode = sat.islInputMode || 'cno';
@@ -1090,131 +1089,149 @@ async function generateExcelParams(configs, lang) {
     const rxDistMode = lp.rxDistanceMode || 'altitude';
     const rxDistLabel = rxDistMode === 'slantRange' ? (isZh ? '星地斜距' : 'Slant Range') : (isZh ? '轨道高度' : 'Orbit Alt');
     const rxDistVal = rxDistMode === 'slantRange' ? u(lp.rxSlantRange, 'km') : u(lp.rxOrbitAltitude, 'km');
-
-    let row = 1;
-    let lastDataRow = row; // 跟踪最后数据行
-
-    // 标题行（名称 + 日期同行，顶粗线）
-    sheet.mergeCells(row, 1, row, 4);
-    const titleCell = sheet.getCell(row, 1);
-    const configTitle = config.configName || (isZh ? '卫星链路参数设置' : 'Link Parameters');
-    titleCell.value = `${configTitle}    ${new Date().toISOString().slice(0, 10)}`;
-    titleCell.font = headerFont;
-    titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-    titleCell.border = headerBorder;
-    sheet.getRow(row).height = 20;
-    row++;
-
-    // 辅助函数：添加分节标题行（斜体加粗，上下细线）
-    const addSection = (title) => {
-      sheet.mergeCells(row, 1, row, 4);
-      const cell = sheet.getCell(row, 1);
-      cell.value = title;
-      cell.font = sectionFont;
-      cell.border = sectionBorder;
-      cell.alignment = { vertical: 'middle' };
-      sheet.getRow(row).height = 18;
-      row++;
-    };
-
-    // 辅助函数：添加参数行（无垂直线，纯净）
-    const addParam = (label1, val1, label2, val2) => {
-      const r = sheet.getRow(row);
-      r.getCell(1).value = label1;
-      r.getCell(1).font = labelFont;
-      r.getCell(1).border = dataBorder;
-      r.getCell(1).alignment = { vertical: 'middle' };
-      r.getCell(2).value = val1;
-      r.getCell(2).font = valFont;
-      r.getCell(2).border = dataBorder;
-      r.getCell(2).alignment = { vertical: 'middle' };
-      if (label2 !== undefined) {
-        r.getCell(3).value = label2;
-        r.getCell(3).font = labelFont;
-        r.getCell(3).border = dataBorder;
-        r.getCell(3).alignment = { vertical: 'middle' };
-        r.getCell(4).value = val2;
-        r.getCell(4).font = valFont;
-        r.getCell(4).border = dataBorder;
-        r.getCell(4).alignment = { vertical: 'middle' };
-      } else {
-        sheet.mergeCells(row, 3, row, 4);
-        r.getCell(3).border = dataBorder;
-      }
-      sheet.getRow(row).height = 17;
-      lastDataRow = row;
-      row++;
-    };
-
-    // 卫星参数
-    addSection(isZh ? '卫星参数' : 'Satellite Parameters');
-    if (isNGSO) {
-      addParam(isZh ? '卫星名称' : 'Satellite', u(sat.satelliteName), isZh ? '轨道类型' : 'Orbit Type', `${ngsoClass} / NGSO`);
-      addParam(isZh ? '工作频段' : 'Band', u(sat.frequencyBand), 'SFD', u(sat.sfdRef, 'dBW/m²'));
-      const islDisplayVal = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
-      addParam(isZh ? '转发器带宽' : 'Xpdr BW', u(sat.transponderBandwidth, 'MHz'), islLabel, u(islDisplayVal, islUnit));
-      addParam(isZh ? '转发器IBO' : 'BOi', u(sat.BOi, 'dB'), isZh ? '转发器OBO' : 'BOo', u(sat.BOo, 'dB'));
-      addParam(isZh ? 'ISL跳数' : 'ISL Hops', u(sat.islHops));
-    } else {
-      addParam(isZh ? '卫星名称' : 'Satellite', u(sat.satelliteName), isZh ? '轨道位置' : 'Orbit', u(sat.orbitPosition, '°E'));
-      addParam(isZh ? '工作频段' : 'Band', u(sat.frequencyBand), 'SFD', u(sat.sfdRef, 'dBW/m²'));
-      addParam(isZh ? '转发器带宽' : 'Xpdr BW', u(sat.transponderBandwidth, 'MHz'), isZh ? '邻星离轴角' : 'Isolation', u(sat.deltaTheta, '°'));
-      addParam(isZh ? '转发器IBO' : 'BOi', u(sat.BOi, 'dB'), isZh ? '转发器OBO' : 'BOo', u(sat.BOo, 'dB'));
-    }
-
-    // 干扰因子
-    addSection(isZh ? '干扰因子' : 'Interference Factors');
-    addParam(isZh ? '上行C/ACI' : 'UL C/ACI', u(sat.aciUplinkFactor, 'dB'), isZh ? '上行C/ASI' : 'UL C/ASI', u(sat.adjUplinkFactor, 'dB'));
-    addParam(isZh ? '上行C/XPI' : 'UL C/XPI', u(sat.xpolUplinkFactor, 'dB'), 'HPA C/IM', u(sat.hpaIntermodFactor, 'dB'));
-    addParam(isZh ? '下行C/ACI' : 'DL C/ACI', u(sat.aciDownlinkFactor, 'dB'), isZh ? '下行C/ASI' : 'DL C/ASI', u(sat.adjDownlinkFactor, 'dB'));
-    addParam(isZh ? '下行C/XPI' : 'DL C/XPI', u(sat.xpolDownlinkFactor, 'dB'), 'Xpdr C/IM', u(sat.xpdrIntermodFactor, 'dB'));
-
-    // 上行站参数
-    addSection(isZh ? '上行站参数' : 'Uplink Station');
-    addParam(isZh ? '地面站位置' : 'Station', u(lp.earthStationLocation), isZh ? '极化方式' : 'Polarization', u(lp.uplinkPolarization));
-    addParam(isZh ? '天线口径' : 'Antenna Dia.', u(lp.antennaDiameter, 'm'), isZh ? '天线效率' : 'Efficiency', u(lp.antennaEfficiency, '%'));
-    addParam(isZh ? '经度' : 'Longitude', u(lp.longitude, '°E'), isZh ? '纬度' : 'Latitude', u(lp.latitude, '°N'));
-    addParam(isZh ? '上行频率' : 'UL Freq.', u(lp.centerFrequency, 'GHz'), isZh ? '卫星G/T' : 'Sat. G/T', u(lp.G_Ts, 'dB/K'));
-    if (isNGSO) {
-      addParam(isZh ? '最低仰角' : 'Min Elevation', u(lp.minElevation, '°'), upDistLabel, upDistVal);
-    }
-    addParam(isZh ? '海拔' : 'Altitude', u(lp.altitude, 'm'), isZh ? '降雨率' : 'Rain Rate', u(lp.rainRate, 'mm/h'));
-    addParam(isZh ? '功放回退' : 'PA Backoff', u(lp.paBackoff, 'dB'), isZh ? '馈线损耗' : 'Feeder Loss', u(lp.feederLoss, 'dB'));
-    addParam('UPC', lp.uplinkPowerControl === '自定义' ? (isZh ? '自定义 ' + u(lp.upcValue, 'dB') : 'Custom ' + u(lp.upcValue, 'dB')) : u(lp.uplinkPowerControl), isZh ? '可用度' : 'Availability', u(lp.uplinkAvailability, '%'));
-
-    // 接收站参数
-    addSection(isZh ? '接收站参数' : 'Downlink Station');
-    addParam(isZh ? '地面站位置' : 'Station', u(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Polarization', u(lp.downlinkPolarization));
-    addParam(isZh ? '天线口径' : 'Antenna Dia.', u(lp.rxAntennaDiameter, 'm'), isZh ? '天线效率' : 'Efficiency', u(lp.rxAntennaEfficiency, '%'));
-    addParam(isZh ? '经度' : 'Longitude', u(lp.rxLongitude, '°E'), isZh ? '纬度' : 'Latitude', u(lp.rxLatitude, '°N'));
-    addParam(isZh ? '下行频率' : 'DL Freq.', u(lp.rxCenterFrequency, 'GHz'), isZh ? '卫星EIRP' : 'Sat. EIRP', u(lp.rxEIRP, 'dBW'));
-    if (isNGSO) {
-      addParam(isZh ? '最低仰角' : 'Min Elevation', u(lp.rxMinElevation, '°'), rxDistLabel, rxDistVal);
-    }
-    addParam(isZh ? '海拔' : 'Altitude', u(lp.rxAltitude, 'm'), isZh ? '降雨率' : 'Rain Rate', u(lp.rxRainRate, 'mm/h'));
-    addParam(isZh ? '天线噪温' : 'Ant. Noise T', u(lp.rxAntennaNoiseTemp, 'K'), isZh ? '接收机噪温' : 'Rx Noise T', u(lp.rxReceiverNoiseTemp, 'K'));
-    addParam(isZh ? '馈线损耗' : 'Feeder Loss', u(lp.rxFeederLoss, 'dB'), isZh ? '可用度' : 'Availability', u(lp.rxDownlinkAvailability, '%'));
-
-    // 载波参数
-    addSection(isZh ? '载波参数' : 'Carrier Parameters');
-    addParam(isZh ? '标准' : 'DVB Std', dvbLabel, isZh ? '调制方式' : 'Modulation', u(lp.modulation));
-    addParam(isZh ? '信息速率' : 'Info Rate', u(lp.infoRate, 'kbps'), isZh ? 'FEC码率' : 'FEC Rate', u(lp.fec));
-    addParam(isZh ? '帧效率' : 'Frame Eff.', u(lp.rsCode), isZh ? '滚降系数' : 'Roll-off (1+α)', u(lp.bandwidthFactor));
+    const islDisplayVal = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
     const noiseMode = config.noiseRatioMode || 'ebno';
     const noiseLabel = noiseMode === 'esno' ? 'Es/N0' : 'Eb/N0';
-    addParam(isZh ? '误码率' : 'BER', '1E-' + u(lp.ber), noiseLabel, u(lp.ebno, 'dB'));
     const lastLabel = isForward ? (isZh ? '功放功率' : 'PA Power') : (isZh ? '余量' : 'Margin');
-    const lastVal = isForward ? u(lp.inputPaPower, 'W') : u(lp.margin, 'dB');
-    addParam(lastLabel, lastVal);
+    const lastVal = isForward ? u(lp.inputPaPower, 'W') : u(cr.linkmargin !== undefined ? cr.linkmargin : lp.margin, 'dB');
+    const configTitle = config.configName || (isZh ? '卫星链路参数设置' : 'Link Parameters');
 
-    // 给最后数据行加底粗线
-    for (let c = 1; c <= 4; c++) {
-      sheet.getCell(lastDataRow, c).border = lastRowBorder;
+    const rows = [
+      [S, isZh ? '卫星参数' : 'Satellite Parameters'],
+      ...(isNGSO ? [
+        [D, isZh ? '卫星名称' : 'Satellite', u(sat.satelliteName), isZh ? '轨道类型' : 'Orbit Type', `${ngsoClass} / NGSO`],
+        [D, isZh ? '工作频段' : 'Band', u(sat.frequencyBand), 'SFD', u(sat.sfdRef, 'dBW/m²')],
+        [D, isZh ? '转发器带宽' : 'Xpdr BW', u(sat.transponderBandwidth, 'MHz'), islLabel, u(islDisplayVal, islUnit)],
+        [D, isZh ? '转发器IBO' : 'BOi', u(sat.BOi, 'dB'), isZh ? '转发器OBO' : 'BOo', u(sat.BOo, 'dB')],
+        [D, isZh ? 'ISL跳数' : 'ISL Hops', u(sat.islHops)],
+      ] : [
+        [D, isZh ? '卫星名称' : 'Satellite', u(sat.satelliteName), isZh ? '轨道位置' : 'Orbit', u(sat.orbitPosition, '°E')],
+        [D, isZh ? '工作频段' : 'Band', u(sat.frequencyBand), 'SFD', u(sat.sfdRef, 'dBW/m²')],
+        [D, isZh ? '转发器带宽' : 'Xpdr BW', u(sat.transponderBandwidth, 'MHz'), isZh ? '邻星离轴角' : 'Isolation', u(sat.deltaTheta, '°')],
+        [D, isZh ? '转发器IBO' : 'BOi', u(sat.BOi, 'dB'), isZh ? '转发器OBO' : 'BOo', u(sat.BOo, 'dB')],
+      ]),
+      [S, isZh ? '干扰因子' : 'Interference Factors'],
+      [D, isZh ? '上行C/ACI' : 'UL C/ACI', u(sat.aciUplinkFactor, 'dB'), isZh ? '上行C/ASI' : 'UL C/ASI', u(sat.adjUplinkFactor, 'dB')],
+      [D, isZh ? '上行C/XPI' : 'UL C/XPI', u(sat.xpolUplinkFactor, 'dB'), 'HPA C/IM', u(sat.hpaIntermodFactor, 'dB')],
+      [D, isZh ? '下行C/ACI' : 'DL C/ACI', u(sat.aciDownlinkFactor, 'dB'), isZh ? '下行C/ASI' : 'DL C/ASI', u(sat.adjDownlinkFactor, 'dB')],
+      [D, isZh ? '下行C/XPI' : 'DL C/XPI', u(sat.xpolDownlinkFactor, 'dB'), 'Xpdr C/IM', u(sat.xpdrIntermodFactor, 'dB')],
+      [S, isZh ? '上行站参数' : 'Uplink Station'],
+      [D, isZh ? '地面站位置' : 'Station', u(lp.earthStationLocation), isZh ? '极化方式' : 'Polarization', u(lp.uplinkPolarization)],
+      [D, isZh ? '天线口径' : 'Antenna Dia.', u(lp.antennaDiameter, 'm'), isZh ? '天线效率' : 'Efficiency', u(lp.antennaEfficiency, '%')],
+      [D, isZh ? '经度' : 'Longitude', u(lp.longitude, '°E'), isZh ? '纬度' : 'Latitude', u(lp.latitude, '°N')],
+      [D, isZh ? '上行频率' : 'UL Freq.', u(lp.centerFrequency, 'GHz'), isZh ? '卫星G/T' : 'Sat. G/T', u(lp.G_Ts, 'dB/K')],
+      ...(isNGSO ? [[D, isZh ? '最低仰角' : 'Min Elevation', u(lp.minElevation, '°'), upDistLabel, upDistVal]] : []),
+      [D, isZh ? '海拔' : 'Altitude', u(lp.altitude, 'm'), isZh ? '降雨率' : 'Rain Rate', u(lp.rainRate, 'mm/h')],
+      [D, isZh ? '功放回退' : 'PA Backoff', u(lp.paBackoff, 'dB'), isZh ? '馈线损耗' : 'Feeder Loss', u(lp.feederLoss, 'dB')],
+      [D, 'UPC', lp.uplinkPowerControl === '自定义' ? (isZh ? '自定义 ' + u(lp.upcValue, 'dB') : 'Custom ' + u(lp.upcValue, 'dB')) : u(lp.uplinkPowerControl), isZh ? '可用度' : 'Availability', u(lp.uplinkAvailability, '%')],
+      [S, isZh ? '接收站参数' : 'Downlink Station'],
+      [D, isZh ? '地面站位置' : 'Station', u(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Polarization', u(lp.downlinkPolarization)],
+      [D, isZh ? '天线口径' : 'Antenna Dia.', u(lp.rxAntennaDiameter, 'm'), isZh ? '天线效率' : 'Efficiency', u(lp.rxAntennaEfficiency, '%')],
+      [D, isZh ? '经度' : 'Longitude', u(lp.rxLongitude, '°E'), isZh ? '纬度' : 'Latitude', u(lp.rxLatitude, '°N')],
+      [D, isZh ? '下行频率' : 'DL Freq.', u(lp.rxCenterFrequency, 'GHz'), isZh ? '卫星EIRP' : 'Sat. EIRP', u(lp.rxEIRP, 'dBW')],
+      ...(isNGSO ? [[D, isZh ? '最低仰角' : 'Min Elevation', u(lp.rxMinElevation, '°'), rxDistLabel, rxDistVal]] : []),
+      [D, isZh ? '海拔' : 'Altitude', u(lp.rxAltitude, 'm'), isZh ? '降雨率' : 'Rain Rate', u(lp.rxRainRate, 'mm/h')],
+      [D, isZh ? '天线噪温' : 'Ant. Noise T', u(lp.rxAntennaNoiseTemp, 'K'), isZh ? '接收机噪温' : 'Rx Noise T', u(lp.rxReceiverNoiseTemp, 'K')],
+      [D, isZh ? '馈线损耗' : 'Feeder Loss', u(lp.rxFeederLoss, 'dB'), isZh ? '可用度' : 'Availability', u(lp.rxDownlinkAvailability, '%')],
+      [S, isZh ? '载波参数' : 'Carrier Parameters'],
+      [D, isZh ? '标准' : 'DVB Std', dvbLabel, isZh ? '调制方式' : 'Modulation', u(lp.modulation)],
+      [D, isZh ? '信息速率' : 'Info Rate', u(lp.infoRate, 'kbps'), isZh ? 'FEC码率' : 'FEC Rate', u(lp.fec)],
+      [D, isZh ? '帧效率' : 'Frame Eff.', u(lp.rsCode), isZh ? '滚降系数' : 'Roll-off (1+α)', u(lp.bandwidthFactor)],
+      [D, isZh ? '误码率' : 'BER', '1E-' + u(lp.ber), noiseLabel, u(lp.ebno, 'dB')],
+      [D, lastLabel, lastVal],
+    ];
+    allConfigsData.push({ configTitle, rows });
+  }
+
+  if (allConfigsData.length === 0) {
+    const buffer = await workbook.xlsx.writeBuffer();
+    return buffer;
+  }
+
+  const configCount = allConfigsData.length;
+  const C4 = 4;   // 每配置4列（标签+值，左右各一对）
+  const SEP = 1;  // 配置间隔列数
+  const colStep = C4 + SEP;
+
+  // 设置列宽：每配置4列 + 间隔列
+  const columns = [];
+  for (let i = 0; i < configCount; i++) {
+    columns.push({ width: 16 }, { width: 17 }, { width: 16 }, { width: 17 });
+    if (i < configCount - 1) columns.push({ width: 2 }); // 间隔列
+  }
+  sheet.columns = columns;
+
+  // 标题行（顶粗线）
+  for (let i = 0; i < configCount; i++) {
+    const ci = i * colStep + 1;
+    sheet.mergeCells(1, ci, 1, ci + C4 - 1);
+    const cell = sheet.getCell(1, ci);
+    cell.value = `${allConfigsData[i].configTitle}    ${new Date().toISOString().slice(0, 10)}`;
+    cell.font = headerFont;
+    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    for (let c = ci; c < ci + C4; c++) sheet.getCell(1, c).border = headerBorder;
+  }
+  sheet.getRow(1).height = 20;
+
+  // 数据行
+  const maxRows = Math.max(...allConfigsData.map(d => d.rows.length));
+  let lastDataRowNum = 2;
+
+  for (let ri = 0; ri < maxRows; ri++) {
+    const rowNum = ri + 2;
+    for (let li = 0; li < configCount; li++) {
+      const ci = li * colStep + 1;
+      const rd = allConfigsData[li].rows[ri];
+      if (!rd) continue;
+
+      if (rd[0] === S) {
+        sheet.mergeCells(rowNum, ci, rowNum, ci + C4 - 1);
+        const cell = sheet.getCell(rowNum, ci);
+        cell.value = rd[1];
+        cell.font = sectionFont;
+        cell.border = sectionBorder;
+        cell.alignment = { vertical: 'middle' };
+        for (let c = ci + 1; c < ci + C4; c++) sheet.getCell(rowNum, c).border = sectionBorder;
+      } else {
+        const l1 = sheet.getCell(rowNum, ci);
+        l1.value = rd[1]; l1.font = labelFont; l1.border = dataBorder; l1.alignment = { vertical: 'middle' };
+        const v1 = sheet.getCell(rowNum, ci + 1);
+        v1.value = rd[2]; v1.font = valFont; v1.border = dataBorder; v1.alignment = { vertical: 'middle' };
+        if (rd.length >= 5) {
+          const l2 = sheet.getCell(rowNum, ci + 2);
+          l2.value = rd[3]; l2.font = labelFont; l2.border = dataBorder; l2.alignment = { vertical: 'middle' };
+          const v2 = sheet.getCell(rowNum, ci + 3);
+          v2.value = rd[4]; v2.font = valFont; v2.border = dataBorder; v2.alignment = { vertical: 'middle' };
+          if (compareMode && li > 0) {
+            const br = allConfigsData[0].rows[ri] || [];
+            if (rd[2] !== '--' && br[2] !== '--' && rd[2] !== br[2]) { l1.fill = yellowFill; v1.fill = yellowFill; }
+            if (rd[4] !== '--' && br[4] !== '--' && rd[4] !== br[4]) { l2.fill = yellowFill; v2.fill = yellowFill; }
+          }
+        } else {
+          sheet.mergeCells(rowNum, ci + 2, rowNum, ci + 3);
+          sheet.getCell(rowNum, ci + 2).border = dataBorder;
+          if (compareMode && li > 0) {
+            const br = allConfigsData[0].rows[ri] || [];
+            if (rd[2] !== '--' && br[2] !== '--' && rd[2] !== br[2]) { l1.fill = yellowFill; v1.fill = yellowFill; }
+          }
+        }
+        lastDataRowNum = rowNum;
+      }
+    }
+    const fr = allConfigsData[0].rows[ri];
+    sheet.getRow(rowNum).height = (fr && fr[0] === S) ? 18 : 17;
+  }
+
+  // 底粗线（各配置分别处理）
+  for (let li = 0; li < configCount; li++) {
+    const ci = li * colStep + 1;
+    for (let c = ci; c < ci + C4; c++) {
+      sheet.getCell(lastDataRowNum, c).border = lastRowBorder;
     }
   }
 
-  // Sheet2: 计算结果（与多选导出 Excel 内容一致，4列三线表）
-  _writeResultsToSheet(workbook, isZh ? '计算结果' : 'Results', configs, lang, false);
+  // Sheet2: 计算结果
+  _writeResultsToSheet(workbook, isZh ? '计算结果' : 'Results', configs, lang, compareMode);
 
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
@@ -1652,7 +1669,7 @@ exports.main = async (event, context) => {
       fileName = `reports/LinkBudget_${timestamp}.xlsx`;
       contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     } else if (format === 'excel-params') {
-      buffer = await generateExcelParams(configs, lang);
+      buffer = await generateExcelParams(configs, lang, compareMode);
       fileName = `reports/LinkParams_${timestamp}.xlsx`;
       contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
     } else if (format === 'pdf') {
