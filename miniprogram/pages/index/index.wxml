@@ -2185,12 +2185,6 @@
           <text class="result-label">Es/N₀</text>
           <text class="result-value">{{results.esnoResult}} dB</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('rsCodeResult') > -1 ? 'result-item-marked' : ''}}" 
-              bindtap="toggleHighlight" 
-              data-param="rsCodeResult">
-          <text class="result-label">帧效率</text>
-          <text class="result-value">{{results.rsCodeResult}}</text>
-        </view>
         <view class="result-item {{markedParams.indexOf('fecResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="fecResult">

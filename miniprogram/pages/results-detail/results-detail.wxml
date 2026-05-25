@@ -449,7 +449,7 @@
     </view>
 
     <!-- ===================== 通信参数 ===================== -->
-    <view id="sec-comm" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行频率','下行频率','载波带宽','频谱效率','上行极化方式','下行极化方式','信息速率','调制方式','调制因子','误码率','Eb/N₀','Es/N₀','帧效率','FEC码率','载波速率','码片速率','符号速率','载波噪声带宽','系统余量'], searchKeyword, results, ['uplinkFrequencyResult','downlinkFrequencyResult','allocBandwidthResult','spectralEfficiencyResult','uplinkPolarizationResult','downlinkPolarizationResult','infoRateResult','modulationResult','modulationFactorResult','berResult','ebnoResult','esnoResult','rsCodeResult','fecResult','carrierRateResult','ChipRateResult','symbolRateResult','RXnoiseBW','marginResult'])}}">
+    <view id="sec-comm" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行频率','下行频率','载波带宽','频谱效率','上行极化方式','下行极化方式','信息速率','调制方式','调制因子','误码率','Eb/N₀','Es/N₀','FEC码率','载波速率','码片速率','符号速率','载波噪声带宽','系统余量'], searchKeyword, results, ['uplinkFrequencyResult','downlinkFrequencyResult','allocBandwidthResult','spectralEfficiencyResult','uplinkPolarizationResult','downlinkPolarizationResult','infoRateResult','modulationResult','modulationFactorResult','berResult','ebnoResult','esnoResult','fecResult','carrierRateResult','ChipRateResult','symbolRateResult','RXnoiseBW','marginResult'])}}">
       <view class="section-header" bindtap="toggleSection" data-section="comm">
         <view class="section-title-row">
           <view class="section-dot dot-cyan"></view>
@@ -508,10 +508,6 @@
           <view class="detail-item {{filter.includes(markedParams, 'esnoResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('Es/N₀', searchKeyword, results.esnoResult)}}" bindtap="toggleHighlight" data-param="esnoResult">
             <text class="detail-label">Es/N₀</text>
             <text class="detail-value">{{results.esnoResult}} dB</text>
-          </view>
-          <view class="detail-item {{filter.includes(markedParams, 'rsCodeResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('帧效率', searchKeyword, results.rsCodeResult)}}" bindtap="toggleHighlight" data-param="rsCodeResult">
-            <text class="detail-label">帧效率</text>
-            <text class="detail-value">{{results.rsCodeResult}}</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'fecResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('FEC码率', searchKeyword, results.fecResult)}}" bindtap="toggleHighlight" data-param="fecResult">
             <text class="detail-label">FEC码率</text>

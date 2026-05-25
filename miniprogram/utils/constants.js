@@ -370,7 +370,7 @@ const RESULT_LABELS = {
       { key: 'ber', label: '误码率', unit: '' },
       { key: 'ebno', label: 'Eb/N0', unit: 'dB' },
       { key: 'esno', label: 'Es/N0', unit: 'dB' },
-      { key: 'rsCode', label: '帧效率', unit: '' },
+      { key: 'rsCode', label: '频谱效率', unit: 'bps/Hz' },
       { key: 'fec', label: 'FEC码率', unit: '' },
       { key: 'carrierRate', label: '载波速率', unit: 'kbps' },
       { key: 'symbolRate', label: '符号速率', unit: 'ksps' },

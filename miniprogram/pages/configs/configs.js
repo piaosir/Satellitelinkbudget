@@ -1821,6 +1821,9 @@ Page({
   formatConfigParamsText(config) {
     const sat = config.satelliteParams || {};
     const lp = this._getFirstLinkParams(config);
+    const calcResults = config.calculationResults || {};
+    const calcKeys = Object.keys(calcResults).filter(k => typeof calcResults[k] === 'object');
+    const cr = calcKeys.length > 0 ? calcResults[calcKeys[0]] : {};
     const v = (val) => (val !== undefined && val !== null && val !== '') ? String(val) : '--';
     const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : '自定义';
     const isForward = lp.calcMode === 'forward';
@@ -1902,7 +1905,7 @@ Page({
       { title: '载波参数', rows: [
         ['标准', dvbLabel, '调制方式', v(lp.modulation)],
         ['信息速率', v(lp.infoRate) + 'kbps', 'FEC码率', v(lp.fec)],
-        ['帧效率', v(lp.rsCode), '滚降系数(1+α)', v(lp.bandwidthFactor)],
+        ['频谱效率', v(cr.spectralEfficiencyResult) + (cr.spectralEfficiencyResult ? 'bps/Hz' : ''), '滚降系数(1+α)', v(lp.bandwidthFactor)],
         ['误码率', '1E-' + v(lp.ber), noiseLabel, v(lp.ebno) + 'dB'],
         [lastLabel, lastValue],
       ]},
