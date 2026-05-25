@@ -704,6 +704,7 @@ async function generatePDF(configs, lang) {
       drawP(isZh ? '海拔' : 'Altitude', u(lp.altitude, 'm'), isZh ? '降雨率' : 'Rain Rate', u(lp.rainRate, 'mm/h'));
       drawP(isZh ? '功放回退' : 'PA Backoff', u(lp.paBackoff, 'dB'), isZh ? '馈线损耗' : 'Feeder Loss', u(lp.feederLoss, 'dB'));
       drawP('UPC', lp.uplinkPowerControl === '自定义' ? (isZh ? `自定义 (${u(lp.upcValue)} dB)` : `Custom (${u(lp.upcValue)} dB)`) : u(lp.uplinkPowerControl), isZh ? '可用度' : 'Availability', u(lp.uplinkAvailability, '%'));
+      if (isForward) drawP(isZh ? '功放功率' : 'PA Power', u(lp.inputPaPower, 'W'));
 
       drawSec(isZh ? '接收站参数' : 'Downlink Station');
       drawP(isZh ? '地面站位置' : 'RX Station', u(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Polarization', u(lp.downlinkPolarization));
@@ -719,9 +720,7 @@ async function generatePDF(configs, lang) {
       drawP(isZh ? '信息速率' : 'Info Rate', u(lp.infoRate, 'kbps'), 'FEC', u(lp.fec));
       drawP(isZh ? '频谱效率' : 'Spectral Eff.', u(r.spectralEfficiencyResult, 'bps/Hz'), isZh ? '滚降系数 (1+α)' : 'Roll-off (1+a)', u(lp.bandwidthFactor));
       drawP('BER', `1x10^-${u(lp.ber)}`, noiseLabel, u(lp.ebno, 'dB'));
-      const lastLabel = isForward ? (isZh ? '功放功率' : 'PA Power') : (isZh ? '余量' : 'Margin');
-      const lastVal = isForward ? u(lp.inputPaPower, 'W') : u(lp.margin, 'dB');
-      drawP(lastLabel, lastVal);
+      if (!isForward) drawP(isZh ? '余量' : 'Margin', u(lp.margin, 'dB'));
 
       // ===== 计算结果区 =====
       const margin = r.linkmargin || '0';
@@ -1148,6 +1147,7 @@ async function generateWord(configs, lang) {
       pRows.push(dataRow(isZh ? '海拔' : 'Altitude', u(lp.altitude, 'm'), isZh ? '降雨率' : 'Rain Rate', u(lp.rainRate, 'mm/h')));
       pRows.push(dataRow(isZh ? '功放回退' : 'PA Backoff', u(lp.paBackoff, 'dB'), isZh ? '馈线损耗' : 'Feeder Loss', u(lp.feederLoss, 'dB')));
       pRows.push(dataRow('UPC', lp.uplinkPowerControl === '自定义' ? (isZh ? `自定义 (${u(lp.upcValue, 'dB')})` : `Custom (${u(lp.upcValue, 'dB')})`) : v(lp.uplinkPowerControl), isZh ? '可用度' : 'Availability', u(lp.uplinkAvailability, '%')));
+      if (isForward) pRows.push(dataRow(isZh ? '功放功率' : 'PA Power', u(lp.inputPaPower, 'W')));
 
       pRows.push(secRow(isZh ? '接收站参数' : 'Downlink Station'));
       pRows.push(dataRow(isZh ? '地面站位置' : 'RX Station', v(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Polarization', v(lp.downlinkPolarization)));
@@ -1167,10 +1167,8 @@ async function generateWord(configs, lang) {
       pRows.push(dataRow(isZh ? 'DVB 标准' : 'DVB Standard', dvbLabel, isZh ? '调制方式' : 'Modulation', v(lp.modulation)));
       pRows.push(dataRow(isZh ? '信息速率' : 'Info Rate', u(lp.infoRate, 'kbps'), 'FEC', v(lp.fec)));
       pRows.push(dataRow(isZh ? '频谱效率' : 'Spectral Eff.', u(r.spectralEfficiencyResult, 'bps/Hz'), isZh ? '滚降系数 (1+a)' : 'Roll-off (1+a)', v(lp.bandwidthFactor)));
-      pRows.push(dataRow('BER', `1x10^-${v(lp.ber)}`, noiseLabel, u(lp.ebno, 'dB')));
-      const lastPLabel = isForward ? (isZh ? '功放功率' : 'PA Power') : (isZh ? '余量' : 'Margin');
-      const lastPVal   = isForward ? u(lp.inputPaPower, 'W') : u(lp.margin, 'dB');
-      pRows.push(dataRow(lastPLabel, lastPVal, undefined, undefined, true));
+      pRows.push(dataRow('BER', `1x10^-${v(lp.ber)}`, noiseLabel, u(lp.ebno, 'dB'), isForward));
+      if (!isForward) pRows.push(dataRow(isZh ? '余量' : 'Margin', u(lp.margin, 'dB'), undefined, undefined, true));
 
       docChildren.push(new Table({ width: { size: TBL_W, type: WidthType.DXA }, layout: TableLayoutType.FIXED, rows: pRows }));
 
@@ -1634,6 +1632,7 @@ async function generatePdfParams(configs, lang) {
       drawParam(isZh ? '海拔' : 'Altitude', u(lp.altitude, 'm'), isZh ? '降雨率' : 'Rain Rate', u(lp.rainRate, 'mm/h'));
       drawParam(isZh ? '功放回退' : 'PA Backoff', u(lp.paBackoff, 'dB'), isZh ? '馈线损耗' : 'Feeder Loss', u(lp.feederLoss, 'dB'));
       drawParam('UPC', lp.uplinkPowerControl === '自定义' ? (isZh ? '自定义 ' + u(lp.upcValue, 'dB') : 'Custom ' + u(lp.upcValue, 'dB')) : u(lp.uplinkPowerControl), isZh ? '可用度' : 'Availability', u(lp.uplinkAvailability, '%'));
+      if (isForward) drawParam(isZh ? '功放功率' : 'PA Power', u(lp.inputPaPower, 'W'));
 
       // 接收站参数
       drawSection(isZh ? '接收站参数' : 'Downlink Station');
@@ -1656,9 +1655,7 @@ async function generatePdfParams(configs, lang) {
       const noiseMode = config.noiseRatioMode || 'ebno';
       const noiseLabel = noiseMode === 'esno' ? 'Es/N0' : 'Eb/N0';
       drawParam(isZh ? '误码率' : 'BER', '1E-' + u(lp.ber), noiseLabel, u(lp.ebno, 'dB'));
-      const lastLabel = isForward ? (isZh ? '功放功率' : 'PA Power') : (isZh ? '余量' : 'Margin');
-      const lastVal = isForward ? u(lp.inputPaPower, 'W') : u(lp.margin, 'dB');
-      drawParam(lastLabel, lastVal);
+      if (!isForward) drawParam(isZh ? '余量' : 'Margin', u(lp.margin, 'dB'));
 
       // === 底粗线 ===
       y += 2;
@@ -1815,6 +1812,7 @@ async function generateWordParams(configs, lang) {
     rows.push(paramRow(isZh ? '海拔' : 'Alt', u(lp.altitude, 'm'), isZh ? '降雨率' : 'Rain', u(lp.rainRate, 'mm/h')));
     rows.push(paramRow(isZh ? '功放回退' : 'PA BO', u(lp.paBackoff, 'dB'), isZh ? '馈线损耗' : 'Feeder', u(lp.feederLoss, 'dB')));
     rows.push(paramRow('UPC', lp.uplinkPowerControl === '自定义' ? (isZh ? '自定义(' + u(lp.upcValue, 'dB') + ')' : 'Custom(' + u(lp.upcValue, 'dB') + ')') : v(lp.uplinkPowerControl), isZh ? '可用度' : 'Avail', u(lp.uplinkAvailability, '%')));
+    if (isForward) rows.push(paramRow(isZh ? '功放功率' : 'PA Power', u(lp.inputPaPower, 'W')));
 
     rows.push(sectionRow(isZh ? '接收站参数' : 'Downlink Station', COL));
     rows.push(paramRow(isZh ? '地面站位置' : 'Station', v(lp.rxEarthStationLocation), isZh ? '极化方式' : 'Pol', v(lp.downlinkPolarization)));
@@ -1831,9 +1829,7 @@ async function generateWordParams(configs, lang) {
     const noiseMode = config.noiseRatioMode || 'ebno';
     const noiseLabel = noiseMode === 'esno' ? 'Es/N₀' : 'Eb/N₀';
     rows.push(paramRow(isZh ? '误码率' : 'BER', '1E-' + v(lp.ber), noiseLabel, u(lp.ebno, 'dB')));
-    const lastLabel = isForward ? (isZh ? '功放功率' : 'PA') : (isZh ? '余量' : 'Margin');
-    const lastVal = isForward ? u(lp.inputPaPower, 'W') : u(lp.margin, 'dB');
-    rows.push(paramRow(lastLabel, lastVal));
+    if (!isForward) rows.push(paramRow(isZh ? '余量' : 'Margin', u(lp.margin, 'dB')));
 
     const table = new Table({
       rows,

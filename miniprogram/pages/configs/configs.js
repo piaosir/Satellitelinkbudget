@@ -1698,7 +1698,7 @@ Page({
     }
 
     this.hideSharePanel();
-    wx.showLoading({ title: '生成PDF参数文档...', mask: true });
+    wx.showLoading({ title: '生成PDF报告...', mask: true });
 
     try {
       const configsToExport = await this.getConfigsData([currentShareConfig.configId]);
@@ -1715,7 +1715,7 @@ Page({
         name: 'generateReport',
         data: {
           configs: configsToExport,
-          format: 'pdf-params',
+          format: 'pdf',
           lang: exportLang,
           oldFileID: lastPdfParamsFileID
         }
