@@ -146,7 +146,6 @@ App({
       beamInput: '中国波束',
       BOi: 6,
       BOo: 3,
-      otherLoss: 0.3,
       deltaTheta: 2.5,
       aciUplinkFactor: 30,
       adjUplinkFactor: 25,
@@ -181,6 +180,7 @@ App({
       feederLoss: 3.5,
       uplinkPowerControl: '否',
       uplinkAvailability: 99.90,
+      uplinkOtherLoss: 0.3,
 
       // NGSO 发信站专属参数（LEO 典型场景）
       minElevation: 25,
@@ -203,6 +203,7 @@ App({
       rxReceiverNoiseTemp: 75,
       rxFeederLoss: 0.2,
       rxDownlinkAvailability: 99.90,
+      downlinkOtherLoss: 0.3,
 
       // NGSO 收信站专属参数（LEO 典型场景）
       rxMinElevation: 25,

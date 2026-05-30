@@ -55,6 +55,54 @@
     <text class="orbit-banner-desc">{{orbitTypeDesc}}</text>
   </view>
 
+  <!-- 视图切换：链路瀑布 / 分组明细 -->
+  <view class="view-switch">
+    <view class="view-tab {{viewMode === 'waterfall' ? 'active' : ''}}" bindtap="switchView" data-mode="waterfall">链路瀑布</view>
+    <view class="view-tab {{viewMode === 'detail' ? 'active' : ''}}" bindtap="switchView" data-mode="detail">分组明细</view>
+  </view>
+
+  <!-- ===================== 链路瀑布视图（三线表） ===================== -->
+  <scroll-view wx:if="{{viewMode === 'waterfall'}}" class="wf-scroll" scroll-y>
+    <view class="wf-toolbar">
+      <text class="wf-doc-title">{{wfUI.docTitle}}</text>
+      <view class="wf-toolbar-actions">
+        <view class="wf-lang-btn" bindtap="toggleLang">
+         
+          <text class="wf-lang-text">{{wfUI.langBtn}}</text>
+        </view>
+        <view class="wf-export-btn {{exporting ? 'disabled' : ''}}" bindtap="exportTable">
+          <text class="wf-export-icon">↓</text>
+          <text class="wf-export-text">{{exporting ? wfUI.exportingText : wfUI.exportText}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="wf-table wf-cols-{{seg.cols}}" wx:for="{{waterfall}}" wx:for-item="seg" wx:key="title">
+      <view class="wf-cap">{{seg.title}}</view>
+      <view class="wf-head">
+        <text class="wf-h-label">{{wfUI.colParam}}</text>
+        <text class="wf-h-val">{{seg.cols === 1 ? wfUI.colValue : wfUI.colUp}}</text>
+        <text class="wf-h-val" wx:if="{{seg.cols >= 2}}">{{wfUI.colDown}}</text>
+        <text class="wf-h-val" wx:if="{{seg.cols >= 3}}">{{wfUI.colTotal}}</text>
+        <text class="wf-h-unit">{{wfUI.colUnit}}</text>
+      </view>
+      <view class="wf-body">
+        <view class="wf-row wf-r-{{row.kind}}"
+              wx:for="{{seg.rows}}" wx:for-item="row" wx:key="key">
+          <text class="wf-label"><text class="wf-sign">{{row.sign}}</text>{{row.label}}</text>
+          <text class="wf-val">{{row.up}}</text>
+          <text class="wf-val" wx:if="{{seg.cols >= 2}}">{{row.down}}</text>
+          <text class="wf-val wf-val-total" wx:if="{{seg.cols >= 3}}">{{row.total}}</text>
+          <text class="wf-unit">{{row.unit}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view style="height: 40rpx;"></view>
+  </scroll-view>
+
+  <!-- ===================== 分组明细视图 ===================== -->
+  <block wx:if="{{viewMode === 'detail'}}">
   <!-- 搜索栏 -->
   <view class="search-bar">
     <view class="search-input-wrap">
@@ -832,4 +880,5 @@
     <!-- 底部间距 -->
     <view style="height: 40rpx;"></view>
   </scroll-view>
+  </block>
 </view>

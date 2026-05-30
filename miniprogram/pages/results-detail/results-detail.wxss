@@ -331,3 +331,269 @@
 .detail-el-warn.detail-el-warn-error {
   color: #dc2626;
 }
+
+/* ====== 视图切换 ====== */
+.view-switch {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 12rpx 20rpx;
+  background: #fff;
+  border-bottom: 1rpx solid #e2e8f0;
+}
+
+.view-tab {
+  flex: 1;
+  text-align: center;
+  font-size: 26rpx;
+  color: #64748b;
+  padding: 12rpx 0;
+  border-radius: 12rpx;
+  background: #f1f5f9;
+  transition: all 0.2s ease;
+}
+
+.view-tab.active {
+  color: #fff;
+  background: #1e293b;
+  font-weight: 600;
+}
+
+.view-tab:active {
+  opacity: 0.8;
+}
+
+/* ====== 链路瀑布（三线表 / 黑白） ====== */
+.wf-scroll {
+  flex: 1;
+  min-height: 0;
+  padding: 16rpx 20rpx 0;
+  box-sizing: border-box;
+  background: #ffffff;
+}
+
+.wf-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2rpx 0 18rpx;
+}
+
+.wf-doc-title {
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #000000;
+  letter-spacing: 1rpx;
+}
+
+/* 导出按钮：黑白描边，呼应三线表风格 */
+.wf-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 22rpx;
+  border: 2rpx solid #000000;
+  border-radius: 6rpx;
+  background: #ffffff;
+}
+
+.wf-export-btn:active {
+  background: #000000;
+}
+
+.wf-export-btn:active .wf-export-icon,
+.wf-export-btn:active .wf-export-text {
+  color: #ffffff;
+}
+
+.wf-export-btn.disabled {
+  opacity: 0.45;
+}
+
+.wf-export-icon {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #000000;
+  line-height: 1;
+}
+
+.wf-export-text {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #000000;
+  letter-spacing: 1rpx;
+}
+
+/* 工具栏右侧操作区：语言切换 + 导出 */
+.wf-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* 中英文切换按钮：黑底白字，与导出按钮区分主次 */
+.wf-lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 6rpx;
+  padding: 8rpx 20rpx;
+  border: 2rpx solid #000000;
+  border-radius: 6rpx;
+  background: #000000;
+}
+
+.wf-lang-btn:active {
+  background: #ffffff;
+}
+
+.wf-lang-btn:active .wf-lang-icon,
+.wf-lang-btn:active .wf-lang-text {
+  color: #000000;
+}
+
+.wf-lang-icon {
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+}
+
+.wf-lang-text {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: 1rpx;
+}
+
+/* 三线表：每段一张表 */
+.wf-table {
+  margin-bottom: 36rpx;
+}
+
+/* 表题（置于顶线之上，居中黑体） */
+.wf-cap {
+  font-size: 23rpx;
+  font-weight: 700;
+  color: #000000;
+  text-align: center;
+  letter-spacing: 0.5rpx;
+  padding-bottom: 8rpx;
+}
+
+/* 表头：顶线（粗）+ 表头细线 */
+.wf-head {
+  display: flex;
+  align-items: center;
+  padding: 8rpx 6rpx;
+  border-top: 3rpx solid #000000;
+  border-bottom: 1rpx solid #000000;
+}
+
+.wf-head text {
+  font-size: 19rpx;
+  font-weight: 600;
+  color: #000000;
+  letter-spacing: 0.5rpx;
+}
+
+/* 表体：底线（粗），数据行无横线 */
+.wf-body {
+  border-bottom: 3rpx solid #000000;
+}
+
+.wf-row {
+  display: flex;
+  align-items: center;
+  padding: 7rpx 6rpx;
+}
+
+/* 列宽：表头与数据行共用 */
+.wf-h-label, .wf-label {
+  flex: 1;
+  padding-right: 10rpx;
+  font-size: 21rpx;
+  color: #1a1a1a;
+  word-break: break-all;
+}
+
+.wf-sign {
+  display: inline-block;
+  width: 20rpx;
+  font-weight: 700;
+  color: #333333;
+  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+.wf-h-val, .wf-val {
+  width: 148rpx;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 21rpx;
+  color: #000000;
+  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.wf-h-unit, .wf-unit {
+  width: 90rpx;
+  flex-shrink: 0;
+  padding-left: 12rpx;
+  font-size: 19rpx;
+  color: #555555;
+  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+
+/* 双列（上行/下行）列宽 */
+.wf-cols-2 .wf-h-val, .wf-cols-2 .wf-val { width: 124rpx; }
+.wf-cols-2 .wf-h-unit, .wf-cols-2 .wf-unit { width: 82rpx; }
+
+/* 三列（上行/下行/合计）列宽 + 更紧凑字号 */
+.wf-cols-3 .wf-h-label, .wf-cols-3 .wf-label { font-size: 20rpx; }
+.wf-cols-3 .wf-h-val, .wf-cols-3 .wf-val {
+  width: 104rpx;
+  font-size: 20rpx;
+  padding-left: 14rpx;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+.wf-cols-3 .wf-h-unit, .wf-cols-3 .wf-unit { width: 60rpx; padding-left: 8rpx; }
+
+/* 合计列：加粗强调 */
+.wf-val-total { font-weight: 700; color: #000000; }
+
+/* 行类型：仅用字重 / 细分隔线区分，无配色 */
+.wf-r-ref .wf-sign { color: #999999; }
+
+.wf-r-base .wf-label { font-weight: 700; color: #000000; }
+.wf-r-base .wf-val { font-weight: 700; }
+
+/* 小计 / 检查点：上方细分隔线 + 加粗 */
+.wf-r-sub {
+  border-top: 1rpx solid #999999;
+}
+.wf-r-sub .wf-label { font-weight: 700; color: #000000; }
+.wf-r-sub .wf-val { font-weight: 700; color: #000000; }
+
+/* 次级检查点（C/T、C/N₀、热噪声 C/N）：仅加粗，无分隔线，减少级联表横线 */
+.wf-r-chk .wf-label { font-weight: 700; color: #000000; }
+.wf-r-chk .wf-val { font-weight: 700; color: #000000; }
+
+/* KPI（C/N、C/N₀、C/T 等）：加粗强调 */
+.wf-r-kpi .wf-label { font-weight: 700; color: #000000; }
+.wf-r-kpi .wf-val { font-weight: 700; color: #000000; }
+
+/* 链路余量：上方细分隔线，加粗放大（不染色） */
+.wf-r-margin {
+  border-top: 1rpx solid #999999;
+  padding-top: 12rpx;
+  padding-bottom: 12rpx;
+}
+.wf-r-margin .wf-label { font-weight: 700; font-size: 22rpx; color: #000000; }
+.wf-r-margin .wf-val { font-size: 25rpx; font-weight: 700; color: #000000; }
+
+.wf-foot {
+  padding: 4rpx 0 20rpx;
+  font-size: 19rpx;
+  color: #888888;
+  line-height: 1.5;
+}

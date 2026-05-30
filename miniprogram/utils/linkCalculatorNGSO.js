@@ -766,12 +766,13 @@ function performCalculations(satParams, inputs) {
   const txOffAxisGain = calculateITU465OffAxisGain(antennaDiameter, wavelength, antennaEfficiency, deltaTheta);
   const txSidelobeGain = txOffAxisGain; // 发信站旁瓣发射增益
   
-  // ============ 其他损耗（用户输入）============
-  const otherLoss = satParams.otherLoss !== undefined && satParams.otherLoss !== '' && satParams.otherLoss !== null
-    ? parseFloat(satParams.otherLoss)
-    : 0.3; // 其他损耗 (dB) 默认值0.3dB
-  const uplinkMiscLoss = otherLoss;
-  const downlinkMiscLoss = otherLoss;
+  // ============ 其他损耗（用户输入，上下行分别设置）============
+  const uplinkMiscLoss = inputs.uplinkOtherLoss !== undefined && inputs.uplinkOtherLoss !== '' && inputs.uplinkOtherLoss !== null
+    ? parseFloat(inputs.uplinkOtherLoss)
+    : 0.3; // 上行其他损耗 (dB) 默认值0.3dB
+  const downlinkMiscLoss = inputs.downlinkOtherLoss !== undefined && inputs.downlinkOtherLoss !== '' && inputs.downlinkOtherLoss !== null
+    ? parseFloat(inputs.downlinkOtherLoss)
+    : 0.3; // 下行其他损耗 (dB) 默认值0.3dB
   
   // 各项C/T值计算
   const uplinkCT = SFDs - antennaGain - BOi + G_Ts;
@@ -1547,6 +1548,7 @@ function performCalculations(satParams, inputs) {
   results.EIRPsResult = EIRPs.toFixed(1);
   results.satellitePSDResult = satellitePSD.toFixed(3);
   results.SFDsResult = SFDs.toFixed(2);
+  results.satelliteGTResult = G_Ts.toFixed(2); // 卫星接收 G/T (dB/K)，上行 C/T 转换用
   results.BOiResult = BOi;
   results.BOoResult = BOo;
   results.antennaGainResult = antennaGain.toFixed(2);

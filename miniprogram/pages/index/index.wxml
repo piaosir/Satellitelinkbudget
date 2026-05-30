@@ -700,14 +700,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">其他损耗(dB)</text>
-          <input class="form-input" 
-                 type="text"
-                 placeholder="0.3" 
-                 value="{{satelliteParams.otherLoss}}"
-                 data-field="otherLoss"
-                 adjust-position="{{isNotIOS ? '' : false}}"
-                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+          <!-- 空白占位（其他损耗已移至发信站/收信站，可上下行单独设置） -->
         </view>
       </view>
 
@@ -1072,6 +1065,24 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
           </view>
+
+          <view class="station-grid-2">
+            <view class="station-form-group">
+              <text class="form-label">其他损耗(dB)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="0.3" 
+                     value="{{linkParams.uplinkOtherLoss}}"
+                     data-field="uplinkOtherLoss"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
+                     bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+            <view class="station-form-group">
+              <!-- 空白占位 -->
+            </view>
+          </view>
         </view>
 
         <!-- 实时结果 -->
@@ -1336,7 +1347,16 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <!-- 空白占位 -->
+              <text class="form-label">其他损耗(dB)</text>
+              <input class="form-input" 
+                     type="text"
+                     placeholder="0.3" 
+                     value="{{linkParams.downlinkOtherLoss}}"
+                     data-field="downlinkOtherLoss"
+                data-focus-area="station"
+                adjust-position="{{true}}"
+                cursor-spacing="120"
+                     bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
           </view>
         </view>

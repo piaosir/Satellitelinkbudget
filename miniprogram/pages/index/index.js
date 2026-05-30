@@ -2697,9 +2697,9 @@ Page({
     app.globalData.calculationResults[this.data.currentLinkNum] = results;
     app.globalData.markedParams = this.data.markedParams;
 
-    // 跳转到报告页面
+    // 跳转到报告页面（链路瀑布 / 链路预算表）
     wx.navigateTo({
-      url: `/pages/report/report?linkNum=${this.data.currentLinkNum}`
+      url: `/pages/results-detail/results-detail?linkNum=${this.data.currentLinkNum}`
     });
   },
 

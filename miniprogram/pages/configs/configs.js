@@ -2412,7 +2412,7 @@ Page({
       const firstLinkNum = linkNumbers.length > 0 ? linkNumbers[0] : 1;
       
       wx.navigateTo({
-        url: `/pages/report/report?linkNum=${firstLinkNum}&fromConfig=true`
+        url: `/pages/results-detail/results-detail?linkNum=${firstLinkNum}&fromConfig=true`
       });
     } catch (error) {
       console.error('生成报告失败:', error);
