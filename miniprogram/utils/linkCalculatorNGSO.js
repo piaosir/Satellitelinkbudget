@@ -1020,16 +1020,12 @@ function performCalculations(satParams, inputs) {
   const rxAntennaUnitAreaGain = 10 * Math.log10(4 * CONSTANTS.PI / (rxWavelength ** 2));
   const arrivalPFDAtGround = cLevelAtGround + rxAntennaUnitAreaGain;
   const downlinkThermalCN = cLevelAtGround + gOverTe - downlinkGtDegEff - CONSTANTS.BOLTZMANN - RXnoiseBW;
-  // 下行干扰损失（dB）：纯干扰造成的 C/N 退化 = 仅热噪声下行 C/T − 含干扰下行总 C/T
-  // 下行无干扰时下行总 C/T → 下行 C/T，干扰损失自动为 0
-  const downlinkInterferenceLoss = downlinkCT - downlinkTotalCT;
-  // 下行 C/N = 热噪声 C/N − 干扰损失
-  const downlinkCN = downlinkThermalCN - downlinkInterferenceLoss;
-  // 合计 C/N = 上行 C/N ⊕ 下行 C/N（真实合成，恒满足 上行⊕下行=合计）
-  const realTotalCN = -10 * Math.log10(
-    Math.pow(10, -uplinkCN / 10) + Math.pow(10, -downlinkCN / 10)
+  // 下行 C/N 反算：上行 C/N ⊕ 下行 C/N = 合计 C/N，故由合计与上行反算下行（取负真值相减再取负）
+  // 下行 C/N = -10·log10( 10^(-合计C/N/10) - 10^(-上行C/N/10) )
+  const downlinkCN = -10 * Math.log10(
+    Math.pow(10, -carrierTotalCN / 10) - Math.pow(10, -uplinkCN / 10)
   );
-  // 下行干扰等效 C/I（仅展示，由热噪声与实际 C/N 反推）
+  // 下行干扰等效 C/I（仅展示，由热噪声与反算 C/N 反推）
   const downlinkInterferenceCN = -10 * Math.log10(
     Math.max(Math.pow(10, -downlinkCN / 10) - Math.pow(10, -downlinkThermalCN / 10), 1e-30)
   );
@@ -1744,9 +1740,8 @@ function performCalculations(satParams, inputs) {
   results.carrierTotalCT = carrierTotalCT.toFixed(2);
   results.carrierTotalCN0 = (carrierTotalCT + 228.6).toFixed(2);
   results.carrierTotalCN = carrierTotalCN.toFixed(2);
-  results.realTotalCN = realTotalCN.toFixed(2); // 实际合计 C/N（上行⊕下行）
   results.thresholdCN = thresholdCN.toFixed(2);
-  results.linkmargin = (realTotalCN - thresholdCN).toFixed(2); // 真实链路余量 = 实际合计 C/N − 门限 C/N
+  results.linkmargin = linkmargin.toFixed(2);
   
   
   

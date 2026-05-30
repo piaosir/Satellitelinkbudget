@@ -600,7 +600,7 @@ Page({
       C('loss', '下行干扰损失 ACI/ASI/XPI/IM', dnIntfLoss, 'dB', 'down'),
       C('sub', '下行 C/N', null, 'dB', 'down'),
       // —— 合成与余量：上行 ⊕ 下行（噪声并联）= 合计 ——
-      T('kpi', 'C/N（合成）', 'uplinkCN', 'downlinkCN', 'realTotalCN', 'dB'),
+      T('kpi', 'C/N（合成）', 'uplinkCN', 'downlinkCN', 'carrierTotalCN', 'dB'),
       T('ref', '门限 C/N', null, null, 'thresholdCN', 'dB'),
       T('margin', '链路余量', null, null, 'linkmargin', 'dB')
     ]));
