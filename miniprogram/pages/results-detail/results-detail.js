@@ -545,12 +545,15 @@ Page({
       - num('uplinkRainAttenuation') - num('uplinkCloudAttenuation') - num('uplinkMiscLossResult');
     const upThermalCN = cUp + num('satelliteGTResult') + KB - noiseBW;
     const upIntfLoss = upThermalCN - num('uplinkCN');
+    // 主导降雨场景：上行降雨占主导时，下行按晴空（下行雨衰与 G/T 劣化不参与）
+    const uplinkRainDominant = num('uplinkPowerRatioResult') > num('downlinkPowerRatioResult');
+    const dnRainEff = uplinkRainDominant ? 0 : num('downlinkRainAttenuationResult');
+    const dnGtDegEff = uplinkRainDominant ? 0 : num('gOverTdegradationResult');
     // 下行：沿功率链得到到达地面热噪声 C/N，扣除 G/T 劣化（降雨）与下行干扰损失 → 引擎实际下行 C/N
-    const cDn = num('eirpPerCarrier') - num('downlinkFSLResult') - num('downlinkAtmosphericAttenuationResult')
-      - num('downlinkRainAttenuationResult') - num('downlinkCloudAttenuation') - num('downlinkMiscLossResult');
-    const gtDeg = num('gOverTdegradationResult'); // G/T 降雨劣化（dB，晴空为 0）
+    const cDn = num('transponderOutputEIRP') - num('downlinkFSLResult') - num('downlinkAtmosphericAttenuationResult')
+      - dnRainEff - num('downlinkCloudAttenuation') - num('downlinkMiscLossResult');
     const dnThermalCN = cDn + num('gOverTeResult') + KB - noiseBW;
-    const dnIntfLoss = dnThermalCN - gtDeg - num('downlinkCN');
+    const dnIntfLoss = dnThermalCN - dnGtDegEff - num('downlinkCN');
     segs.push(this._cascadeTriSeg('链路预算级联（上行 / 下行 / 合计）', [
       // —— 上行：地球站 → 到达卫星 → C/T → C/N₀ → C/N ——
       C('base', '功放建议功率', 'paRecommendationdBResult', 'dBW', 'up'),
@@ -564,7 +567,7 @@ Page({
       C('loss', '云衰 P.840', 'uplinkCloudAttenuation', 'dB', 'up'),
       C('loss', '其他损耗', 'uplinkMiscLossResult', 'dB', 'up'),
       C('sub', '到达卫星载波电平 C', null, 'dBW', 'up'),
-      C('ref', '到达卫星通量密度', 'PFDcResult', 'dBW/m²', 'up'),
+      C('ref', '到达卫星通量密度', 'arrivalPFDAtSatelliteResult', 'dBW/m²', 'up'),
       C('gain', '卫星 G/T', 'satelliteGTResult', 'dB/K', 'up'),
       C('chk', '上行 C/T', null, 'dBW/K', 'up'),
       C('gain', '−玻尔兹曼常数 k', KB, 'dB', 'up'),
@@ -577,19 +580,18 @@ Page({
       C('base', '卫星饱和 EIRP', 'EIRPsResult', 'dBW', 'down'),
       C('loss', '输出补偿 OBO', 'BOoResult', 'dB', 'down'),
       C('loss', '转发器工作区回退', 'actualTransponderCapacityResult', 'dB', 'down'),
-      C('sub', '转发器输出 EIRP', null, 'dBW', 'down'),
-      C('base', '每载波占卫星 EIRP', 'eirpPerCarrier', 'dBW', 'down'),
+      C('sub', '转发器输出 EIRP', 'transponderOutputEIRP', 'dBW', 'down'),
       C('ref', '卫星功率谱密度', 'satellitePSDResult', 'dBW/Hz', 'down'),
       C('loss', '自由空间损耗', 'downlinkFSLResult', 'dB', 'down'),
       C('loss', '大气衰减 P.676', 'downlinkAtmosphericAttenuationResult', 'dB', 'down'),
-      C('loss', '雨衰 P.618', 'downlinkRainAttenuationResult', 'dB', 'down'),
+      C('loss', '雨衰 P.618', dnRainEff, 'dB', 'down'),
       C('loss', '云衰 P.840', 'downlinkCloudAttenuation', 'dB', 'down'),
       C('loss', '其他损耗', 'downlinkMiscLossResult', 'dB', 'down'),
       C('sub', '到达地面载波电平 C', null, 'dBW', 'down'),
-      C('ref', '卫星到地面 PFD', 'satellitePFD', 'dBW/m²', 'down'),
+      C('ref', '卫星到地面 PFD', 'arrivalPFDAtGroundResult', 'dBW/m²', 'down'),
       C('ref', '接收天线增益', 'rxAntennaGainResult', 'dBi', 'down'),
       C('gain', '地球站 G/T', 'gOverTeResult', 'dB/K', 'down'),
-      C('loss', 'G/T 劣化（降雨）', gtDeg, 'dB', 'down'),
+      C('loss', 'G/T 劣化（降雨）', dnGtDegEff, 'dB', 'down'),
       C('chk', '下行 C/T', null, 'dBW/K', 'down'),
       C('gain', '−玻尔兹曼常数 k', KB, 'dB', 'down'),
       C('chk', '下行 C/N₀', null, 'dBHz', 'down'),
@@ -598,7 +600,7 @@ Page({
       C('loss', '下行干扰损失 ACI/ASI/XPI/IM', dnIntfLoss, 'dB', 'down'),
       C('sub', '下行 C/N', null, 'dB', 'down'),
       // —— 合成与余量：上行 ⊕ 下行（噪声并联）= 合计 ——
-      T('kpi', 'C/N（合成）', 'uplinkCN', 'downlinkCN', 'carrierTotalCN', 'dB'),
+      T('kpi', 'C/N（合成）', 'uplinkCN', 'downlinkCN', 'realTotalCN', 'dB'),
       T('ref', '门限 C/N', null, null, 'thresholdCN', 'dB'),
       T('margin', '链路余量', null, null, 'linkmargin', 'dB')
     ]));

@@ -610,7 +610,25 @@ function performCalculations(satParams, inputs) {
   const downlinkRainAttenuation = scaleRainAttenP618_14(
     downlinkA001, (1 - rxDownlinkAvailability) * 100, rxLatitude, rxElevation
   );
-  
+
+  // ============ 降雨去极化 XPD 计算 (ITU-R P.618-14 §4.1) ============
+  // 倾斜角 τ：线极化电场矢量相对当地水平的倾角。考虑卫星几何引起的极化偏转角，
+  //   水平极化 H → τ = 极化偏转角；垂直极化 V → τ = 极化偏转角 + 90°；圆极化 C → τ = 45°
+  const uplinkXpdTau = uplinkPolarization === 'C'
+    ? 45
+    : (uplinkPolarization === 'V' ? uplinkPolarizationAngle + 90 : uplinkPolarizationAngle);
+  const downlinkXpdTau = downlinkPolarization === 'C'
+    ? 45
+    : (downlinkPolarization === 'V' ? downlinkPolarizationAngle + 90 : downlinkPolarizationAngle);
+
+  // 雨致 XPD（与同极化降雨衰减取同一时间百分比 p = 100 - 可用度）
+  const uplinkRainXPD = calculateRainXPD_P618_14(
+    uplinkRainAttenuation, uplinkFrequency, uplinkXpdTau, elevation, (1 - uplinkUnavailability) * 100
+  );
+  const downlinkRainXPD = calculateRainXPD_P618_14(
+    downlinkRainAttenuation, downlinkFrequency, downlinkXpdTau, rxElevation, (1 - rxDownlinkAvailability) * 100
+  );
+
   // ============ 云衰减计算 ============
   const uplinkCloudAttenuation = calculateCloudAttenuation(uplinkFrequency, elevation, rainRate);
   const downlinkCloudAttenuation = calculateCloudAttenuation(downlinkFrequency, rxElevation, rxRainRate);
@@ -707,8 +725,12 @@ function performCalculations(satParams, inputs) {
                       CONSTANTS.BOLTZMANN + aciUplinkFactor;
   const adjUplinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                       CONSTANTS.BOLTZMANN + adjUplinkFactor;
+  // 交叉极化隔离度：晴空设备 XPI 与降雨去极化 XPD（ITU-R P.618-14 §4.1）功率合成
+  const effectiveXpolUplinkFactor = -10 * Math.log10(
+    Math.pow(10, -xpolUplinkFactor / 10) + Math.pow(10, -uplinkRainXPD / 10)
+  );
   const xpolUplinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
-                       CONSTANTS.BOLTZMANN + xpolUplinkFactor;
+                       CONSTANTS.BOLTZMANN + effectiveXpolUplinkFactor;
   const hpaIntermodCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                         CONSTANTS.BOLTZMANN + hpaIntermodFactor;
   const downlinkCT = EIRPs - BOo - downlinkFSL - downlinkCloudAttenuation - 
@@ -717,8 +739,12 @@ function performCalculations(satParams, inputs) {
                         CONSTANTS.BOLTZMANN + aciDownlinkFactor;
   const adjDownlinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                         CONSTANTS.BOLTZMANN + adjDownlinkFactor;
+  // 交叉极化隔离度：晴空设备 XPI 与降雨去极化 XPD（ITU-R P.618-14 §4.1）功率合成
+  const effectiveXpolDownlinkFactor = -10 * Math.log10(
+    Math.pow(10, -xpolDownlinkFactor / 10) + Math.pow(10, -downlinkRainXPD / 10)
+  );
   const xpolDownlinkCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
-                         CONSTANTS.BOLTZMANN + xpolDownlinkFactor;
+                         CONSTANTS.BOLTZMANN + effectiveXpolDownlinkFactor;
   const xpdrIntermodCT = 10 * Math.log10(transponderBandwidth * 1e6) + 
                          CONSTANTS.BOLTZMANN + xpdrIntermodFactor;
   
@@ -770,9 +796,8 @@ function performCalculations(satParams, inputs) {
   const totalCTRain = totalCT - residualRainLoss;
   
   // ============ C/N计算 ============
-  // 上行C/N (dB) - 基于实际上行C/T计算
+  // 载波上行C/T（目标分配，仅用于详情的载波上行C/T·C/N₀展示）
   const actualUplinkCT = uplinkTotalCT - totalCT + carrierTotalCT;
-  const uplinkCN = actualUplinkCT - CONSTANTS.BOLTZMANN - RXnoiseBW;
   
 
   
@@ -823,9 +848,8 @@ function performCalculations(satParams, inputs) {
   
   // 转发器容量 - 下行降雨
   const RXtransponderCapacity = downlinkComponent - carrierTotalCT;
-    // 下行C/N (dB) - 基于实际下行C/T计算
+    // 载波下行C/T（目标分配，仅用于详情的载波下行C/T·C/N₀展示）
   const actualDownlinkCT = downlinkTotalCT - totalCT + carrierTotalCT;
-  const downlinkCN = actualDownlinkCT - CONSTANTS.BOLTZMANN - RXnoiseBW;
   // 下行降雨 - 载波占有卫星有效全向辐射功率
   const RXeirpPerCarrier = EIRPs - BOo - RXtransponderCapacity;
   
@@ -883,7 +907,56 @@ function performCalculations(satParams, inputs) {
   // 根据上下行功率占比选择实际转发器回退
   const actualTransponderCapacity = (uplinkPowerRatio > downlinkPowerRatio) ? transponderCapacity : RXtransponderCapacity;
   const PFDc = SFDs - BOi - actualTransponderCapacity;
-  
+
+  // 转发器输出EIRP（每载波）：卫星饱和EIRP - 输出回退 - 转发器工作区回退
+  const transponderOutputEIRP = EIRPs - BOo - actualTransponderCapacity;
+
+  // ============ 上/下行 C/N 评估（按主导降雨场景分别计算）============
+  // 与链路瀑布功率链一致：先沿功率链得到“热噪声 C/N”，再与干扰 C/I 噪声并联合成实际 C/N，
+  // 干扰损失 = 热噪声 C/N − 实际 C/N（反算）。
+  // 主导场景：上行降雨占主导时，下行按晴空（下行雨衰与 G/T 劣化不参与）；
+  //          下行降雨占主导时，下行计入雨衰与 G/T 劣化，上行雨衰按实际值参与。
+  const uplinkRainDominant = uplinkPowerRatio > downlinkPowerRatio;
+
+  // 上行：到达卫星载波电平 → 热噪声 C/N（始终含上行雨衰）
+  const cLevelAtSatellite = stationEIRP - uplinkFSL - uplinkAtmosphericAttenuation -
+                            uplinkRainAttenuation - uplinkCloudAttenuation - uplinkMiscLoss;
+  // 实际到达卫星通量密度：到达卫星载波电平 + 卫星单位面积增益（与级联自洽，含实际上行雨衰）
+  const arrivalPFDAtSatellite = cLevelAtSatellite + antennaGain;
+  const uplinkThermalCN = cLevelAtSatellite + G_Ts - CONSTANTS.BOLTZMANN - RXnoiseBW;
+  // 上行干扰损失（dB）：纯干扰造成的 C/N 退化 = 仅热噪声上行 C/T − 含干扰上行总 C/T
+  // EIRP、雨衰、带宽、k 等热噪声项在差值中抵消，结果只反映 ACI/ASI/XPI/IM 干扰，与降雨解耦
+  const uplinkInterferenceLoss = uplinkCT - uplinkTotalCT;
+  // 上行 C/N = 热噪声 C/N − 干扰损失
+  const uplinkCN = uplinkThermalCN - uplinkInterferenceLoss;
+  // 上行干扰等效 C/I（仅展示，由热噪声与实际 C/N 反推）
+  const uplinkInterferenceCN = -10 * Math.log10(
+    Math.max(Math.pow(10, -uplinkCN / 10) - Math.pow(10, -uplinkThermalCN / 10), 1e-30)
+  );
+
+  // 下行：到达地面载波电平 → 热噪声 C/N（仅下行降雨占主导时计入下行雨衰与 G/T 劣化）
+  const downlinkRainEff = uplinkRainDominant ? 0 : downlinkRainAttenuation;
+  const downlinkGtDegEff = uplinkRainDominant ? 0 : gOverTdegradation;
+  const cLevelAtGround = transponderOutputEIRP - downlinkFSL - downlinkAtmosphericAttenuation -
+                         downlinkRainEff - downlinkCloudAttenuation - downlinkMiscLoss;
+  // 实际到达地面通量密度：到达地面载波电平 + 下行单位面积增益（与级联自洽，含实际下行雨衰/其他损耗）
+  const rxAntennaUnitAreaGain = 10 * Math.log10(4 * CONSTANTS.PI / (rxWavelength ** 2));
+  const arrivalPFDAtGround = cLevelAtGround + rxAntennaUnitAreaGain;
+  const downlinkThermalCN = cLevelAtGround + gOverTe - downlinkGtDegEff - CONSTANTS.BOLTZMANN - RXnoiseBW;
+  // 下行干扰损失（dB）：纯干扰造成的 C/N 退化 = 仅热噪声下行 C/T − 含干扰下行总 C/T
+  // 下行无干扰时下行总 C/T → 下行 C/T，干扰损失自动为 0
+  const downlinkInterferenceLoss = downlinkCT - downlinkTotalCT;
+  // 下行 C/N = 热噪声 C/N − 干扰损失
+  const downlinkCN = downlinkThermalCN - downlinkInterferenceLoss;
+  // 合计 C/N = 上行 C/N ⊕ 下行 C/N（真实合成，恒满足 上行⊕下行=合计）
+  const realTotalCN = -10 * Math.log10(
+    Math.pow(10, -uplinkCN / 10) + Math.pow(10, -downlinkCN / 10)
+  );
+  // 下行干扰等效 C/I（仅展示，由热噪声与实际 C/N 反推）
+  const downlinkInterferenceCN = -10 * Math.log10(
+    Math.max(Math.pow(10, -downlinkCN / 10) - Math.pow(10, -downlinkThermalCN / 10), 1e-30)
+  );
+
   // 地球站功率谱密度：EIRP - 10*log10(带宽Hz)
   const stationPSD = stationEIRP - 10 * Math.log10(allocBandwidth * 1000);
   
@@ -1206,9 +1279,8 @@ function performCalculations(satParams, inputs) {
   // 发信站旁瓣功率谱密度：旁瓣EIRP - 10*log10(带宽Hz)
   const txSidelobePSD = txSidelobeEIRP - 10 * Math.log10(allocBandwidth * 1000);
   
-  // 卫星功率谱密度：卫星EIRP - 10*log10(带宽Hz)
-  // 使用每载波占用的卫星EIRP
-  const satellitePSD = eirpPerCarrier - 10 * Math.log10(allocBandwidth * 1000);
+  // 卫星功率谱密度：转发器输出EIRP - 10*log10(载波带宽Hz)
+  const satellitePSD = transponderOutputEIRP - 10 * Math.log10(allocBandwidth * 1000);
   
   // ============ 卫星到地面的PFD计算 ============
   // PFD (功率通量密度) = EIRP - 10*log10(4*π*d²) 单位: dBW/m²
@@ -1216,7 +1288,7 @@ function performCalculations(satParams, inputs) {
   // 这是一个与频率无关的物理量，只取决于EIRP和距离
   // 注意：不应使用FSL，因为FSL包含了频率项（用于计算接收功率）
   // PFD可以进一步减去大气和云衰减以得到地面实际功率通量密度
-  const satelliteActualEIRP = eirpPerCarrier; // 使用载波占用的卫星EIRP
+  const satelliteActualEIRP = transponderOutputEIRP; // 使用载波占用的卫星EIRP
   const rxSlantRangeMeters = rxSlantRange * 1000; // 下行斜距转换为米
   // PFD = EIRP - 10*log10(4*π*d²) = EIRP - 10*log10(4π) - 20*log10(d)
   const spreadingLoss = 10 * Math.log10(4 * CONSTANTS.PI) + 20 * Math.log10(rxSlantRangeMeters);
@@ -1410,11 +1482,17 @@ function performCalculations(satParams, inputs) {
   results.uplinkFSLResult = uplinkFSL.toFixed(2);
   results.uplinkRainAttenuation = uplinkRainAttenuation.toFixed(2);
   results.uplinkRainHeightResult = uplinkRainHeight.toFixed(3);
+  // 上行降雨去极化 XPD (ITU-R P.618-14 §4.1)，无降雨时显示'-'
+  results.uplinkRainXPDResult = isFinite(uplinkRainXPD) ? uplinkRainXPD.toFixed(2) : '-';
+  results.effectiveXpolUplinkFactorResult = effectiveXpolUplinkFactor.toFixed(2);
   results.uplinkCloudAttenuation = uplinkCloudAttenuation.toFixed(2);
   results.uplinkAtmosphericAttenuationResult = uplinkAtmosphericAttenuation.toFixed(2);
   results.uplinkScintillationResult = uplinkScintillation.toFixed(2); // 上行闪烁衰减 AS(p) (dB)
   results.uplinkTotalAttenuationResult = uplinkTotalAttenuation.toFixed(2); // 上行总衰减 AT(p) ITU-R P.618-14 §2.5
   results.uplinkCN = uplinkCN.toFixed(2);
+  results.uplinkThermalCN = uplinkThermalCN.toFixed(2); // 上行热噪声 C/N
+  results.uplinkInterferenceCN = uplinkInterferenceCN.toFixed(2); // 上行干扰 C/I（表达为 C/N）
+  results.uplinkRainDominant = uplinkRainDominant; // 上行降雨是否占主导
   results.actualUplinkCT = actualUplinkCT.toFixed(2); // 载波上行C/T
   results.actualUplinkCN0 = (actualUplinkCT + 228.6).toFixed(2); // 载波上行C/N₀
   
@@ -1444,14 +1522,20 @@ function performCalculations(satParams, inputs) {
   results.downlinkFSLResult = downlinkFSL.toFixed(2);
   results.downlinkRainAttenuationResult = downlinkRainAttenuation.toFixed(2);
   results.downlinkRainHeightResult = downlinkRainHeight.toFixed(3);
+  // 下行降雨去极化 XPD (ITU-R P.618-14 §4.1)，无降雨时显示'-'
+  results.downlinkRainXPDResult = isFinite(downlinkRainXPD) ? downlinkRainXPD.toFixed(2) : '-';
+  results.effectiveXpolDownlinkFactorResult = effectiveXpolDownlinkFactor.toFixed(2);
   results.downlinkCloudAttenuation = downlinkCloudAttenuation.toFixed(2);
   results.downlinkAtmosphericAttenuationResult = downlinkAtmosphericAttenuation.toFixed(2);
   results.downlinkScintillationResult = downlinkScintillation.toFixed(2); // 下行闪烁衰减 AS(p) (dB)
   results.downlinkTotalAttenuationResult = downlinkTotalAttenuation.toFixed(2); // 下行总衰减 AT(p) ITU-R P.618-14 §2.5
   results.downlinkCN = downlinkCN.toFixed(2);
+  results.downlinkThermalCN = downlinkThermalCN.toFixed(2); // 下行热噪声 C/N
+  results.downlinkInterferenceCN = downlinkInterferenceCN.toFixed(2); // 下行干扰 C/I（表达为 C/N）
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
   results.actualDownlinkCN0 = (actualDownlinkCT + 228.6).toFixed(2); // 载波下行C/N₀
   results.satellitePFD = satellitePFD.toFixed(2);
+  results.arrivalPFDAtGroundResult = arrivalPFDAtGround.toFixed(2); // 实际到达地面通量密度（到达地面载波电平+下行单位面积增益）
   results.ituPfdLimit4kHz = ituPfdLimit4kHz.toFixed(2); // ITU PFD限制(dBW/m²/4kHz)
   results.ituPfdLimitPerM2 = ituPfdLimitPerM2.toFixed(2); // ITU PFD限制(转换到载波带宽)
   results.ituPfdRefBandwidth = ituPfdRefBandwidth; // ITU参考带宽
@@ -1551,8 +1635,9 @@ function performCalculations(satParams, inputs) {
   results.carrierTotalCT = carrierTotalCT.toFixed(2);
   results.carrierTotalCN0 = (carrierTotalCT + 228.6).toFixed(2);
   results.carrierTotalCN = carrierTotalCN.toFixed(2);
+  results.realTotalCN = realTotalCN.toFixed(2); // 实际合计 C/N（上行⊕下行）
   results.thresholdCN = thresholdCN.toFixed(2);
-  results.linkmargin = linkmargin.toFixed(2);
+  results.linkmargin = (realTotalCN - thresholdCN).toFixed(2); // 真实链路余量 = 实际合计 C/N − 门限 C/N
   
   
   
@@ -1570,6 +1655,7 @@ function performCalculations(satParams, inputs) {
   results.UPCmarginResult = upcMargin.toFixed(2);
   results.stationEIRPResult = stationEIRP.toFixed(3);
   results.PFDcResult = PFDc.toFixed(3);
+  results.arrivalPFDAtSatelliteResult = arrivalPFDAtSatellite.toFixed(3); // 实际到达卫星通量密度（载波电平+单位面积增益）
   results.stationPSDResult = stationPSD.toFixed(3);
   results.satellitePSDResult = satellitePSD.toFixed(3);
   results.deltagain = deltagain.toFixed(2);
@@ -1581,6 +1667,7 @@ function performCalculations(satParams, inputs) {
   results.RXtransponderCapacityResult = RXtransponderCapacity.toFixed(3);
   results.RXeirpPerCarrierResult = RXeirpPerCarrier.toFixed(3);
   results.actualTransponderCapacityResult = actualTransponderCapacity.toFixed(3);
+  results.transponderOutputEIRP = transponderOutputEIRP.toFixed(3);
   
   // 转发器回退 (Transponder Backoff) = 卫星的EIRP - 载波占有的EIRP
   // 使用上行雨情况下的载波占有EIRP
@@ -2029,6 +2116,63 @@ function scaleRainAttenP618_14(A001, p, latDeg, elevDeg) {
   const exponent = -(0.655 + 0.033 * Math.log(p) - 0.045 * Math.log(A001)
                     - beta * (1 - p) * sinElev);
   return A001 * Math.pow(p / 0.01, exponent);
+}
+
+/**
+ * ITU-R P.618-14 §4.1：由同极化降雨衰减统计估算去极化（交叉极化鉴别度 XPD）
+ *
+ * 适用范围：8 ≤ f ≤ 35 GHz（频率项 Cf 给出的扩展范围为 6 ≤ f ≤ 55 GHz），θ ≤ 60°。
+ * 严格按照电联（ITU-R P.618-14）规定的 8 个步骤实现，结果为 p% 时间不被超过的 XPD。
+ *
+ * @param {number} Ap      超过 p% 时间的同极化降雨衰减（CPA，dB），与 XPD 同一时间百分比
+ * @param {number} freq    频率（GHz）
+ * @param {number} tauDeg  线极化电场矢量相对当地水平方向的倾斜角 τ（度），圆极化取 45°
+ * @param {number} elevDeg 路径仰角 θ（度）
+ * @param {number} p       时间百分比（%）
+ * @returns {number} XPDp（dB）；无降雨或参数无效时返回 Infinity（表示无去极化效应）
+ */
+function calculateRainXPD_P618_14(Ap, freq, tauDeg, elevDeg, p) {
+  // 无降雨衰减或参数无效 → 不产生雨致去极化
+  if (!(Ap > 0) || !(freq > 0) || !(p > 0)) return Infinity;
+
+  // 方法有效仰角范围 θ ≤ 60°，超出则限幅到 60°
+  const theta = Math.min(Math.max(elevDeg, 0), 60);
+  const D2R = CONSTANTS.PI / 180;
+
+  // Step 1: 频率相关项 Cf = 30·log f （6 ≤ f ≤ 55 GHz）
+  const Cf = 30 * Math.log10(freq);
+
+  // Step 2: 降雨衰减相关项 CA = V(f)·log(Ap)
+  //   V(f) = 12.8·f^0.19   (6 ≤ f ≤ 9 GHz)
+  //   V(f) = 22.6          (9 < f ≤ 36 GHz)
+  //   V(f) = 13.0·f^0.19   (36 < f ≤ 55 GHz)
+  let Vf;
+  if (freq <= 9)        Vf = 12.8 * Math.pow(freq, 0.19);
+  else if (freq <= 36)  Vf = 22.6;
+  else                  Vf = 13.0 * Math.pow(freq, 0.19);
+  const CA = Vf * Math.log10(Ap);
+
+  // Step 3: 极化改善因子 Cτ = -10·log[1 - 0.484·(1 + cos4τ)]
+  //   τ=0°(水平) 或 τ=90°(垂直) → Cτ ≈ 15 dB；τ=45°(圆极化) → Cτ = 0
+  const Ctau = -10 * Math.log10(1 - 0.484 * (1 + Math.cos(4 * tauDeg * D2R)));
+
+  // Step 4: 仰角相关项 Cθ = -40·log(cosθ) （θ ≤ 60°）
+  const Ctheta = -40 * Math.log10(Math.cos(theta * D2R));
+
+  // Step 5: 雨滴倾角分布相关项 Cσ = 0.0053·σ²
+  //   σ 为雨滴倾角分布的有效标准差（度），对 1%/0.1%/0.01%/0.001%
+  //   分别取 0/5/10/15 度，即 σ = -5·log10(p)（p ≥ 1% 时取 0）
+  const sigma = Math.max(0, -5 * Math.log10(p));
+  const Csigma = 0.0053 * sigma * sigma;
+
+  // Step 6: 降雨去极化 XPDrain = Cf - CA + Cτ + Cθ + Cσ （dB）
+  const XPDrain = Cf - CA + Ctau + Ctheta + Csigma;
+
+  // Step 7: 冰晶相关项 Cice = XPDrain·(0.3 + 0.1·log p)/2 （dB）
+  const Cice = XPDrain * (0.3 + 0.1 * Math.log10(p)) / 2;
+
+  // Step 8: 含冰晶效应的 XPD（p% 时间不被超过的 XPD）
+  return XPDrain - Cice;
 }
 
 /**
