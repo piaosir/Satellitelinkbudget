@@ -924,11 +924,25 @@ function performCalculations(satParams, inputs) {
   // 实际到达卫星通量密度：到达卫星载波电平 + 卫星单位面积增益（与级联自洽，含实际上行雨衰）
   const arrivalPFDAtSatellite = cLevelAtSatellite + antennaGain;
   const uplinkThermalCN = cLevelAtSatellite + G_Ts - CONSTANTS.BOLTZMANN - RXnoiseBW;
-  // 上行干扰损失（dB）：纯干扰造成的 C/N 退化 = 仅热噪声上行 C/T − 含干扰上行总 C/T
-  // EIRP、雨衰、带宽、k 等热噪声项在差值中抵消，结果只反映 ACI/ASI/XPI/IM 干扰，与降雨解耦
-  const uplinkInterferenceLoss = uplinkCT - uplinkTotalCT;
-  // 上行 C/N = 热噪声 C/N − 干扰损失
-  const uplinkCN = uplinkThermalCN - uplinkInterferenceLoss;
+  // 上行 C/N（密度域合并法）：把各上行干扰 C/I 转为 C/I₀（基准=转发器带宽），
+  // 与载波级上行热噪声 C/N₀ 在密度域并联，再减去载波噪声带宽换算成上行 C/N。
+  // 这样干扰与热噪声同处「每赫兹密度」基准，避免用转发器满载基准的干扰损失套到载波级热噪声 C/N 上而高估干扰。
+  const uplinkThermalCN0 = uplinkThermalCN + RXnoiseBW; // 载波级上行热噪声 C/N₀
+  // 各上行干扰 C/I₀ = C/I + 10log10(转发器带宽)；前面以转发器带宽构造的干扰 C/T 满足 C/I₀ = C/T − k
+  const aciUplinkCI0 = aciUplinkCT - CONSTANTS.BOLTZMANN;
+  const adjUplinkCI0 = adjUplinkCT - CONSTANTS.BOLTZMANN;
+  const xpolUplinkCI0 = xpolUplinkCT - CONSTANTS.BOLTZMANN;
+  const hpaIntermodCI0 = hpaIntermodCT - CONSTANTS.BOLTZMANN;
+  // 上行总 C/(N₀+I₀)：热噪声 C/N₀ 与各干扰 C/I₀ 密度域并联
+  const uplinkTotalCN0 = -10 * Math.log10(
+    Math.pow(10, -uplinkThermalCN0 / 10) +
+    Math.pow(10, -aciUplinkCI0 / 10) +
+    Math.pow(10, -adjUplinkCI0 / 10) +
+    Math.pow(10, -xpolUplinkCI0 / 10) +
+    Math.pow(10, -hpaIntermodCI0 / 10)
+  );
+  // 上行 C/N = 上行总 C/(N₀+I₀) − 载波噪声带宽
+  const uplinkCN = uplinkTotalCN0 - RXnoiseBW;
   // 上行干扰等效 C/I（仅展示，由热噪声与实际 C/N 反推）
   const uplinkInterferenceCN = -10 * Math.log10(
     Math.max(Math.pow(10, -uplinkCN / 10) - Math.pow(10, -uplinkThermalCN / 10), 1e-30)
@@ -1485,7 +1499,7 @@ function performCalculations(satParams, inputs) {
   results.uplinkAtmosphericAttenuationResult = uplinkAtmosphericAttenuation.toFixed(2);
   results.uplinkScintillationResult = uplinkScintillation.toFixed(2); // 上行闪烁衰减 AS(p) (dB)
   results.uplinkTotalAttenuationResult = uplinkTotalAttenuation.toFixed(2); // 上行总衰减 AT(p) ITU-R P.618-14 §2.5
-  results.uplinkCN = uplinkCN.toFixed(2);
+  results.uplinkCN = uplinkCN.toFixed(3);
   results.uplinkThermalCN = uplinkThermalCN.toFixed(2); // 上行热噪声 C/N
   results.uplinkInterferenceCN = uplinkInterferenceCN.toFixed(2); // 上行干扰 C/I（表达为 C/N）
   results.uplinkRainDominant = uplinkRainDominant; // 上行降雨是否占主导
@@ -1525,7 +1539,7 @@ function performCalculations(satParams, inputs) {
   results.downlinkAtmosphericAttenuationResult = downlinkAtmosphericAttenuation.toFixed(2);
   results.downlinkScintillationResult = downlinkScintillation.toFixed(2); // 下行闪烁衰减 AS(p) (dB)
   results.downlinkTotalAttenuationResult = downlinkTotalAttenuation.toFixed(2); // 下行总衰减 AT(p) ITU-R P.618-14 §2.5
-  results.downlinkCN = downlinkCN.toFixed(2);
+  results.downlinkCN = downlinkCN.toFixed(3);
   results.downlinkThermalCN = downlinkThermalCN.toFixed(2); // 下行热噪声 C/N
   results.downlinkInterferenceCN = downlinkInterferenceCN.toFixed(2); // 下行干扰 C/I（表达为 C/N）
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
