@@ -616,8 +616,6 @@ Page({
       ['最大载波数', 'maxCarrierCount', ''],
       ['带宽占用比', 'bandwidthUsageRatio', '%'],
       ['功率占用比', 'powerUsageRatio', '%'],
-      ['上行功率占比', 'uplinkPowerRatioResult', '%'],
-      ['下行功率占比', 'downlinkPowerRatioResult', '%'],
       ['功放实际输出', 'selectedPowerResult', 'dBW'],
       ['功放实际输出(W)', 'selectedPowerWResult', 'W'],
       ['功放建议值', 'paRecommendationdBResult', 'dBW'],

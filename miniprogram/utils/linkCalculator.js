@@ -462,7 +462,7 @@ function performCalculations(satParams, inputs) {
   
   // 系统可用度
   const rxdownlinkAvailability = rxDownlinkAvailability * 100;
-  const systemAvailability = (uplinkAvailability * rxDownlinkAvailability).toFixed(2);
+  const systemAvailability = (uplinkAvailability * rxDownlinkAvailability).toFixed(5);
   
   // ============ 调制与带宽计算 ============
   const modulationFactor = MODULATION_FACTORS[modulation] || 2;
@@ -1591,8 +1591,8 @@ function performCalculations(satParams, inputs) {
   results.marginResult = margin.toFixed(2);
   
   // 可用度
-  results.uplinkAvailabilityResult = uplinkAvailability.toFixed(2);
-  results.downlinkAvailabilityResult = rxdownlinkAvailability.toFixed(2);
+  results.uplinkAvailabilityResult = uplinkAvailability.toFixed(5);
+  results.downlinkAvailabilityResult = rxdownlinkAvailability.toFixed(5);
   results.systemAvailabilityResult = systemAvailability;
   // 预计中断时长（基于系统可用度，按年计算）
   const systemUnavailability = (100 - parseFloat(systemAvailability)) / 100;

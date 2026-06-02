@@ -1478,9 +1478,8 @@ Page({
               'linkParams.rsCode': rsCode.toFixed(6),
               'realtimeParams.spectralEfficiency': value
             });
-            this.updateRealtimeParams();
-            // updateRealtimeParams 会用计算值覆盖 SE 显示，还原为用户正在输入的原始值
-            this.setData({ 'realtimeParams.spectralEfficiency': value });
+            // 跳过频谱效率回写，避免覆盖用户正在输入的原始值导致闪烁
+            this.updateRealtimeParams({ skipSpectralEfficiency: true });
             return;
           }
         }
@@ -2978,7 +2977,8 @@ Page({
   },
 
   // 实时计算参数
-  updateRealtimeParams() {
+  updateRealtimeParams(options) {
+    const skipSpectralEfficiency = !!(options && options.skipSpectralEfficiency);
     try {
       // 如果是符号率优先模式，先根据当前符号率反推信息速率和载波带宽
       if (this.data.rateCalcMode === 'symbolRate') {
@@ -3054,7 +3054,7 @@ Page({
         const _bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.20;
         const _m = parseFloat(this.data.linkParams.m) || 1;
         const _se = _modulationFactor * _fec * _rsCode / (_bandwidthFactor * _m);
-        const spectralEfficiencyUpdate = {
+        const spectralEfficiencyUpdate = skipSpectralEfficiency ? {} : {
           'realtimeParams.spectralEfficiency': isNaN(_se) ? '' : _se.toFixed(4)
         };
 
