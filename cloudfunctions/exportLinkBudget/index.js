@@ -336,7 +336,10 @@ async function generateExcel(segments, meta, ui) {
       vals.forEach((v, vi) => {
         const isTotalCol = cols >= 3 && vi === 2;
         const cell = ws.getCell(rowNum, 2 + vi);
-        const num = v === '' || v === '—' ? v : (isNaN(parseFloat(v)) ? v : parseFloat(v));
+        // 仅当整个字符串都是合法数字时才转为数值，避免将分数（如 "3/4"）截断为数字
+        const sv = String(v).trim();
+        const isNumeric = sv !== '' && !isNaN(sv) && !isNaN(parseFloat(sv));
+        const num = v === '' || v === '—' ? v : (isNumeric ? parseFloat(v) : v);
         cell.value = num;
         cell.font = { name: 'Consolas', size: 10, bold: strong || isTotalCol, color: { argb: 'FF000000' } };
         cell.alignment = { horizontal: 'right', vertical: 'middle' };
