@@ -1627,6 +1627,16 @@ Page({
     wx.vibrateShort({ type: 'light' });
   },
 
+  // 切换 ISL 计算模式：manual（直接给 SNR/C·N₀）/ rf（射频链路预算）/ optical（光学链路预算）
+  onIslModeChange(e) {
+    const mode = e.currentTarget.dataset.mode;
+    if (!mode || mode === this.data.satelliteParams.islMode) return;
+    this.setData({ 'satelliteParams.islMode': mode });
+    this.updateRealtimeParams();
+    app.globalData.satelliteParams = this.data.satelliteParams;
+    wx.vibrateShort({ type: 'light' });
+  },
+
   // ============ 城市选择相关方法 ============
   
   // 城市输入变化处理（带搜索功能）
