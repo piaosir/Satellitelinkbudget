@@ -7,6 +7,7 @@ const { calculateLinkBudget: calculateLinkBudgetGEO } = require('../../utils/lin
 const { calculateLinkBudget: calculateLinkBudgetNGSO, slantRangeFromAltitude, altitudeFromSlantRange } = require('../../utils/linkCalculatorNGSO');
 const { getAllCities, getDisplayOrderCities, searchCities, getCityByName } = require('../../utils/cities');
 const { estimateRainRate, getNearestCityInfo } = require('../../utils/rainRate');
+const { queryElevation, isElevationReady } = require('../../utils/elevation');
 const { calculateSunOutage, BAND_PARAMS } = require('../../utils/sunOutageCalculator');
 
 // 解析分数或小数字符串的辅助函数
@@ -830,6 +831,24 @@ Page({
         update['linkParams.distanceMode'] = 'altitude';
         update['linkParams.rxDistanceMode'] = 'altitude';
       }
+
+      // 星间链路 ISL：默认「激光链路」模式，并把光学链路预算默认值实际填入输入框（用户可改）
+      const islDefaults = {
+        islMode: 'optical',
+        islHopDistance: '2000',     // 单跳距离 (km)
+        islOptTxPower: '20',        // 发射光功率 (dBm，=0.1 W)
+        islOptTxAperture: '0.08',   // 发射口径 (m)
+        islOptRxAperture: '0.08',   // 接收口径 (m)
+        islOptWavelength: '1550',   // 波长 (nm)
+        islOptPointingLoss: '3',    // 指向+光学损耗 (dB)
+        islOptSensitivity: '-30',   // 接收灵敏度 (dBm)
+        islOptSensRate: '1000',     // 灵敏度参考速率 (Mbps)
+        islOptSensEbN0: '13'        // 灵敏度点所需 Eb/N₀ (dB)
+      };
+      Object.keys(islDefaults).forEach((k) => {
+        update['satelliteParams.' + k] = islDefaults[k];
+        if (app.globalData.satelliteParams) app.globalData.satelliteParams[k] = islDefaults[k];
+      });
     }
     this.setData(update);
   },
@@ -1315,6 +1334,20 @@ Page({
     
     this.setData({
       [`linkParams.${field}`]: cityInfo.rainRate
+    });
+
+    // 同步根据经纬度自动填充海拔(P.1511 Earth2014)，数据未就绪时不覆盖现有值
+    this.promptElevationEstimation(lon, lat, type);
+  },
+
+  // 根据经纬度自动填充海拔(高于平均海平面)
+  promptElevationEstimation(lon, lat, type) {
+    if (!isElevationReady()) return;
+    const result = queryElevation(lat, lon);
+    if (!result || !result.success) return;
+    const field = type === 'uplink' ? 'altitude' : 'rxAltitude';
+    this.setData({
+      [`linkParams.${field}`]: result.altitude
     });
   },
 

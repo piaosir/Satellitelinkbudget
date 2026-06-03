@@ -1,5 +1,6 @@
 // app.js
 const { setFullPrecisionData } = require('./utils/rainRate');
+const { setFullPrecisionElevation } = require('./utils/elevation');
 
 App({
   onLaunch: function (options) {
@@ -70,6 +71,9 @@ App({
 
     // 后台静默下载 ITU-R P.837 全精度降雨率数据
     this._loadP837Data();
+
+    // 后台静默下载 ITU-R P.1511 全精度海拔数据
+    this._loadTopoData();
   },
 
   // ===== P.837 降雨率数据加载 =====
@@ -134,6 +138,67 @@ App({
     });
   },
 
+  // ===== P.1511 海拔数据加载 =====
+  // 云存储文件路径 (上传 topo_v1.bin 后填入对应 fileID)
+  TOPO_CLOUD_FILE: 'cloud://cloud1-8gjv5ekx41d6fb76.636c-cloud1-8gjv5ekx41d6fb76-1385987144/TOPO/topo_v1.bin',
+  TOPO_LOCAL_PATH: wx.env.USER_DATA_PATH + '/topo_v1.bin',
+  TOPO_VERSION_KEY: 'topo_data_version',
+  TOPO_CURRENT_VERSION: 'v1',
+  TOPO_EXPECTED_SIZE: 2164 * 4324 * 2, // 18,714,272 bytes (int16)
+
+  _loadTopoData() {
+    const fs = wx.getFileSystemManager();
+    const savedVersion = wx.getStorageSync(this.TOPO_VERSION_KEY);
+
+    // 优先尝试加载本地缓存
+    if (savedVersion === this.TOPO_CURRENT_VERSION) {
+      try {
+        const arrayBuffer = fs.readFileSync(this.TOPO_LOCAL_PATH);
+        if (arrayBuffer && arrayBuffer.byteLength === this.TOPO_EXPECTED_SIZE) {
+          setFullPrecisionElevation(arrayBuffer);
+          console.log('[P.1511] 从本地缓存加载成功');
+          return;
+        }
+      } catch (e) {
+        console.warn('[P.1511] 本地缓存读取失败，重新下载:', e.message);
+      }
+    }
+
+    // 后台下载
+    this._downloadTopoData(fs);
+  },
+
+  _downloadTopoData(fs) {
+    console.log('[P.1511] 开始后台下载全精度海拔数据...');
+    wx.cloud.downloadFile({
+      fileID: this.TOPO_CLOUD_FILE,
+      success: (res) => {
+        if (res.statusCode === 200 && res.tempFilePath) {
+          try {
+            const arrayBuffer = fs.readFileSync(res.tempFilePath);
+            if (arrayBuffer.byteLength !== this.TOPO_EXPECTED_SIZE) {
+              console.warn('[P.1511] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              return;
+            }
+
+            // 持久化到用户目录
+            fs.writeFileSync(this.TOPO_LOCAL_PATH, arrayBuffer);
+            wx.setStorageSync(this.TOPO_VERSION_KEY, this.TOPO_CURRENT_VERSION);
+
+            // 注入到 elevation 模块
+            setFullPrecisionElevation(arrayBuffer);
+            console.log('[P.1511] 下载并缓存成功');
+          } catch (e) {
+            console.error('[P.1511] 保存失败:', e.message);
+          }
+        }
+      },
+      fail: (err) => {
+        console.warn('[P.1511] 下载失败(海拔自动填充将不可用):', err.errMsg);
+      }
+    });
+  },
+
   // 获取默认卫星参数 - 完全对齐 index.html
   getDefaultSatelliteParams() {
     return {
@@ -166,14 +231,14 @@ App({
   getDefaultLinkParams() {
     return {
       // 上行站参数
-      earthStationLocation: '',
+      earthStationLocation: '北京',
       antennaDiameter: 6.2,
       longitude: 116.4074,
       latitude: 39.9042,
       centerFrequency: 14.25,
       uplinkPolarization: 'V',
       G_Ts: 2,
-      altitude: 0,
+      altitude: 47,
       rainRate: 46.167,
       antennaEfficiency: 65,
       paBackoff: 5,
@@ -189,14 +254,14 @@ App({
       slantRange: 2120,
 
       // 接收站参数
-      rxEarthStationLocation: '',
+      rxEarthStationLocation: '北京',
       rxAntennaDiameter: 3.7,
       rxLongitude: 116.4074,
       rxLatitude: 39.9042,
       rxCenterFrequency: 12.5,
       downlinkPolarization: 'H',
       rxEIRP: 46,
-      rxAltitude: 0,
+      rxAltitude: 47,
       rxRainRate: 46.167,
       rxAntennaEfficiency: 65,
       rxAntennaNoiseTemp: 35,

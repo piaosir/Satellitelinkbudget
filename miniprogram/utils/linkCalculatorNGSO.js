@@ -481,15 +481,15 @@ function performCalculations(satParams, inputs) {
   const islRfFreq = islNum('islFreq', 23);        // ISL 频率 (GHz，典型 Ka/V 频段星间)
   const islRfMiscLoss = islNum('islMiscLoss', 1); // ISL 其他损耗 (dB)
   // —— 光学 ISL 参数（接收灵敏度法）——
-  const islOptTxPower = islNum('islOptTxPower', -10);     // 发射光功率 (dBW，约 0.1 W)
+  const islOptTxPower = islNum('islOptTxPower', 20);      // 发射光功率 (dBm，厂商手册口径；默认 20 dBm = 0.1 W)
   const islOptTxAperture = islNum('islOptTxAperture', 0.08); // 发射望远镜口径 (m)
   const islOptRxAperture = islNum('islOptRxAperture', 0.08); // 接收望远镜口径 (m)
   const islOptWavelengthNm = islNum('islOptWavelength', 1550); // 工作波长 (nm)
   const islOptPointingLoss = islNum('islOptPointingLoss', 3);  // 指向 + 光学损耗 (dB)
-  // 接收灵敏度三参数：在参考速率、目标 BER 下的最小接收功率 P_req，及该点所需 Eb/N₀
-  const islOptSensitivity = islNum('islOptSensitivity', -60); // 接收灵敏度 P_req (dBW，约 -30 dBm)
+  // 接收灵敏度三参数：在参考速率、目标 BER 下的最小接收功率 P_req（单位 dBm，对齐厂商手册），及该点所需 Eb/N₀
+  const islOptSensitivity = islNum('islOptSensitivity', -30); // 接收灵敏度 P_req (dBm，厂商手册值，如 -36 dBm)
   const islOptSensRate = islNum('islOptSensRate', 1000);      // 灵敏度参考速率 (Mbps)
-  const islOptSensEbN0 = islNum('islOptSensEbN0', 13);        // 灵敏度点所需 Eb/N₀ (dB)
+  const islOptSensEbN0 = islNum('islOptSensEbN0', 13);        // 灵敏度点所需 Eb/N₀ (dB，由 BER+调制格式查得，用户自查填入)
   const aciUplinkFactor = satParams.aciUplinkFactor !== undefined && satParams.aciUplinkFactor !== '' && satParams.aciUplinkFactor !== null
     ? parseFloat(satParams.aciUplinkFactor) 
     : 30; // dB
@@ -685,9 +685,9 @@ function performCalculations(satParams, inputs) {
   // ============ 降雨衰减计算 ============
   // 上行降雨衰减
   const uplinkUnavailability = uplinkAvailability / 100;
-  const freqKey = findClosestFrequency(uplinkFrequency);
+  // 雨衰直接传入具体频率（P.838 系数由 interpolateP838 插值），不再四舍五入到整数频点
   const { A001, hR: uplinkRainHeight } = calculateSinglePathRainAttenuation(
-    rainRate, freqKey, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude, elevation
+    rainRate, uplinkFrequency, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude, elevation
   );
   
   // ITU-R P.618-14 公式(8) 换算到目标可用度（p=0 即可用度100% 返回0，即晴天）
@@ -696,9 +696,8 @@ function performCalculations(satParams, inputs) {
   );
   
   // 下行降雨衰减
-  const downlinkFreqKey = findClosestFrequency(downlinkFrequency);
   const { A001: downlinkA001, hR: downlinkRainHeight } = calculateSinglePathRainAttenuation(
-    rxRainRate, downlinkFreqKey, downlinkPolarization, 
+    rxRainRate, downlinkFrequency, downlinkPolarization, 
     rxLatitude, rxLongitude, orbitPosition, rxAltitude, rxElevation
   );
   
@@ -791,11 +790,17 @@ function performCalculations(satParams, inputs) {
   //  rf    ：射频链路预算 C/T = EIRP − FSL(d,f) + G/T − 其他损耗
   //  optical：光学链路预算 C/N₀ = P_tx + G_tx − FSL_opt − 指向损耗 + G_rx − N₀；C/T = C/N₀ + k
   let cIsl_CT;
+  // 按链路类型捕获中间量，供瀑布表「ISL 性能评估」段按 islMode 分链路展示（逐行可算通）
+  const islBudgetDetail = {};
   if (islMode === 'rf') {
     // FSL：与上下行同式（d 取单跳 ISL 距离，单位 m；f 单位 GHz）
     const islFsl = 20 * (Math.log10(islRfFreq) + Math.log10(islHopDistanceKm * 1000)) +
                    20 * Math.log10((4 * CONSTANTS.PI) / 0.299792458);
     cIsl_CT = islRfEirp - islFsl + islRfGT - islRfMiscLoss;
+    islBudgetDetail.rf = {
+      eirp: islRfEirp, freq: islRfFreq, dist: islHopDistanceKm,
+      fsl: islFsl, gt: islRfGT, miscLoss: islRfMiscLoss
+    };
   } else if (islMode === 'optical') {
     // 几何（严格）：望远镜增益 G = 20·log10(π·D/λ)（衍射极限孔径增益）；FSL = 20·log10(4π·d/λ)
     const lambdaM = islOptWavelengthNm * 1e-9;        // 波长 (m)
@@ -804,14 +809,27 @@ function performCalculations(satParams, inputs) {
     const gRxOpt = 20 * Math.log10(CONSTANTS.PI * islOptRxAperture / lambdaM);
     const fslOpt = 20 * Math.log10(4 * CONSTANTS.PI * dM / lambdaM);
     // 接收光功率（截断/波前等真实劣化并入「指向+光学损耗」）
-    const pRxOpt = islOptTxPower + gTxOpt - fslOpt - islOptPointingLoss + gRxOpt; // dBW
+    // 发射光功率以 dBm 输入（厂商手册口径），此处 −30 换算到 dBW 再参与计算
+    const pRxOpt = (islOptTxPower - 30) + gTxOpt - fslOpt - islOptPointingLoss + gRxOpt; // dBW
     // 接收灵敏度法：由灵敏度反推接收机等效噪声谱密度 N₀ = P_req − 10·lg(R_ref) − (Eb/N₀)_req
-    const n0Opt = islOptSensitivity - 10 * Math.log10(islOptSensRate * 1e6) - islOptSensEbN0; // dBW/Hz
+    // 灵敏度以 dBm 输入（厂商手册口径），此处 −30 换算到 dBW 再参与计算
+    const n0Opt = (islOptSensitivity - 30) - 10 * Math.log10(islOptSensRate * 1e6) - islOptSensEbN0; // dBW/Hz
     const cn0Opt = pRxOpt - n0Opt;                    // C/N₀ (dBHz)
     cIsl_CT = cn0Opt + CONSTANTS.BOLTZMANN;           // C/T = C/N₀ + k
+    // 展示统一用 dBm 口径（与发射功率/灵敏度输入一致，逐行算得通）：pRx、N₀ 各 +30 转 dBm
+    islBudgetDetail.opt = {
+      txPowerDbm: islOptTxPower, txAperture: islOptTxAperture, rxAperture: islOptRxAperture,
+      wavelengthNm: islOptWavelengthNm, dist: islHopDistanceKm,
+      gTx: gTxOpt, fsl: fslOpt, pointLoss: islOptPointingLoss, gRx: gRxOpt,
+      pRxDbm: pRxOpt + 30, n0Dbm: n0Opt + 30, cn0: cn0Opt,
+      sensDbm: islOptSensitivity, sensRate: islOptSensRate, sensEbN0: islOptSensEbN0
+    };
   } else {
     // manual（默认，兼容旧配置）：SNR → C/T = SNR + 10·lgB + k
     cIsl_CT = cIsl + 10 * Math.log10(transponderBandwidth * 1e6) + CONSTANTS.BOLTZMANN;
+    islBudgetDetail.manual = {
+      inputSnr: cIsl, refBandwidthMHz: transponderBandwidth
+    };
   }
   
   // 载波门限值C/T
@@ -1071,22 +1089,27 @@ function performCalculations(satParams, inputs) {
   const rxAntennaUnitAreaGain = 10 * Math.log10(4 * CONSTANTS.PI / (rxWavelength ** 2));
   const arrivalPFDAtGround = cLevelAtGround + rxAntennaUnitAreaGain;
   const downlinkThermalCN = cLevelAtGround + gOverTe - downlinkGtDegEff - CONSTANTS.BOLTZMANN - RXnoiseBW;
-  // ISL（星间链路）折算到载波噪声带宽的等效 C/N
+  // ISL（星间链路）折算到载波噪声带宽的等效 C/N（原始：ISL 链路自身性能，供 ISL 性能段展示）
   // 单跳 C/N = 单跳 C/T − k − 10·lgB（B 为载波噪声带宽 RXnoiseBW）；多跳噪声并联（线性倒数相加）
   const islPerHopCN = islHops > 0 ? (cIsl_CT - CONSTANTS.BOLTZMANN - RXnoiseBW) : null;
   const islCNlinearSum = islHops > 0 ? islHops * Math.pow(10, -islPerHopCN / 10) : 0;
   // ISL 总等效 C/N（islHops 跳并联后）
   const islTotalCN = islHops > 0 ? -10 * Math.log10(islCNlinearSum) : null;
-  // ── ISL 并入「上行侧」──
-  // 弯管星座端到端为：用户上行(RF) → 星间激光多跳 → 信关站下行(RF)；落地（下行）之前噪声逐段累加，
-  // 故 ISL 与上行合成为「有效上行 C/N」：上行 C/N ⊕ ISL（噪声并联）。islHops=0 时即为纯上行。
-  const uplinkWithIslCN = -10 * Math.log10(Math.pow(10, -uplinkCN / 10) + islCNlinearSum);
+  // ── ISL 并入「上行侧」（口径统一到 totalCT）──
+  // ISL 已计入工作区饱和总 C/T（invTotalCT 含 ISL 项）。为使瀑布里 ISL 的影响 ＝ 它在 totalCT 的影响，
+  // 不直接用 ISL 自身工作点 C/N（islTotalCN，会过度惩罚、致下行反解为负→300、合成>上行），
+  // 而是取 ISL 在饱和总 C/T 中的噪声份额 f_isl = (islHops·10^(-cIsl_CT/10)) / invTotalCT，
+  // 折算到工作点：ISL 等效 C/N = carrierTotalCN − 10·lg(f_isl)，即级联噪声份额 = f_isl·10^(-carrierTotalCN/10)。
+  // 这样 ISL 对合计的代价与它对 totalCT 的代价一致（小），上行(含ISL) 恒 > 合计，反解下行恒为正。
+  const islFraction = islHops > 0 ? (islHops * Math.pow(10, -cIsl_CT / 10)) / invTotalCT : 0;
+  const islCascadeLin = islFraction * Math.pow(10, -carrierTotalCN / 10);
+  const uplinkWithIslCN = -10 * Math.log10(Math.pow(10, -uplinkCN / 10) + islCascadeLin);
   // 下行 C/N 反算：有效上行(含 ISL) ⊕ 下行 = 合计，故由合计扣除有效上行反算下行
-  // 与「合计 ⊖ 上行 ⊖ ISL」恒等（结合律）；islHops=0 时 uplinkWithIslCN=uplinkCN，退化为原逻辑，保持兼容
+  // islHops=0 时 islCascadeLin=0、uplinkWithIslCN=uplinkCN，退化为原逻辑，保持兼容
   const downlinkCN = -10 * Math.log10(
     Math.max(Math.pow(10, -carrierTotalCN / 10) - Math.pow(10, -uplinkWithIslCN / 10), 1e-30)
   );
-  // ISL 对上行侧的代价（dB，≥0）：上行(纯) − 上行(含 ISL)
+  // ISL 对上行侧的代价（dB，≥0）：上行(纯) − 上行(含 ISL)，与 totalCT 口径一致
   const islImpact = islHops > 0 ? (uplinkCN - uplinkWithIslCN) : null;
   // 下行干扰等效 C/I（仅展示，由热噪声与反算 C/N 反推）
   const downlinkInterferenceCN = -10 * Math.log10(
@@ -1677,8 +1700,42 @@ function performCalculations(satParams, inputs) {
     results.islPerHopCTResult = cIsl_CT.toFixed(2);                 // 单跳 ISL C/T (dBW/K)
     results.islPerHopCNResult = islPerHopCN.toFixed(2);             // 单跳 ISL 折算到载波噪声带宽的 C/N (dB)
     results.islTotalCTResult = (cIsl_CT - 10 * Math.log10(islHops)).toFixed(2); // 多跳并联后等效 C/T (dBW/K)
-    results.islTotalCNResult = islTotalCN.toFixed(2);               // 多跳并联后等效 C/N (dB)
+    results.islTotalCNResult = islTotalCN.toFixed(2);               // 多跳并联后等效 C/N (dB，ISL 链路自身)
     results.islImpactResult = islImpact.toFixed(2);                 // ISL 对合计 C/N 的代价 (dB)
+    // 级联折算 C/N（口径同 totalCT）：使 上行C/N ⊕ 该值 = 上行C/N(含ISL)，瀑布逐行算得通
+    results.islCascadeCNResult = (-10 * Math.log10(islCascadeLin)).toFixed(2);
+    // ISL 计算模式 + 各模式链路预算中间量（供瀑布「ISL 性能评估」段按链路类型分别展示）
+    results.islModeResult = islMode; // 'manual' | 'rf' | 'optical'
+    if (islMode === 'rf' && islBudgetDetail.rf) {
+      const b = islBudgetDetail.rf;
+      results.islRfEirpResult = b.eirp.toFixed(2);        // ISL EIRP (dBW)
+      results.islRfFreqResult = b.freq.toFixed(2);        // ISL 频率 (GHz)
+      results.islRfDistResult = b.dist.toFixed(0);        // 单跳距离 (km)
+      results.islRfFslResult = b.fsl.toFixed(2);          // ISL 自由空间损耗 (dB)
+      results.islRfGtResult = b.gt.toFixed(2);            // ISL G/T (dB/K)
+      results.islRfMiscLossResult = b.miscLoss.toFixed(2); // 其他损耗 (dB)
+    } else if (islMode === 'optical' && islBudgetDetail.opt) {
+      const b = islBudgetDetail.opt;
+      results.islOptTxPowerResult = b.txPowerDbm.toFixed(2);   // 发射光功率 (dBm)
+      results.islOptTxApertureResult = b.txAperture.toFixed(3); // 发射口径 (m)
+      results.islOptRxApertureResult = b.rxAperture.toFixed(3); // 接收口径 (m)
+      results.islOptWavelengthResult = b.wavelengthNm.toFixed(0); // 波长 (nm)
+      results.islOptDistResult = b.dist.toFixed(0);            // 单跳距离 (km)
+      results.islOptGTxResult = b.gTx.toFixed(2);              // 发射望远镜增益 (dBi)
+      results.islOptFslResult = b.fsl.toFixed(2);              // 光学自由空间损耗 (dB)
+      results.islOptPointLossResult = b.pointLoss.toFixed(2);  // 指向+光学损耗 (dB)
+      results.islOptGRxResult = b.gRx.toFixed(2);              // 接收望远镜增益 (dBi)
+      results.islOptPRxResult = b.pRxDbm.toFixed(2);           // 接收光功率 (dBm)
+      results.islOptN0Result = b.n0Dbm.toFixed(2);             // 等效噪声谱密度 N₀ (dBm/Hz)
+      results.islOptCN0Result = b.cn0.toFixed(2);              // 单跳 C/N₀ (dBHz)
+      results.islOptSensResult = b.sensDbm.toFixed(2);         // 接收灵敏度 (dBm)
+      results.islOptSensRateResult = b.sensRate.toFixed(0);    // 灵敏度参考速率 (Mbps)
+      results.islOptSensEbN0Result = b.sensEbN0.toFixed(2);    // 灵敏度点 Eb/N₀ (dB)
+    } else if (islMode === 'manual' && islBudgetDetail.manual) {
+      const b = islBudgetDetail.manual;
+      results.islManualSnrResult = b.inputSnr.toFixed(2);          // 输入 SNR (dB)
+      results.islManualRefBwResult = b.refBandwidthMHz.toFixed(2); // 参考带宽 (MHz)
+    }
   }
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
   results.actualDownlinkCN0 = (actualDownlinkCT + 228.6).toFixed(2); // 载波下行C/N₀
@@ -1714,6 +1771,9 @@ function performCalculations(satParams, inputs) {
   const islTotalDistance = islHops * ISL_HOP_DISTANCE_KM; // ISL段总距离 (km)
   const linkDelay = (slantRange + islTotalDistance + rxSlantRange) / 299792.458 * 1000; // ms
   results.linkDelayResult = linkDelay.toFixed(1);
+  // 上/下行单程传播时延（分列展示，上下行星地斜距不同 → 时延可不同）
+  results.linkDelayUpResult = (slantRange / 299792.458 * 1000).toFixed(1);     // ms，上行段传播时延
+  results.linkDelayDownResult = (rxSlantRange / 299792.458 * 1000).toFixed(1); // ms，下行段传播时延
   // 最大多普勒频移（NGSO专属，上下行独立计算）
   // 公式：f_d_max = f_c/c · |v_sat − ω_E·r·cos(i)| · Re·cos(ε_min) / r
   //   v_sat = sqrt(μ/r)：惯性系轨道速度
@@ -1745,8 +1805,35 @@ function performCalculations(satParams, inputs) {
 
   results.orbitAltitudeResult = h_rx.toFixed(1);      // km，下行链路轨道高度
   results.orbitVelocityResult = v_sat_rx.toFixed(3);  // km/s，下行惯性系轨道速度
+  results.orbitAltitudeUpResult = h_tx.toFixed(1);     // km，上行链路轨道高度
+  results.orbitVelocityUpResult = v_sat_tx.toFixed(3); // km/s，上行惯性系轨道速度
   results.maxDopplerUplinkResult = maxDopplerUplink.toFixed(1);   // kHz
   results.maxDopplerDownlinkResult = maxDopplerDownlink.toFixed(1); // kHz
+
+  // ============ 可见性几何（NGSO 专属，纯轨道几何，严格有据；上下行各自计算，可不同）============
+  // 参考：Maral & Bousquet "Satellite Communications Systems" 5th Ed §2/§5；Wertz, SMAD（几何）
+  //   轨道周期    P = 2π·√(r³/μ)
+  //   覆盖地心半角 λ = arccos( (Re/r)·cos ε_min ) − ε_min   （地面站最低仰角 ε_min 处的中心角）
+  //   地面覆盖半径 = Re·λ（大圆弧长，sub-satellite 点到 ε_min 边界）
+  //   最大过境时长 = λ·P/π（天顶过境、忽略地球自转的标准近似；卫星扫过中心角 2λ）
+  // 上行用(r_tx, elevation)、下行用(r_rx, rxElevation)分别计算——上下行轨道高度/仰角可不同，结果可不同。
+  // 注：重访周期 / 可见卫星数需星座规模（轨道面数、每面卫星数），工具无此输入 → 不臆造。
+  const visMetrics = (r, epsDeg) => {
+    const eps = epsDeg * Math.PI / 180;
+    const P = 2 * Math.PI * Math.sqrt(Math.pow(r, 3) / MU_EARTH); // s
+    const lam = Math.acos((RE_KM / r) * Math.cos(eps)) - eps;     // rad
+    return { periodMin: P / 60, halfAngleDeg: lam * 180 / Math.PI, radiusKm: RE_KM * lam, passMin: lam * P / Math.PI / 60 };
+  };
+  const visUp = visMetrics(r_tx, elevation);
+  const visDown = visMetrics(r_rx, rxElevation);
+  results.orbitPeriodUpResult = visUp.periodMin.toFixed(2);
+  results.orbitPeriodDownResult = visDown.periodMin.toFixed(2);
+  results.coverageHalfAngleUpResult = visUp.halfAngleDeg.toFixed(2);
+  results.coverageHalfAngleDownResult = visDown.halfAngleDeg.toFixed(2);
+  results.coverageRadiusUpResult = visUp.radiusKm.toFixed(1);
+  results.coverageRadiusDownResult = visDown.radiusKm.toFixed(1);
+  results.maxPassDurationUpResult = visUp.passMin.toFixed(2);
+  results.maxPassDurationDownResult = visDown.passMin.toFixed(2);
   
   // 通信参数
   results.uplinkFrequencyResult = uplinkFrequency.toFixed(2);
@@ -1989,7 +2076,7 @@ function calcSpecificAttenOxygen(f, rp, rt) {
     const A = 7.2 * Math.pow(rt, 2.8) /
               (f * f + 0.34 * rp * rp * Math.pow(rt, 1.6));
     const B = 0.62 * xi3 /
-              (Math.pow(Math.max(54 - f, 0.5), 1.16 * xi1) + 0.83 * xi2);
+              (Math.pow(54 - f, 1.16 * xi1) + 0.83 * xi2);
     return (A + B) * f * f * rp * rp * 1e-3;
   }
 
@@ -2008,24 +2095,41 @@ function calcSpecificAttenOxygen(f, rp, rt) {
   }
 
   if (f > 120) {
-    // Eq. (22f)
+    // Eq. (22f)，含修正项 δ
+    const delta = -0.00306 * phi676(rp, rt, 3.211, -14.94, 1.583, -16.37);
     const A = 3.02e-4 / (1 + 1.9e-5 * Math.pow(f, 1.5));
     const B = 0.283 * Math.pow(rt, 0.3) /
               (Math.pow(f - 118.75, 2) + 2.91 * rp * rp * Math.pow(rt, 1.6));
-    return (A + B) * f * f * rp * rp * Math.pow(rt, 3.5) * 1e-3;
+    return (A + B) * f * f * rp * rp * Math.pow(rt, 3.5) * 1e-3 + delta;
   }
 
-  // 54 < f ≤ 66: 氧气吸收复合体（对数插值）
-  // 此频段因极端衰减不用于卫星通信
-  const gamma54 = calcSpecificAttenOxygen(54, rp, rt);
-  const gamma66 = calcSpecificAttenOxygen(66.01, rp, rt);
-  const gammaPeak60 = 14.9 * rp * rp * Math.pow(rt, 3.5);
+  // 54 < f ≤ 66: 氧气吸收复合体 — ITU-R P.676-13 Eq.(22b)(22c)(22d)
+  // 参考比衰减 γ54…γ66（Eq.22 表中 φ 形式）
+  const g54 = 2.192 * phi676(rp, rt, 1.8286, -1.9487, 0.4051, -2.8509);
+  const g58 = 12.59 * phi676(rp, rt, 1.0045,  3.5610, 0.1588,  1.2834);
+  const g60 = 15.00 * phi676(rp, rt, 0.9003,  4.1335, 0.0427,  1.6088);
+  const g62 = 14.28 * phi676(rp, rt, 0.9886,  3.4176, 0.1827,  1.3429);
+  const g64 = 6.819 * phi676(rp, rt, 1.4320,  0.6258, 0.3177, -0.5914);
+  const g66 = 1.908 * phi676(rp, rt, 2.0717, -4.1404, 0.4910, -4.8718);
+
   if (f <= 60) {
-    const t = (f - 54) / 6;
-    return Math.exp(Math.log(gamma54) * (1 - t) + Math.log(gammaPeak60) * t);
+    // Eq. (22b): 54 < f ≤ 60
+    return Math.exp(
+      Math.log(g54) / 24 * (f - 58) * (f - 60) -
+      Math.log(g58) /  8 * (f - 54) * (f - 60) +
+      Math.log(g60) / 12 * (f - 54) * (f - 58)
+    );
   }
-  const t = (f - 60) / 6;
-  return Math.exp(Math.log(gammaPeak60) * (1 - t) + Math.log(gamma66) * t);
+  if (f <= 62) {
+    // Eq. (22c): 60 < f ≤ 62（线性内插）
+    return g60 + (g62 - g60) * (f - 60) / 2;
+  }
+  // Eq. (22d): 62 < f ≤ 66
+  return Math.exp(
+    Math.log(g62) / 8 * (f - 64) * (f - 66) -
+    Math.log(g64) / 4 * (f - 62) * (f - 66) +
+    Math.log(g66) / 8 * (f - 62) * (f - 64)
+  );
 }
 
 /**
@@ -2154,10 +2258,10 @@ function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg, Ps, Ts, rho
     elevationDeg = undefined;
   }
 
-  // 标准大气默认值 (ITU-R P.835-6)
+  // 默认大气参数：气压/温度取 ITU-R P.835-6 标准参考大气，水汽密度取 10 g/m³（偏保守工程默认值，SatMaster 等商业软件惯例；ITU-R P.835 标准参考值为 7.5 g/m³）
   if (!Ps   || !isFinite(Ps))    Ps    = 1013.25;
   if (!Ts   || !isFinite(Ts))    Ts    = 288.15;
-  if (!rhoWs || !isFinite(rhoWs)) rhoWs = 7.5;
+  if (!rhoWs || !isFinite(rhoWs)) rhoWs = 20.0;  // g/m³
 
   const rp  = Ps / 1013.25;
   const rt  = 288.15 / Ts;
@@ -2348,10 +2452,62 @@ function calculateRainXPD_P618_14(Ap, freq, tauDeg, elevDeg, p) {
 }
 
 /**
+ * ITU-R P.838-3 频率插值：返回任意频率 f(GHz) 处的 {k_H, alpha_H, k_V, alpha_V}
+ *
+ * 标准插值规则（ITU-R P.838-3，§ 注释）：
+ *   - 频率 f 采用对数刻度；
+ *   - 系数 k 采用对数刻度（即 k 关于 log f 做 log-log 线性插值）；
+ *   - 指数 α 采用线性刻度（即 α 关于 log f 做半对数线性插值）。
+ * 表外频率夹紧到 [1, 100] GHz（表的有效范围）；整数频点直接返回表值（向后兼容）。
+ *
+ * @param {number} freqGHz 频率（GHz）
+ * @returns {{k_H:number, alpha_H:number, k_V:number, alpha_V:number}}
+ */
+function interpolateP838(freqGHz) {
+  const keys = Object.keys(P838_TABLE).map(Number).sort((a, b) => a - b);
+  const fMin = keys[0];
+  const fMax = keys[keys.length - 1];
+
+  // 表外夹紧到有效范围
+  if (freqGHz <= fMin) return Object.assign({}, P838_TABLE[fMin]);
+  if (freqGHz >= fMax) return Object.assign({}, P838_TABLE[fMax]);
+  // 整数频点直接命中表值（避免浮点误差，向后兼容）
+  if (P838_TABLE[freqGHz]) return Object.assign({}, P838_TABLE[freqGHz]);
+
+  // 定位相邻两频点 f1 < f < f2
+  let f1 = fMin;
+  let f2 = fMax;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (keys[i] <= freqGHz && freqGHz <= keys[i + 1]) {
+      f1 = keys[i];
+      f2 = keys[i + 1];
+      break;
+    }
+  }
+  const e1 = P838_TABLE[f1];
+  const e2 = P838_TABLE[f2];
+
+  // 频率对数刻度上的插值比例
+  const t = (Math.log(freqGHz) - Math.log(f1)) / (Math.log(f2) - Math.log(f1));
+  // k：log-log（k 取对数后线性插值）
+  const logInterp = (y1, y2) => Math.exp(Math.log(y1) + t * (Math.log(y2) - Math.log(y1)));
+  // α：半对数（α 关于 log f 线性插值）
+  const linInterp = (y1, y2) => y1 + t * (y2 - y1);
+
+  return {
+    k_H: logInterp(e1.k_H, e2.k_H),
+    alpha_H: linInterp(e1.alpha_H, e2.alpha_H),
+    k_V: logInterp(e1.k_V, e2.k_V),
+    alpha_V: linInterp(e1.alpha_V, e2.alpha_V),
+  };
+}
+
+/**
  * 获取P838系数 - 根据频率和极化
+ * @param {number} freq 具体频率（GHz，非整数频率经 interpolateP838 插值）
  */
 function getCoefficients(freq, pol, elevationDeg) {
-  const entry = P838_TABLE[freq];
+  const entry = interpolateP838(freq);
   if (!entry) {
     return [0, 0];
   }

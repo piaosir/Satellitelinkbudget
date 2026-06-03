@@ -453,6 +453,16 @@ page {
   gap: 4rpx;
 }
 
+/* ISL 计算模式：分段切换器三等分撑满整行（不影响卡片标题用的 .orbit-seg） */
+.orbit-seg-full {
+  width: 100%;
+}
+
+.orbit-seg-full .orbit-seg-item {
+  flex: 1;
+  min-width: 0;
+}
+
 .form-label-row .form-label {
   margin-bottom: 0;
   flex: 4;

@@ -57,8 +57,9 @@ const WF_DICT = {
   '下行最大多普勒': 'Max Downlink Doppler',
   '卫星饱和 EIRP': 'Satellite Saturated EIRP',
   '卫星天线增益': 'Satellite Antenna Gain',
+  '卫星天线单位面积增益': 'Satellite Antenna Gain per Unit Area',
   '卫星 SFD': 'Satellite SFD',
-  '输入补偿 IBO': 'Input Backoff IBO',
+  'IBO': 'IBO',
   '转发器带宽': 'Transponder Bandwidth',
   '卫星功率谱密度': 'Satellite PSD',
   // —— 旁瓣·功率谱·增益与噪声 ——
@@ -69,6 +70,7 @@ const WF_DICT = {
   '地球站功率谱密度': 'Earth Station PSD',
   'ITU 旁瓣 PSD 建议值': 'ITU Sidelobe PSD Limit',
   '到达卫星通量密度': 'PFD at Satellite',
+  '到达卫星通量密度（晴天）': 'PFD at Satellite (Clear Sky)',
   '卫星到地面 PFD': 'Satellite-to-Ground PFD',
   'ITU PFD 限值': 'ITU PFD Limit',
   '接收旁瓣增益': 'Rx Sidelobe Gain',
@@ -94,7 +96,7 @@ const WF_DICT = {
   '上行 C/N（热噪声）': 'Uplink C/N (Thermal)',
   '上行干扰损失 ACI/ASI/XPI/IM': 'Uplink Interference Loss ACI/ASI/XPI/IM',
   '上行 C/N': 'Uplink C/N',
-  '输出补偿 OBO': 'Output Backoff OBO',
+  'OBO': 'OBO',
   '转发器工作区回退': 'Transponder Operating Backoff',
   '转发器输出 EIRP': 'Transponder Output EIRP',
   '每载波占卫星 EIRP': 'EIRP per Carrier',
@@ -129,15 +131,50 @@ const WF_DICT = {
   'UPC 上行功控余量': 'UPC Uplink Power Control Margin',
   // —— NGSO 专属 ——
   '卫星参数': 'Satellite Parameters',
+  '卫星参数（上行 / 下行）': 'Satellite Parameters (Up / Down)',
+  '最大多普勒': 'Max Doppler Shift',
   '星间链路 ISL（性能评估）': 'Inter-Satellite Link ISL (Performance)',
   'ISL 跳数': 'ISL Hops',
   'ISL 单跳 C/T': 'ISL C/T per Hop',
   'ISL 单跳 C/N': 'ISL C/N per Hop',
   'ISL 等效 C/T（并联）': 'ISL Equivalent C/T (Combined)',
   'ISL 等效 C/N（并联）': 'ISL Equivalent C/N (Combined)',
+  'ISL 等效 C/N（计入总C/T）': 'ISL Equivalent C/N (into Total C/T)',
   'ISL 对上行 C/N 代价': 'ISL Cost to Uplink C/N',
   '上行 C/N（含 ISL）': 'Uplink C/N (incl. ISL)',
   '跳': 'hops',
+  // —— ISL 分链路展示（按 islMode）——
+  '星间链路 ISL（经验值）': 'Inter-Satellite Link ISL (Empirical)',
+  '星间链路 ISL（微波链路）': 'Inter-Satellite Link ISL (Microwave)',
+  '星间链路 ISL（激光链路）': 'Inter-Satellite Link ISL (Laser)',
+  'ISL 频率': 'ISL Frequency',
+  '单跳距离': 'Per-Hop Distance',
+  'ISL EIRP': 'ISL EIRP',
+  'ISL 自由空间损耗': 'ISL Free Space Loss',
+  'ISL G/T': 'ISL G/T',
+  '发射口径': 'Tx Aperture',
+  '接收口径': 'Rx Aperture',
+  '发射光功率': 'Tx Optical Power',
+  '发射望远镜增益': 'Tx Telescope Gain',
+  '光学自由空间损耗': 'Optical Free Space Loss',
+  '指向+光学损耗': 'Pointing + Optical Loss',
+  '接收望远镜增益': 'Rx Telescope Gain',
+  '接收光功率': 'Rx Optical Power',
+  '接收灵敏度': 'Rx Sensitivity',
+  '灵敏度参考速率': 'Sensitivity Ref. Rate',
+  '灵敏度 Eb/N₀': 'Sensitivity Eb/N₀',
+  '等效噪声谱密度 N₀': 'Equiv. Noise PSD N₀',
+  '单跳 C/N₀': 'C/N₀ per Hop',
+  '输入 SNR': 'Input SNR',
+  '参考带宽': 'Reference Bandwidth',
+  // —— 可见性几何 / NGSO 干扰适配 ——
+  '可见性几何': 'Visibility Geometry',
+  '轨道周期': 'Orbital Period',
+  '覆盖地心半角': 'Earth-Central Coverage Half-Angle',
+  '地面覆盖半径': 'Ground Coverage Radius',
+  '最大过境时长(天顶)': 'Max Pass Duration (Zenith)',
+  '功率谱·PFD·增益与噪声': 'PSD · PFD · Gain & Noise',
+  'ITU PFD 限值(Art.21)': 'ITU PFD Limit (Art.21)',
   // —— 特殊单位 ——
   '米': 'm'
 };
@@ -369,10 +406,11 @@ Page({
     return { key: label, kind, sign: signMap[kind], label: this._t(label), up: value, down: '', total: '', unit: this._t(unit) || '', cum: '', _raw: raw };
   },
 
-  // 双列行（上行 / 下行）
+  // 双列行（上行 / 下行）。key 为 '_none' 表示该侧不适用（留空，不画横杠）
   _dualRow(label, upKey, downKey, unit, kind) {
     const r = this.data.results || {};
-    return { key: label, kind: kind || 'ref', sign: '', label: this._t(label), up: this._disp(r[upKey]), down: this._disp(r[downKey]), total: '', unit: this._t(unit) || '', cum: '' };
+    const cell = (k) => (k === '_none' ? '' : this._disp(r[k]));
+    return { key: label, kind: kind || 'ref', sign: '', label: this._t(label), up: cell(upKey), down: cell(downKey), total: '', unit: this._t(unit) || '', cum: '' };
   },
 
   // 纯参考段（单列）：list 为 [label, key, unit] 数组，自动剔除无值行
@@ -522,8 +560,8 @@ Page({
       ['卫星饱和 EIRP', 'EIRPsResult', 'dBW'],
       ['卫星天线增益', 'antennaGainResult', 'dBi'],
       ['卫星 SFD', 'SFDsResult', 'dBW/m²'],
-      ['输入补偿 IBO', 'BOiResult', 'dB'],
-      ['输出补偿 OBO', 'BOoResult', 'dB'],
+      ['IBO', 'BOiResult', 'dB'],
+      ['OBO', 'BOoResult', 'dB'],
       ['转发器带宽', 'transponderBandwidthResult', 'MHz'],
       ['卫星功率谱密度', 'satellitePSDResult', 'dBW/Hz']
     ]));
@@ -536,7 +574,7 @@ Page({
       ['旁瓣功率谱密度', 'txSidelobePSDResult', 'dBW/Hz'],
       ['地球站功率谱密度', 'stationPSDResult', 'dBW/Hz'],
       ['ITU 旁瓣 PSD 建议值', 'ituPsdLimitHz', 'dBW/Hz'],
-      ['到达卫星通量密度', 'PFDcResult', 'dBW/m²'],
+      ['到达卫星通量密度（晴天）', 'PFDcResult', 'dBW/m²'],
       ['卫星到地面 PFD', 'satellitePFD', 'dBW/m²'],
       ['ITU PFD 限值', 'ituPfdLimitPerM2', 'dBW/m²'],
       ['接收旁瓣增益', 'rxSidelobeGainResult', 'dBi'],
@@ -600,7 +638,7 @@ Page({
       C('sub', '上行 C/N', null, 'dB', 'up'),
       // —— 下行：卫星转发器 → 到达地面 → C/T → C/N₀ → C/N ——
       C('base', '卫星饱和 EIRP', 'EIRPsResult', 'dBW', 'down'),
-      C('loss', '输出补偿 OBO', 'BOoResult', 'dB', 'down'),
+      C('loss', 'OBO', 'BOoResult', 'dB', 'down'),
       C('loss', '转发器工作区回退', 'actualTransponderCapacityResult', 'dB', 'down'),
       C('sub', '转发器输出 EIRP', 'transponderOutputEIRP', 'dBW', 'down'),
       C('ref', '卫星功率谱密度', 'satellitePSDResult', 'dBW/Hz', 'down'),
@@ -680,10 +718,10 @@ Page({
     ]));
 
     // ② 几何与天线（上行 / 下行 双列）。NGSO「对卫星仰角」为最低仰角
+    // 注：NGSO 不含「极化角」——卫星位置时变，GEO 式极化偏转/方位反算不适用（恒为 0，已移除）
     const geoSeg = this._dualSeg('几何与天线（上行 / 下行）', [
       ['频率', 'uplinkFrequencyResult', 'downlinkFrequencyResult', 'GHz'],
       ['极化方式', 'uplinkPolarizationResult', 'downlinkPolarizationResult', ''],
-      ['极化角', 'uplinkPolarizationAngleResult', 'downlinkPolarizationAngleResult', '°'],
       ['地球站天线口径', 'earthAntennaDiameterResult', 'rxAntennaDiameterResult', '米'],
       ['地球站经度', 'earthLongitudeResult', 'rxLongitudeResult', '°E'],
       ['地球站纬度', 'earthLatitudeResult', 'rxLatitudeResult', '°N'],
@@ -699,6 +737,19 @@ Page({
       up: this._disp(this.data.txLocation), down: this._disp(this.data.rxLocation),
       total: '', unit: '', cum: ''
     });
+    // 可见性几何（并入几何天线段，上行/下行双列——上下行轨道高度/仰角可不同，结果可不同）
+    // 纯轨道几何，依据 Maral&Bousquet/Wertz：周期 P=2π√(r³/μ)、覆盖地心半角 λ=arccos((Re/r)cosε)−ε、
+    // 地面覆盖半径 Re·λ、最大过境时长 λ·P/π。重访/可见星数需星座规模，工具无输入，故不展示。
+    const visRow = (label, upKey, downKey, unit) => ({
+      key: label, kind: 'ref', sign: '', label: this._t(label),
+      up: this._disp(r[upKey]), down: this._disp(r[downKey]), total: '', unit: this._t(unit) || '', cum: ''
+    });
+    geoSeg.rows.push(
+      visRow('轨道周期', 'orbitPeriodUpResult', 'orbitPeriodDownResult', 'min'),
+      visRow('覆盖地心半角', 'coverageHalfAngleUpResult', 'coverageHalfAngleDownResult', '°'),
+      visRow('地面覆盖半径', 'coverageRadiusUpResult', 'coverageRadiusDownResult', 'km'),
+      visRow('最大过境时长(天顶)', 'maxPassDurationUpResult', 'maxPassDurationDownResult', 'min')
+    );
     segs.push(geoSeg);
 
     // ③ 传播损耗（上行 / 下行 双列）
@@ -712,34 +763,32 @@ Page({
       ['雨层高度 P.839', 'uplinkRainHeightResult', 'downlinkRainHeightResult', 'km']
     ]));
 
-    // ④ 卫星参数（NGSO：无轨道位置；保留轨道高度/速度/时延/多普勒等运动学参数，单列）
-    segs.push(this._refSeg('卫星参数', [
-      ['轨道高度', 'orbitAltitudeResult', 'km'],
-      ['轨道速度', 'orbitVelocityResult', 'km/s'],
-      ['链路时延(单程)', 'linkDelayResult', 'ms'],
-      ['上行最大多普勒', 'maxDopplerUplinkResult', 'kHz'],
-      ['下行最大多普勒', 'maxDopplerDownlinkResult', 'kHz'],
-      ['卫星饱和 EIRP', 'EIRPsResult', 'dBW'],
-      ['卫星天线增益', 'antennaGainResult', 'dBi'],
-      ['卫星 SFD', 'SFDsResult', 'dBW/m²'],
-      ['输入补偿 IBO', 'BOiResult', 'dB'],
-      ['输出补偿 OBO', 'BOoResult', 'dB'],
-      ['转发器带宽', 'transponderBandwidthResult', 'MHz'],
-      ['卫星功率谱密度', 'satellitePSDResult', 'dBW/Hz']
+    // ④ 卫星参数（NGSO：无轨道位置；上下行轨道高度/速度/时延/多普勒可不同 → 双列；
+    //    卫星载荷参数按收发侧归列：单位面积增益/SFD/IBO 为上行接收侧，EIRP/OBO/PSD 为下行发射侧）
+    segs.push(this._dualSeg('卫星参数（上行 / 下行）', [
+      ['轨道高度', 'orbitAltitudeUpResult', 'orbitAltitudeResult', 'km'],
+      ['轨道速度', 'orbitVelocityUpResult', 'orbitVelocityResult', 'km/s'],
+      ['链路时延(单程)', 'linkDelayUpResult', 'linkDelayDownResult', 'ms'],
+      ['最大多普勒', 'maxDopplerUplinkResult', 'maxDopplerDownlinkResult', 'kHz'],
+      ['卫星天线单位面积增益', 'antennaGainResult', '_none', 'dBi/m²'],
+      ['卫星 SFD', 'SFDsResult', '_none', 'dBW/m²'],
+      ['IBO', 'BOiResult', '_none', 'dB'],
+      ['卫星饱和 EIRP', '_none', 'EIRPsResult', 'dBW'],
+      ['OBO', '_none', 'BOoResult', 'dB'],
+      ['转发器带宽', 'transponderBandwidthResult', 'transponderBandwidthResult', 'MHz'],
+      ['卫星功率谱密度', '_none', 'satellitePSDResult', 'dBW/Hz']
     ]));
 
-    // ⑤ 旁瓣·功率谱·增益与噪声（单列）
-    segs.push(this._refSeg('旁瓣·功率谱·增益与噪声', [
+    // ⑤ 功率谱·PFD·增益与噪声（单列）
+    // NGSO 已移除 GEO 弧「邻星旁瓣/隔离」相关行（旁瓣增益/EIRP/PSD、ITU 旁瓣 PSD 建议值、接收旁瓣增益）——
+    // 这些基于邻星轨位差 deltaTheta + ITU-R S.465，是 GEO 静止弧概念，不适配 NGSO。
+    // 保留落地 PFD vs ITU Article 21 限值（对 NGSO 下行有效）。
+    segs.push(this._refSeg('功率谱·PFD·增益与噪声', [
       ['功放建议功率(W)', 'paRecommendation', 'W'],
-      ['旁瓣发射增益', 'txSidelobeGainResult', 'dBi'],
-      ['旁瓣 EIRP', 'txSidelobeEIRPResult', 'dBW'],
-      ['旁瓣功率谱密度', 'txSidelobePSDResult', 'dBW/Hz'],
       ['地球站功率谱密度', 'stationPSDResult', 'dBW/Hz'],
-      ['ITU 旁瓣 PSD 建议值', 'ituPsdLimitHz', 'dBW/Hz'],
-      ['到达卫星通量密度', 'PFDcResult', 'dBW/m²'],
+      ['到达卫星通量密度（晴天）', 'PFDcResult', 'dBW/m²'],
       ['卫星到地面 PFD', 'satellitePFD', 'dBW/m²'],
-      ['ITU PFD 限值', 'ituPfdLimitPerM2', 'dBW/m²'],
-      ['接收旁瓣增益', 'rxSidelobeGainResult', 'dBi'],
+      ['ITU PFD 限值(Art.21)', 'ituPfdLimitPerM2', 'dBW/m²'],
       ['接收馈线损耗', 'rxFeederLossResult', 'dB'],
       ['G/T', 'gOverTeResult', 'dB/K'],
       ['G/T 劣化', 'gOverTdegradationResult', 'dB'],
@@ -795,7 +844,7 @@ Page({
       C('sub', '上行 C/N', null, 'dB', 'up'),
       // —— 下行：卫星转发器 → 到达地面 → C/T → C/N₀ → C/N ——
       C('base', '卫星饱和 EIRP', 'EIRPsResult', 'dBW', 'down'),
-      C('loss', '输出补偿 OBO', 'BOoResult', 'dB', 'down'),
+      C('loss', 'OBO', 'BOoResult', 'dB', 'down'),
       C('loss', '转发器工作区回退', 'actualTransponderCapacityResult', 'dB', 'down'),
       C('sub', '转发器输出 EIRP', 'transponderOutputEIRP', 'dBW', 'down'),
       C('ref', '卫星功率谱密度', 'satellitePSDResult', 'dBW/Hz', 'down'),
@@ -823,7 +872,8 @@ Page({
       const islUpRows = [
         C('ref', 'ISL 跳数', 'islHopsResult', '跳', 'up'),
         C('ref', 'ISL 单跳 C/T', 'islPerHopCTResult', 'dBW/K', 'up'),
-        C('ref', 'ISL 等效 C/N（并联）', 'islTotalCNResult', 'dB', 'up'),
+        // 折算入总 C/T 的 ISL 等效 C/N：上行 C/N ⊕ 该值 = 上行 C/N（含 ISL），逐行算得通
+        C('ref', 'ISL 等效 C/N（计入总C/T）', 'islCascadeCNResult', 'dB', 'up'),
         C('sub', '上行 C/N（含 ISL）', 'uplinkWithIslCN', 'dB', 'up')
       ];
       const idx = cascadeRows.findIndex((row) => row.key === 'up·上行 C/N');
@@ -838,16 +888,55 @@ Page({
     );
     segs.push(this._cascadeTriSeg('链路预算级联（上行 / 下行 / 合计）', cascadeRows));
 
-    // ⑥-b 星间链路 ISL（性能评估，单列；仅多跳时出现）
+    // ⑥-b 星间链路 ISL（性能评估，单列；按 islMode 分链路展示，逐行可算通）
+    // 经验值(manual)：仅展示输入 SNR → 折算单跳 C/T；
+    // 微波(rf)：EIRP − FSL(频率/距离) + G/T − 其他损耗 = 单跳 C/T；
+    // 激光(optical)：发射光功率 + 发射增益 − 光学FSL − 指向损耗 + 接收增益 = 接收光功率，−N₀ = C/N₀，+k = 单跳 C/T。
     if (hasIsl) {
-      segs.push(this._refSeg('星间链路 ISL（性能评估）', [
-        ['ISL 跳数', 'islHopsResult', '跳'],
+      const islMode = r.islModeResult || 'manual';
+      const islRows = [['ISL 跳数', 'islHopsResult', '跳']];
+      if (islMode === 'rf') {
+        islRows.push(
+          ['ISL 频率', 'islRfFreqResult', 'GHz'],
+          ['单跳距离', 'islRfDistResult', 'km'],
+          ['ISL EIRP', 'islRfEirpResult', 'dBW'],
+          ['ISL 自由空间损耗', 'islRfFslResult', 'dB'],
+          ['ISL G/T', 'islRfGtResult', 'dB/K'],
+          ['其他损耗', 'islRfMiscLossResult', 'dB']
+        );
+      } else if (islMode === 'optical') {
+        islRows.push(
+          ['波长', 'islOptWavelengthResult', 'nm'],
+          ['发射口径', 'islOptTxApertureResult', 'm'],
+          ['接收口径', 'islOptRxApertureResult', 'm'],
+          ['单跳距离', 'islOptDistResult', 'km'],
+          ['发射光功率', 'islOptTxPowerResult', 'dBm'],
+          ['发射望远镜增益', 'islOptGTxResult', 'dBi'],
+          ['光学自由空间损耗', 'islOptFslResult', 'dB'],
+          ['指向+光学损耗', 'islOptPointLossResult', 'dB'],
+          ['接收望远镜增益', 'islOptGRxResult', 'dBi'],
+          ['接收光功率', 'islOptPRxResult', 'dBm'],
+          ['接收灵敏度', 'islOptSensResult', 'dBm'],
+          ['灵敏度参考速率', 'islOptSensRateResult', 'Mbps'],
+          ['灵敏度 Eb/N₀', 'islOptSensEbN0Result', 'dB'],
+          ['等效噪声谱密度 N₀', 'islOptN0Result', 'dBm/Hz'],
+          ['单跳 C/N₀', 'islOptCN0Result', 'dBHz']
+        );
+      } else {
+        islRows.push(
+          ['输入 SNR', 'islManualSnrResult', 'dB'],
+          ['参考带宽', 'islManualRefBwResult', 'MHz']
+        );
+      }
+      islRows.push(
         ['ISL 单跳 C/T', 'islPerHopCTResult', 'dBW/K'],
         ['ISL 单跳 C/N', 'islPerHopCNResult', 'dB'],
         ['ISL 等效 C/T（并联）', 'islTotalCTResult', 'dBW/K'],
         ['ISL 等效 C/N（并联）', 'islTotalCNResult', 'dB'],
         ['ISL 对上行 C/N 代价', 'islImpactResult', 'dB']
-      ]));
+      );
+      const modeLabel = islMode === 'rf' ? '微波链路' : (islMode === 'optical' ? '激光链路' : '经验值');
+      segs.push(this._refSeg('星间链路 ISL（' + modeLabel + '）', islRows));
     }
 
     // ⑦ 可用度与资源（计算结果，单列）

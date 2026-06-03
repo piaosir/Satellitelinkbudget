@@ -590,9 +590,8 @@ function performCalculations(satParams, inputs) {
   // ============ 降雨衰减计算 ============
   // 上行降雨衰减
   const uplinkUnavailability = uplinkAvailability / 100;
-  const freqKey = findClosestFrequency(uplinkFrequency);
   const { A001, hR: uplinkRainHeight } = calculateSinglePathRainAttenuation(
-    rainRate, freqKey, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude
+    rainRate, uplinkFrequency, uplinkPolarization, earthLat, earthLon, orbitPosition, altitude
   );
   
   // ITU-R P.618-14 公式(8) 换算到目标可用度（p=0 即可用度100% 返回0，即晴天）
@@ -601,9 +600,8 @@ function performCalculations(satParams, inputs) {
   );
   
   // 下行降雨衰减
-  const downlinkFreqKey = findClosestFrequency(downlinkFrequency);
   const { A001: downlinkA001, hR: downlinkRainHeight } = calculateSinglePathRainAttenuation(
-    rxRainRate, downlinkFreqKey, downlinkPolarization, 
+    rxRainRate, downlinkFrequency, downlinkPolarization,
     rxLatitude, rxLongitude, orbitPosition, rxAltitude
   );
   
@@ -1805,7 +1803,7 @@ function calcSpecificAttenOxygen(f, rp, rt) {
     const A = 7.2 * Math.pow(rt, 2.8) /
               (f * f + 0.34 * rp * rp * Math.pow(rt, 1.6));
     const B = 0.62 * xi3 /
-              (Math.pow(Math.max(54 - f, 0.5), 1.16 * xi1) + 0.83 * xi2);
+              (Math.pow(54 - f, 1.16 * xi1) + 0.83 * xi2);
     return (A + B) * f * f * rp * rp * 1e-3;
   }
 
@@ -1824,24 +1822,41 @@ function calcSpecificAttenOxygen(f, rp, rt) {
   }
 
   if (f > 120) {
-    // Eq. (22f)
+    // Eq. (22f)，含修正项 δ
+    const delta = -0.00306 * phi676(rp, rt, 3.211, -14.94, 1.583, -16.37);
     const A = 3.02e-4 / (1 + 1.9e-5 * Math.pow(f, 1.5));
     const B = 0.283 * Math.pow(rt, 0.3) /
               (Math.pow(f - 118.75, 2) + 2.91 * rp * rp * Math.pow(rt, 1.6));
-    return (A + B) * f * f * rp * rp * Math.pow(rt, 3.5) * 1e-3;
+    return (A + B) * f * f * rp * rp * Math.pow(rt, 3.5) * 1e-3 + delta;
   }
 
-  // 54 < f ≤ 66: 氧气吸收复合体（对数插值）
-  // 此频段因极端衰减不用于卫星通信
-  const gamma54 = calcSpecificAttenOxygen(54, rp, rt);
-  const gamma66 = calcSpecificAttenOxygen(66.01, rp, rt);
-  const gammaPeak60 = 14.9 * rp * rp * Math.pow(rt, 3.5);
+  // 54 < f ≤ 66: 氧气吸收复合体 — ITU-R P.676-13 Eq.(22b)(22c)(22d)
+  // 参考比衰减 γ54…γ66（Eq.22 表中 φ 形式）
+  const g54 = 2.192 * phi676(rp, rt, 1.8286, -1.9487, 0.4051, -2.8509);
+  const g58 = 12.59 * phi676(rp, rt, 1.0045,  3.5610, 0.1588,  1.2834);
+  const g60 = 15.00 * phi676(rp, rt, 0.9003,  4.1335, 0.0427,  1.6088);
+  const g62 = 14.28 * phi676(rp, rt, 0.9886,  3.4176, 0.1827,  1.3429);
+  const g64 = 6.819 * phi676(rp, rt, 1.4320,  0.6258, 0.3177, -0.5914);
+  const g66 = 1.908 * phi676(rp, rt, 2.0717, -4.1404, 0.4910, -4.8718);
+
   if (f <= 60) {
-    const t = (f - 54) / 6;
-    return Math.exp(Math.log(gamma54) * (1 - t) + Math.log(gammaPeak60) * t);
+    // Eq. (22b): 54 < f ≤ 60
+    return Math.exp(
+      Math.log(g54) / 24 * (f - 58) * (f - 60) -
+      Math.log(g58) /  8 * (f - 54) * (f - 60) +
+      Math.log(g60) / 12 * (f - 54) * (f - 58)
+    );
   }
-  const t = (f - 60) / 6;
-  return Math.exp(Math.log(gammaPeak60) * (1 - t) + Math.log(gamma66) * t);
+  if (f <= 62) {
+    // Eq. (22c): 60 < f ≤ 62（线性内插）
+    return g60 + (g62 - g60) * (f - 60) / 2;
+  }
+  // Eq. (22d): 62 < f ≤ 66
+  return Math.exp(
+    Math.log(g62) / 8 * (f - 64) * (f - 66) -
+    Math.log(g64) / 4 * (f - 62) * (f - 66) +
+    Math.log(g66) / 8 * (f - 62) * (f - 64)
+  );
 }
 
 /**
@@ -1972,10 +1987,10 @@ function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg, Ps, Ts, rho
     elevationDeg = undefined;
   }
 
-  // 标准大气默认值 (ITU-R P.835-6)
+  // 默认大气参数：气压/温度取 ITU-R P.835-6 标准参考大气，水汽密度取 10 g/m³（偏保守工程默认值，SatMaster 等商业软件惯例；ITU-R P.835 标准参考值为 7.5 g/m³）
   if (!Ps   || !isFinite(Ps))    Ps    = 1013.25; // hPa
   if (!Ts   || !isFinite(Ts))    Ts    = 288.15;  // K
-  if (!rhoWs || !isFinite(rhoWs)) rhoWs = 7.5;    // g/m³
+  if (!rhoWs || !isFinite(rhoWs)) rhoWs = 20.0;   // g/m³
 
   const rp  = Ps / 1013.25;       // 气压比
   const rt  = 288.15 / Ts;        // 逆温度比
@@ -2171,10 +2186,62 @@ function calculateRainXPD_P618_14(Ap, freq, tauDeg, elevDeg, p) {
 }
 
 /**
+ * ITU-R P.838-3 频率插值：返回任意频率 f(GHz) 处的 {k_H, alpha_H, k_V, alpha_V}
+ *
+ * 标准插值规则（ITU-R P.838-3，§ 注释）：
+ *   - 频率 f 采用对数刻度；
+ *   - 系数 k 采用对数刻度（即 k 关于 log f 做 log-log 线性插值）；
+ *   - 指数 α 采用线性刻度（即 α 关于 log f 做半对数线性插值）。
+ * 表外频率夹紧到 [1, 100] GHz（表的有效范围）；整数频点直接返回表值（向后兼容）。
+ *
+ * @param {number} freqGHz 频率（GHz）
+ * @returns {{k_H:number, alpha_H:number, k_V:number, alpha_V:number}}
+ */
+function interpolateP838(freqGHz) {
+  const keys = Object.keys(P838_TABLE).map(Number).sort((a, b) => a - b);
+  const fMin = keys[0];
+  const fMax = keys[keys.length - 1];
+
+  // 表外夹紧到有效范围
+  if (freqGHz <= fMin) return Object.assign({}, P838_TABLE[fMin]);
+  if (freqGHz >= fMax) return Object.assign({}, P838_TABLE[fMax]);
+  // 整数频点直接命中表值（避免浮点误差，向后兼容）
+  if (P838_TABLE[freqGHz]) return Object.assign({}, P838_TABLE[freqGHz]);
+
+  // 定位相邻两频点 f1 < f < f2
+  let f1 = fMin;
+  let f2 = fMax;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (keys[i] <= freqGHz && freqGHz <= keys[i + 1]) {
+      f1 = keys[i];
+      f2 = keys[i + 1];
+      break;
+    }
+  }
+  const e1 = P838_TABLE[f1];
+  const e2 = P838_TABLE[f2];
+
+  // 频率对数刻度上的插值比例
+  const t = (Math.log(freqGHz) - Math.log(f1)) / (Math.log(f2) - Math.log(f1));
+  // k：log-log（k 取对数后线性插值）
+  const logInterp = (y1, y2) => Math.exp(Math.log(y1) + t * (Math.log(y2) - Math.log(y1)));
+  // α：半对数（α 关于 log f 线性插值）
+  const linInterp = (y1, y2) => y1 + t * (y2 - y1);
+
+  return {
+    k_H: logInterp(e1.k_H, e2.k_H),
+    alpha_H: linInterp(e1.alpha_H, e2.alpha_H),
+    k_V: logInterp(e1.k_V, e2.k_V),
+    alpha_V: linInterp(e1.alpha_V, e2.alpha_V),
+  };
+}
+
+/**
  * 获取P838系数 - 根据频率和极化
+ * @param {number} freq 具体频率（GHz，非整数频率经 interpolateP838 插值）
  */
 function getCoefficients(freq, pol, elevationDeg) {
-  const entry = P838_TABLE[freq];
+  const entry = interpolateP838(freq);
   if (!entry) {
     return [0, 0];
   }

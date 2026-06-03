@@ -613,19 +613,19 @@
 
       </view>
 
-      <!-- NGSO 星间链路 ISL：计算模式 + 对应参数（手动 / 射频 / 光学） -->
+      <!-- NGSO 星间链路 ISL：计算模式 + 对应参数（经验值 / 微波链路 / 激光链路） -->
       <view class="form-group" wx:if="{{orbitType === 'NGSO'}}">
         <view class="form-label-row">
           <text class="form-label">ISL 计算模式</text>
         </view>
-        <view class="orbit-seg">
-          <view class="orbit-seg-item {{(satelliteParams.islMode || 'manual') === 'manual' ? 'active' : ''}}" data-mode="manual" bindtap="onIslModeChange">手动</view>
-          <view class="orbit-seg-item {{satelliteParams.islMode === 'rf' ? 'active' : ''}}" data-mode="rf" bindtap="onIslModeChange">射频</view>
-          <view class="orbit-seg-item {{satelliteParams.islMode === 'optical' ? 'active' : ''}}" data-mode="optical" bindtap="onIslModeChange">光学</view>
+        <view class="orbit-seg orbit-seg-full">
+          <view class="orbit-seg-item {{(satelliteParams.islMode || 'manual') === 'manual' ? 'active' : ''}}" data-mode="manual" bindtap="onIslModeChange">经验值</view>
+          <view class="orbit-seg-item {{satelliteParams.islMode === 'rf' ? 'active' : ''}}" data-mode="rf" bindtap="onIslModeChange">微波链路</view>
+          <view class="orbit-seg-item {{satelliteParams.islMode === 'optical' ? 'active' : ''}}" data-mode="optical" bindtap="onIslModeChange">激光链路</view>
         </view>
       </view>
 
-      <!-- 手动模式：直接输入 ISL SNR / C·N₀ -->
+      <!-- 经验值模式：直接输入 ISL SNR / C·N₀ -->
       <view class="grid-2" wx:if="{{orbitType === 'NGSO' && (satelliteParams.islMode || 'manual') === 'manual'}}">
         <view class="form-group">
           <view class="form-label-row">
@@ -671,8 +671,8 @@
       <!-- 光学模式：发射光功率 / 收发口径 / 波长 / 指向损耗 / 单跳距离 / 噪声 PSD -->
       <view class="grid-3" wx:if="{{orbitType === 'NGSO' && satelliteParams.islMode === 'optical'}}">
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">发射光功率(dBW)</text></view>
-          <input class="form-input" type="text" placeholder="-10" value="{{satelliteParams.islOptTxPower}}" data-field="islOptTxPower"
+          <view class="form-label-row"><text class="form-label">发射光功率(dBm)</text></view>
+          <input class="form-input" type="text" placeholder="20" value="{{satelliteParams.islOptTxPower}}" data-field="islOptTxPower"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
@@ -701,8 +701,8 @@
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">接收灵敏度(dBW)</text></view>
-          <input class="form-input" type="text" placeholder="-60" value="{{satelliteParams.islOptSensitivity}}" data-field="islOptSensitivity"
+          <view class="form-label-row"><text class="form-label">接收灵敏度(dBm)</text></view>
+          <input class="form-input" type="text" placeholder="-30" value="{{satelliteParams.islOptSensitivity}}" data-field="islOptSensitivity"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
