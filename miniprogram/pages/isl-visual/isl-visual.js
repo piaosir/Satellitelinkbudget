@@ -32,6 +32,8 @@ Page({
     rttMs: '--',         // ISL 往返时延 ms
     statusText: '视距通畅',
     blocked: false,
+    // 显示开关
+    show1: true, show2: true, showStation: true,
     // 地球站（辅助计算斜距）
     esLat: '39.93', esLon: '116.4',
     latHemi: '°N', lonHemi: '°E', esAddr: '--',
@@ -203,6 +205,20 @@ Page({
     const key = e.currentTarget.dataset.key;
     this.setData({ [key]: String(e.detail.value) }, () => this._recompute());
   },
+  // 显示/隐藏 卫星1 / 卫星2 / 地球站（仅影响 3D 渲染，下一帧自动生效）
+  onToggle(e) {
+    const key = e.currentTarget.dataset.key;
+    this.setData({ [key]: !this.data[key] });
+    wx.vibrateShort({ type: 'light' });
+  },
+
+  // 点击经纬度后缀切换半球（正负号），以支持南纬 / 西经
+  toggleHemi(e) {
+    const key = e.currentTarget.dataset.key;
+    const v = parseFloat(this.data[key]);
+    this.setData({ [key]: String(isFinite(v) ? -v : 0) }, () => this._recompute());
+    wx.vibrateShort({ type: 'light' });
+  },
 
   // ===================== 3D 渲染 =====================
 
@@ -319,40 +335,44 @@ Page({
 
     this._drawGraticule(cx, cy, scale, Rpx);
 
+    const show1 = d.show1, show2 = d.show2, showSt = d.showStation;
+
     // 两条轨道（各自倾角 / 升交点赤经）
-    this._drawOrbit(R1, num(d.i1, 0), num(d.raan1, 0), cx, cy, scale, Rpx, 'rgba(111,159,200,0.4)');
-    this._drawOrbit(R2, num(d.i2, 0), num(d.raan2, 0), cx, cy, scale, Rpx, 'rgba(194,162,94,0.4)');
+    if (show1) this._drawOrbit(R1, num(d.i1, 0), num(d.raan1, 0), cx, cy, scale, Rpx, 'rgba(111,159,200,0.4)');
+    if (show2) this._drawOrbit(R2, num(d.i2, 0), num(d.raan2, 0), cx, cy, scale, Rpx, 'rgba(194,162,94,0.4)');
 
     const P1 = this._P1 || this._satPos(R1, num(d.i1, 0), num(d.raan1, 0), num(d.u1, 0));
     const P2 = this._P2 || this._satPos(R2, num(d.i2, 0), num(d.raan2, 0), num(d.u2, 0));
 
-    // ISL 链路
-    const blocked = d.blocked;
-    const linePts = [];
-    const N = 60;
-    for (let k = 0; k <= N; k++) {
-      const t = k / N;
-      linePts.push([
-        P1[0] + (P2[0] - P1[0]) * t,
-        P1[1] + (P2[1] - P1[1]) * t,
-        P1[2] + (P2[2] - P1[2]) * t
-      ]);
+    // ISL 链路（两星都显示时才画）
+    if (show1 && show2) {
+      const blocked = d.blocked;
+      const linePts = [];
+      const N = 60;
+      for (let k = 0; k <= N; k++) {
+        const t = k / N;
+        linePts.push([
+          P1[0] + (P2[0] - P1[0]) * t,
+          P1[1] + (P2[1] - P1[1]) * t,
+          P1[2] + (P2[2] - P1[2]) * t
+        ]);
+      }
+      this._drawPath(linePts, cx, cy, scale, Rpx, {
+        color: blocked ? '#c25b58' : '#5a93a8',
+        hiddenColor: blocked ? 'rgba(194,91,88,0.22)' : 'rgba(90,147,168,0.18)',
+        width: 1.6,
+        dash: blocked ? [6, 5] : []
+      });
     }
-    this._drawPath(linePts, cx, cy, scale, Rpx, {
-      color: blocked ? '#c25b58' : '#5a93a8',
-      hiddenColor: blocked ? 'rgba(194,91,88,0.22)' : 'rgba(90,147,168,0.18)',
-      width: 1.6,
-      dash: blocked ? [6, 5] : []
-    });
 
-    // 地球站斜距线
+    // 地球站斜距线（站与对应卫星都显示时才画）
     const station = this._station || this._stationPos(num(d.esLat, 0), num(d.esLon, 0));
-    this._drawSlant(station, P1, cx, cy, scale, Rpx, d.vis1);
-    this._drawSlant(station, P2, cx, cy, scale, Rpx, d.vis2);
+    if (showSt && show1) this._drawSlant(station, P1, cx, cy, scale, Rpx, d.vis1);
+    if (showSt && show2) this._drawSlant(station, P2, cx, cy, scale, Rpx, d.vis2);
 
-    this._drawSat(P1, cx, cy, scale, Rpx, '#6f9fc8', '卫星1');
-    this._drawSat(P2, cx, cy, scale, Rpx, '#c2a25e', '卫星2');
-    this._drawStation(station, cx, cy, scale, Rpx);
+    if (show1) this._drawSat(P1, cx, cy, scale, Rpx, '#6f9fc8', '卫星1');
+    if (show2) this._drawSat(P2, cx, cy, scale, Rpx, '#c2a25e', '卫星2');
+    if (showSt) this._drawStation(station, cx, cy, scale, Rpx);
   },
 
   // 站→星斜距线（可见绿、地平线下红，被地球挡住部分自动虚淡）

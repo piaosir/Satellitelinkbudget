@@ -1,6 +1,12 @@
 <view class="page">
   <!-- 操作区（置顶） -->
   <view class="ctrl-zone">
+    <view class="toggle-row">
+      <text class="toggle-label">显示</text>
+      <view class="tg {{show1 ? 'tg-on' : ''}}" data-key="show1" bindtap="onToggle"><view class="tg-dot dot-sat1"></view>卫星1</view>
+      <view class="tg {{show2 ? 'tg-on' : ''}}" data-key="show2" bindtap="onToggle"><view class="tg-dot dot-sat2"></view>卫星2</view>
+      <view class="tg {{showStation ? 'tg-on' : ''}}" data-key="showStation" bindtap="onToggle"><view class="tg-dot dot-station"></view>地球站</view>
+    </view>
     <view class="sat-row">
       <!-- 卫星1 -->
       <view class="sat-col">
@@ -23,11 +29,12 @@
     <view class="common-row">
       <text class="cl cl-wide">地球站 纬度</text>
       <input class="cf" type="digit" value="{{esLat}}" data-key="esLat" bindinput="onInput" />
-      <text class="cu">{{latHemi}}</text>
+      <text class="cu cu-hemi" data-key="esLat" bindtap="toggleHemi">{{latHemi}}</text>
       <text class="cl cl-mid">经度</text>
       <input class="cf" type="digit" value="{{esLon}}" data-key="esLon" bindinput="onInput" />
-      <text class="cu">{{lonHemi}}</text>
+      <text class="cu cu-hemi" data-key="esLon" bindtap="toggleHemi">{{lonHemi}}</text>
     </view>
+    <view class="hint-mini">点击 °N/°E 切换半球（南纬 / 西经记为负值）</view>
   </view>
 
   <!-- 3D 地球 -->

@@ -9,6 +9,39 @@
 .ctrl-zone {
   padding: 10rpx 14rpx 0;
 }
+.toggle-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10rpx;
+}
+.toggle-label {
+  font-size: 21rpx;
+  color: #8b94a3;
+  margin-right: 12rpx;
+}
+.tg {
+  display: flex;
+  align-items: center;
+  font-size: 21rpx;
+  color: #6b7484;
+  padding: 6rpx 14rpx;
+  margin-right: 10rpx;
+  border: 1rpx solid #2a313c;
+  border-radius: 5rpx;
+  background: #14181f;
+  opacity: 0.5;
+}
+.tg-on {
+  color: #cfd6df;
+  border-color: #3a4456;
+  opacity: 1;
+}
+.tg-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 2rpx;
+  margin-right: 7rpx;
+}
 .sat-row {
   display: flex;
   gap: 12rpx;
@@ -76,6 +109,17 @@
   text-align: right;
   flex-shrink: 0;
   margin-left: 4rpx;
+}
+.cu-hemi {
+  color: #8ab4cc;
+  text-decoration: underline;
+  padding: 6rpx 2rpx;
+}
+.hint-mini {
+  font-size: 19rpx;
+  color: #6b7484;
+  margin-top: 6rpx;
+  line-height: 1.4;
 }
 .csl {
   flex: 1;
