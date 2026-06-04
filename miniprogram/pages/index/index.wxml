@@ -73,6 +73,16 @@
         </view>
         <view class="visual-option-arrow">›</view>
       </view>
+      <view class="visual-option" bindtap="goToISLVisual">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-isl"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">星间链路ISL</text>
+          <text class="visual-option-desc">3D地球展示两星几何，计算最大星间链路长度</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
       <view class="visual-option" bindtap="showAzElToolPanel">
         <view class="visual-option-icon">
           <view class="option-icon icon-az-el"></view>

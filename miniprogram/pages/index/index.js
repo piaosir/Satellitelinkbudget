@@ -2346,6 +2346,23 @@ Page({
     });
   },
 
+  // 跳转到星间链路 ISL 可视化页面（复用全局参数）
+  goToISLVisual() {
+    this.setData({ showVisualPopup: false });
+    // 确保最新参数写入全局，供 ISL 页面读取
+    this.saveLinkParams();
+    app.globalData.orbitType = this.data.orbitType || 'GEO';
+    app.globalData.ngsoOrbitClass = this.data.ngsoOrbitClass || '';
+    app.globalData.satelliteParams = {
+      ...this.data.satelliteParams,
+      orbitType: this.data.orbitType || 'GEO',
+      ngsoOrbitClass: this.data.orbitType === 'NGSO' ? (this.data.ngsoOrbitClass || 'LEO') : ''
+    };
+    wx.navigateTo({
+      url: '/pages/isl-visual/isl-visual'
+    });
+  },
+
   // 显示方位仰角工具面板
   showAzElToolPanel() {
     const defaultLat = this.data.linkParams.latitude || '';

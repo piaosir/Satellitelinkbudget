@@ -1,0 +1,256 @@
+.page {
+  min-height: 100vh;
+  background: #0d1117;
+  padding-bottom: 30rpx;
+  box-sizing: border-box;
+}
+
+/* ===== 操作区（置顶） ===== */
+.ctrl-zone {
+  padding: 10rpx 14rpx 0;
+}
+.sat-row {
+  display: flex;
+  gap: 12rpx;
+}
+.sat-col {
+  flex: 1;
+  min-width: 0;
+  background: #14181f;
+  border: 1rpx solid #232a34;
+  border-radius: 6rpx;
+  padding: 10rpx 12rpx;
+  box-sizing: border-box;
+}
+.card-title {
+  display: flex;
+  align-items: center;
+  font-size: 22rpx;
+  color: #c5ccd6;
+  font-weight: 500;
+  margin-bottom: 4rpx;
+}
+.tag-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 2rpx;
+  margin-right: 8rpx;
+}
+.dot-sat1 { background: #6f9fc8; }
+.dot-sat2 { background: #c2a25e; }
+.dot-station { background: #6fb88f; }
+
+.cin {
+  display: flex;
+  align-items: center;
+  padding: 3rpx 0;
+}
+.cslider {
+  display: flex;
+  align-items: center;
+  padding: 2rpx 0;
+}
+.cl {
+  font-size: 21rpx;
+  color: #8b94a3;
+  width: 84rpx;
+  flex-shrink: 0;
+}
+.cl-wide { width: 150rpx; }
+.cl-mid { width: 64rpx; margin-left: 14rpx; }
+.cf {
+  flex: 1;
+  min-width: 0;
+  background: #0e1219;
+  border: 1rpx solid #283039;
+  border-radius: 4rpx;
+  padding: 6rpx 9rpx;
+  font-size: 22rpx;
+  color: #e6e9ef;
+  font-family: 'DIN Alternate', 'Roboto Mono', Consolas, monospace;
+}
+.cu {
+  font-size: 20rpx;
+  color: #5c6675;
+  width: 44rpx;
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 4rpx;
+}
+.csl {
+  flex: 1;
+  min-width: 0;
+  margin: 0 6rpx 0 4rpx;
+}
+
+.common-row {
+  display: flex;
+  align-items: center;
+  margin-top: 10rpx;
+  padding: 9rpx 12rpx;
+  background: #14181f;
+  border: 1rpx solid #232a34;
+  border-radius: 6rpx;
+}
+/* ===== 3D 地球 ===== */
+.globe-wrap {
+  position: relative;
+  width: 100%;
+  height: 720rpx;
+  margin-top: 10rpx;
+  background: #090c11;
+  border-top: 1rpx solid #1b212a;
+  border-bottom: 1rpx solid #1b212a;
+}
+.globe-canvas {
+  width: 100%;
+  height: 100%;
+}
+.globe-hint {
+  position: absolute;
+  top: 16rpx;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 20rpx;
+  letter-spacing: 1rpx;
+  color: #5c6675;
+}
+.globe-legend {
+  position: absolute;
+  bottom: 16rpx;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 32rpx;
+}
+.lg-item {
+  display: flex;
+  align-items: center;
+  font-size: 20rpx;
+  color: #8b94a3;
+}
+.lg-dot {
+  width: 12rpx;
+  height: 12rpx;
+  border-radius: 2rpx;
+  margin-right: 7rpx;
+}
+.lg-line {
+  width: 26rpx;
+  height: 3rpx;
+  margin-right: 7rpx;
+}
+.line-ok { background: #5a93a8; }
+.line-blocked { background: #c25b58; }
+
+/* ===== 展示信息区 ===== */
+.result-card {
+  margin: 10rpx 14rpx 0;
+  padding: 12rpx 16rpx 14rpx;
+  background: #14181f;
+  border: 1rpx solid #232a34;
+  border-radius: 6rpx;
+}
+.card-blocked { border-color: #4a2c2c; }
+
+.sec-title {
+  display: flex;
+  align-items: center;
+  font-size: 21rpx;
+  color: #6fa6bd;
+  font-weight: 500;
+  letter-spacing: 0.5rpx;
+  margin: 2rpx 0 6rpx;
+}
+.sec-title:not(:first-child) {
+  margin-top: 12rpx;
+  padding-top: 10rpx;
+  border-top: 1rpx solid #1f2630;
+}
+.sec-badge {
+  margin-left: 10rpx;
+  font-size: 19rpx;
+  padding: 3rpx 12rpx;
+  border-radius: 4rpx;
+  border: 1rpx solid transparent;
+}
+.b-ok {
+  color: #6cb290;
+  background: rgba(78, 154, 120, 0.1);
+  border-color: rgba(78, 154, 120, 0.3);
+}
+.b-bad {
+  color: #d07673;
+  background: rgba(194, 91, 88, 0.1);
+  border-color: rgba(194, 91, 88, 0.3);
+}
+
+/* 键值密集网格 */
+.kv-grid {
+  display: flex;
+  flex-wrap: wrap;
+}
+.kv {
+  width: 50%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 3rpx 0;
+  box-sizing: border-box;
+}
+.kv:nth-child(odd) { padding-right: 18rpx; }
+.kv .k {
+  font-size: 20rpx;
+  color: #8b94a3;
+}
+.kv .v {
+  font-size: 22rpx;
+  color: #e6e9ef;
+  font-family: 'DIN Alternate', 'Roboto Mono', Consolas, monospace;
+  white-space: nowrap;
+}
+.kv .v-ok { color: #6cb290; }
+.kv .v-bad { color: #d07673; }
+
+/* 地球站对星表格 */
+.es-tbl {
+  display: flex;
+  flex-direction: column;
+}
+.es-tr {
+  display: flex;
+  align-items: center;
+  padding: 3rpx 0;
+}
+.es-thead .es-c {
+  font-size: 19rpx;
+  color: #6b7484;
+}
+.es-c {
+  flex: 1;
+  font-size: 21rpx;
+  color: #cfd6df;
+  text-align: right;
+  font-family: 'DIN Alternate', 'Roboto Mono', Consolas, monospace;
+}
+.es-c.c-name {
+  flex: 1.2;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  color: #c5ccd6;
+  font-family: inherit;
+}
+.es-c.c-name .tag-dot {
+  width: 12rpx;
+  height: 12rpx;
+  flex-shrink: 0;
+}
+.es-warn { color: #d07673; }
+.es-note {
+  font-size: 19rpx;
+  color: #6b7484;
+  margin-top: 8rpx;
+}

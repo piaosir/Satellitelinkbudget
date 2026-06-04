@@ -6,7 +6,8 @@
     "pages/settings/settings",
     "pages/ar-align/ar-align",
     "pages/satellite-coverage/satellite-coverage",
-    "pages/results-detail/results-detail"
+    "pages/results-detail/results-detail",
+    "pages/isl-visual/isl-visual"
   ],
   "permission": {
     "scope.userLocation": {

@@ -1,0 +1,92 @@
+<view class="page">
+  <!-- 操作区（置顶） -->
+  <view class="ctrl-zone">
+    <view class="sat-row">
+      <!-- 卫星1 -->
+      <view class="sat-col">
+        <view class="card-title"><view class="tag-dot dot-sat1"></view>卫星1</view>
+        <view class="cin"><text class="cl">高度</text><input class="cf" type="digit" value="{{h1}}" data-key="h1" bindinput="onInput" /><text class="cu">km</text></view>
+        <view class="cin"><text class="cl">倾角</text><input class="cf" type="digit" value="{{i1}}" data-key="i1" bindinput="onInput" /><text class="cu">°</text></view>
+        <view class="cin"><text class="cl">赤经Ω</text><input class="cf" type="digit" value="{{raan1}}" data-key="raan1" bindinput="onInput" /><text class="cu">°</text></view>
+        <view class="cslider"><text class="cl">幅角</text><slider class="csl" min="0" max="360" step="1" value="{{u1}}" activeColor="#5a93a8" backgroundColor="#2a313c" block-color="#7bb4cc" block-size="14" data-key="u1" bindchange="onSliderChange" bindchanging="onSliderChange" /><text class="cu">{{u1}}°</text></view>
+      </view>
+      <!-- 卫星2 -->
+      <view class="sat-col">
+        <view class="card-title"><view class="tag-dot dot-sat2"></view>卫星2</view>
+        <view class="cin"><text class="cl">高度</text><input class="cf" type="digit" value="{{h2}}" data-key="h2" bindinput="onInput" /><text class="cu">km</text></view>
+        <view class="cin"><text class="cl">倾角</text><input class="cf" type="digit" value="{{i2}}" data-key="i2" bindinput="onInput" /><text class="cu">°</text></view>
+        <view class="cin"><text class="cl">赤经Ω</text><input class="cf" type="digit" value="{{raan2}}" data-key="raan2" bindinput="onInput" /><text class="cu">°</text></view>
+        <view class="cslider"><text class="cl">幅角</text><slider class="csl" min="0" max="360" step="1" value="{{u2}}" activeColor="#5a93a8" backgroundColor="#2a313c" block-color="#7bb4cc" block-size="14" data-key="u2" bindchange="onSliderChange" bindchanging="onSliderChange" /><text class="cu">{{u2}}°</text></view>
+      </view>
+    </view>
+
+    <view class="common-row">
+      <text class="cl cl-wide">地球站 纬度</text>
+      <input class="cf" type="digit" value="{{esLat}}" data-key="esLat" bindinput="onInput" />
+      <text class="cu">{{latHemi}}</text>
+      <text class="cl cl-mid">经度</text>
+      <input class="cf" type="digit" value="{{esLon}}" data-key="esLon" bindinput="onInput" />
+      <text class="cu">{{lonHemi}}</text>
+    </view>
+  </view>
+
+  <!-- 3D 地球 -->
+  <view class="globe-wrap">
+    <canvas type="2d" id="globeCanvas" class="globe-canvas"
+      bindtouchstart="onTouchStart" catchtouchmove="onTouchMove"
+      bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"></canvas>
+    <view class="globe-legend">
+      <view class="lg-item"><view class="lg-dot dot-sat1"></view>卫星1</view>
+      <view class="lg-item"><view class="lg-dot dot-sat2"></view>卫星2</view>
+      <view class="lg-item"><view class="lg-dot dot-station"></view>地球站</view>
+      <view class="lg-item"><view class="lg-line {{blocked ? 'line-blocked' : 'line-ok'}}"></view>ISL</view>
+    </view>
+  </view>
+
+  <!-- 展示信息区 -->
+  <view class="result-card {{blocked ? 'card-blocked' : ''}}">
+    <!-- 星间链路 -->
+    <view class="sec-title">
+      星间链路 ISL 几何
+      <text class="sec-badge {{blocked ? 'b-bad' : 'b-ok'}}">{{statusText}}</text>
+    </view>
+    <view class="kv-grid">
+      <view class="kv"><text class="k">ISL 斜距（当前）</text><text class="v">{{dCur}} km</text></view>
+      <view class="kv"><text class="k">几何视距上限</text><text class="v">{{dMax}} km</text></view>
+      <view class="kv"><text class="k">视距裕量</text><text class="v {{blocked ? 'v-bad' : 'v-ok'}}">{{losMargin}} km</text></view>
+      <view class="kv"><text class="k">视线切线高度</text><text class="v">{{tangentText}}</text></view>
+      <view class="kv"><text class="k">当前地心夹角</text><text class="v">{{thetaCur}}°</text></view>
+      <view class="kv"><text class="k">最大可视夹角</text><text class="v">{{thetaMaxDeg}}°</text></view>
+      <view class="kv"><text class="k">两星轨道高度差</text><text class="v">{{deltaH}} km</text></view>
+      <view class="kv"><text class="k">单向传播时延</text><text class="v">{{delayMs}} ms</text></view>
+      <view class="kv"><text class="k">往返传播时延</text><text class="v">{{rttMs}} ms</text></view>
+    </view>
+
+    <!-- 地球站斜距 -->
+    <view class="sec-title">地球站对星（站址 {{esAddr}}）</view>
+    <view class="es-tbl">
+      <view class="es-tr es-thead">
+        <view class="es-c c-name">目标</view>
+        <view class="es-c">斜距 km</view>
+        <view class="es-c">仰角 °</view>
+        <view class="es-c">方位角 °</view>
+        <view class="es-c">时延 ms</view>
+      </view>
+      <view class="es-tr">
+        <view class="es-c c-name"><view class="tag-dot dot-sat1"></view>卫星1</view>
+        <view class="es-c">{{slant1}}</view>
+        <view class="es-c {{vis1 ? '' : 'es-warn'}}">{{elev1}}</view>
+        <view class="es-c">{{az1}}</view>
+        <view class="es-c">{{esDelay1}}</view>
+      </view>
+      <view class="es-tr">
+        <view class="es-c c-name"><view class="tag-dot dot-sat2"></view>卫星2</view>
+        <view class="es-c">{{slant2}}</view>
+        <view class="es-c {{vis2 ? '' : 'es-warn'}}">{{elev2}}</view>
+        <view class="es-c">{{az2}}</view>
+        <view class="es-c">{{esDelay2}}</view>
+      </view>
+    </view>
+    <view class="es-note" wx:if="{{!vis1 || !vis2}}">仰角为负 = 卫星在该站地平线下，不可见</view>
+  </view>
+</view>
