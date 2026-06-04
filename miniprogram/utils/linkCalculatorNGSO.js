@@ -1,6 +1,7 @@
 // linkCalculatorNGSO.js
 // NGSO（非地球静止轨道）卫星链路本地计算模块
 const { P676_PART1 } = require('./p676Data.js');
+const CLOUD_GRID = require('../data/cloudParamsGrid.js'); // ITU-R P.840-9 Lred 对数正态参数地图
 // 基于 linkCalculator.js，针对 NGSO 链路做了以下调整：
 // 1. 绕过 GEO 专属的轨位/几何计算，直接使用用户输入的最低仰角
 // 2. 根据用户选择使用 “轨道高度” 或 “星地斜距” 计算链路距离
@@ -723,9 +724,10 @@ function performCalculations(satParams, inputs) {
     downlinkRainAttenuation, downlinkFrequency, downlinkXpdTau, rxElevation, (1 - rxDownlinkAvailability) * 100
   );
   
-  // ============ 云衰减计算 ============
-  const uplinkCloudAttenuation = calculateCloudAttenuation(uplinkFrequency, elevation, rainRate);
-  const downlinkCloudAttenuation = calculateCloudAttenuation(downlinkFrequency, rxElevation, rxRainRate);
+  // ============ 云衰减计算 (ITU-R P.840-9) ============
+  // 第三参数为超越概率 p（=100-可用度）；p≤5% 时 L 封顶在 5% 值，p=0(可用度100%)按晴天返回0
+  const uplinkCloudAttenuation = calculateCloudAttenuation(uplinkFrequency, elevation, 100 - uplinkAvailability, earthLat, earthLon);
+  const downlinkCloudAttenuation = calculateCloudAttenuation(downlinkFrequency, rxElevation, 100 - rxdownlinkAvailability, rxLatitude, rxLongitude);
 
   // ============ 闪烁衰减计算 (ITU-R P.618-14 §2.4.1) ============
   const uplinkScintillation = calculateScintillationFading(uplinkFrequency, elevation, antennaDiameter, uplinkAvailability, antennaEfficiency);
@@ -733,8 +735,8 @@ function performCalculations(satParams, inputs) {
 
   // ============ 总衰减合并 (ITU-R P.618-14 §2.5 公式65/66/67/68) ============
   // p = 超越概率（不可用概率），%
-  // 截断规则：当 p < 5% 时 AC_eff = AC(5%), AG_eff = AG(5%)；
-  // 当前 AC 和 AG 不依赖 p（固定值），隐式满足截断规则
+  // 公式 65/66 在 p=5% 分界（p>5% 丢弃雨衰项）；
+  // 云衰 AC(p) 取旧版口径：p<1% 封顶在 1% 值（见 calculateCloudAttenuation 内 pEff）
   const uplinkP = 100 - uplinkAvailability;       // 上行超越概率 (%)
   const downlinkP = 100 - rxdownlinkAvailability; // 下行超越概率 (%)
 
@@ -2293,52 +2295,132 @@ function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg, Ps, Ts, rho
 }
 
 /**
- * 计算云衰减 - 根据ITU-R P.840-9建议书
+ * 反误差函数 erfinv（Giles 2010 近似），用于对数正态分位数反算
  */
-function calculateCloudAttenuation(frequency, elevation, rainRate) {
-  // 如果降雨率为0，云衰减为0
-  if (rainRate === 0 || rainRate === null || rainRate === undefined) {
-    return 0;
-  }
-  
-  // 频率单位：GHz, 仰角单位：度, 降雨率单位：mm/h
-  
-  // 云液态水含量 (kg/m²)
-  const L = 0.2 + 0.003 * Math.sqrt(rainRate);
-  
-  // 温度参数
-  const T = 273; // K
-  
-  // 计算复介电常数的虚部 (Debye模型)
-  const epsilon_0 = 77.6 + 103.3 * (T - 273) / T;
-  const epsilon_inf = 5.48;
-  const fp = 20.09 - 142.4 * (T - 273) / T + 294.6 * Math.pow((T - 273) / T, 2);
-  
-  // 复介电常数的虚部
-  const epsilon_imag = ((epsilon_0 - epsilon_inf) * frequency) / 
-                       (fp * (1 + Math.pow(frequency / fp, 2)));
-  
-  // 比衰减系数 (dB/km per kg/m²)
-  const Kl = (0.819 * frequency) / (epsilon_imag + 2.25);
-  
-  // 计算路径长度因子
-  const elevationRad = elevation * CONSTANTS.PI / 180;
-  const sinElevation = Math.sin(elevationRad);
-  
-  let pathLengthFactor;
-  if (elevation >= 5) {
-    pathLengthFactor = 1 / sinElevation;
+function erfinv(x) {
+  const w0 = -Math.log((1 - x) * (1 + x));
+  let p, w;
+  if (w0 < 5) {
+    w = w0 - 2.5;
+    p = 2.81022636e-08;
+    p = 3.43273939e-07 + p * w;
+    p = -3.5233877e-06 + p * w;
+    p = -4.39150654e-06 + p * w;
+    p = 0.00021858087 + p * w;
+    p = -0.00125372503 + p * w;
+    p = -0.00417768164 + p * w;
+    p = 0.246640727 + p * w;
+    p = 1.50140941 + p * w;
   } else {
-    pathLengthFactor = 1 / Math.sqrt(sinElevation * sinElevation + 2.35e-4);
+    w = Math.sqrt(w0) - 3;
+    p = -0.000200214257;
+    p = 0.000100950558 + p * w;
+    p = 0.00134934322 + p * w;
+    p = -0.00367342844 + p * w;
+    p = 0.00573950773 + p * w;
+    p = -0.0076224613 + p * w;
+    p = 0.00943887047 + p * w;
+    p = 1.00167406 + p * w;
+    p = 2.83297682 + p * w;
   }
-  
-  // 云层厚度
-  const cloudThickness = 2.0; // km
-  
-  // 云衰减 (dB)
-  const cloudAttenuation = Kl * L * pathLengthFactor * cloudThickness;
-  
-  return cloudAttenuation;
+  return p * x;
+}
+function erfcinv(y) {
+  return erfinv(1 - y);
+}
+
+/**
+ * ITU-R P.840-9 比衰减系数 Kl（瑞利近似，双 Debye 水介电模型，<1000 GHz）
+ *   Kl = 0.819·f / [ε″·(1+η²)]，η=(2+ε′)/ε″，单位 (dB/km)/(g/m³)
+ * @param {number} f 频率 GHz
+ * @param {number} T 温度 K（云默认 273.15）
+ */
+function cloudSpecificAttenuation(f, T) {
+  const theta = 300 / T;
+  const d = theta - 1;
+  const e0 = 77.66 + 103.3 * d;
+  const e1 = 0.0671 * e0;
+  const e2 = 3.52;
+  const fp = 20.20 - 146 * d + 316 * d * d;  // 主弛豫频率 GHz
+  const fs = 39.8 * fp;                       // 次弛豫频率 GHz
+  const rp = f / fp, rs = f / fs;
+  const eImag = f * (e0 - e1) / (fp * (1 + rp * rp)) +
+                f * (e1 - e2) / (fs * (1 + rs * rs));
+  const eReal = (e0 - e1) / (1 + rp * rp) +
+                (e1 - e2) / (1 + rs * rs) + e2;
+  const eta = (2 + eReal) / eImag;
+  return 0.819 * f / (eImag * (1 + eta * eta));
+}
+
+/**
+ * 对数正态法求液态水柱含量 Lred(p)（完全符合 P.840-9）
+ *   Lred = exp(m + σ·√2·erfcinv(2p/Pclw))，p<Pclw；否则 0
+ * @param {number} pPercent 超越概率 %
+ * @param {{m:number,sigma:number,Pclw:number}} params Pclw 单位 %
+ * @returns {number} kg/m²
+ */
+function cloudLWCFromLognormal(pPercent, params) {
+  const Pclw = params.Pclw;
+  if (!(Pclw > 0) || pPercent >= Pclw) return 0;  // 云出现概率不足 → 无云
+  const arg = 2 * pPercent / Pclw;                 // ∈(0,2)
+  return Math.exp(params.m + params.sigma * Math.SQRT2 * erfcinv(arg));
+}
+
+/**
+ * 云液态水柱含量 L(p) - 工程保守回退表（官方 Lred 地图未导入时使用），kg/m²
+ * - p ≤ 1%：封顶在 1% 值（保守取湿润端）；1%~50% 线性递减；≥50% 取下限
+ * @param {number} p 超越概率 %
+ */
+function getCloudLWC(p) {
+  const tbl = [
+    { p: 1,  L: 1.6 },   // 封顶值：所有 p<1% 都用它
+    { p: 5,  L: 1.0 },
+    { p: 10, L: 0.7 },
+    { p: 20, L: 0.45 },
+    { p: 30, L: 0.3 },
+    { p: 50, L: 0.2 },
+  ];
+  if (p <= 1)  return tbl[0].L;
+  if (p >= 50) return tbl[tbl.length - 1].L;
+  for (let i = 0; i < tbl.length - 1; i++) {
+    const a = tbl[i], b = tbl[i + 1];
+    if (p >= a.p && p <= b.p) {
+      return a.L + (b.L - a.L) * (p - a.p) / (b.p - a.p);
+    }
+  }
+  return tbl[0].L;
+}
+
+/**
+ * 计算云衰减 - 根据 ITU-R P.840-9 建议书
+ * 斜路径云衰减 A = Kl·Lred / sinθ
+ *   优先用官方对数正态参数地图按站点(lat,lon)取 Lred(p)（完全符合）；
+ *   地图未导入时回退到工程保守表 getCloudLWC。
+ * 截断规则（P.840 旧版口径）：p<1% 时取 1% 值，故内部用 pEff=max(p,1)。
+ * @param {number} frequency 频率 GHz
+ * @param {number} elevation 仰角 度
+ * @param {number} p 超越概率 %，= 100 - 可用度
+ * @param {number} lat 地球站纬度（用于查 Lred 地图，可选）
+ * @param {number} lon 地球站经度（用于查 Lred 地图，可选）
+ */
+function calculateCloudAttenuation(frequency, elevation, p, lat, lon) {
+  // 可用度 100% → p=0 → 视为晴天，不考虑云衰减
+  if (p === null || p === undefined || p <= 0) return 0;
+  if (!elevation || elevation <= 0) return 0;
+
+  const pEff = Math.max(p, 1);  // p<1% 封顶在 1% 值
+
+  // L：优先官方 Lred 对数正态地图，否则回退保守表
+  let L = null;
+  try {
+    const params = (lat !== undefined && lon !== undefined && CLOUD_GRID && CLOUD_GRID.getParams)
+      ? CLOUD_GRID.getParams(lat, lon) : null;
+    if (params) L = cloudLWCFromLognormal(pEff, params);
+  } catch (e) { /* 地图异常时静默回退 */ }
+  if (L === null || L === undefined || isNaN(L)) L = getCloudLWC(pEff);
+
+  const Kl = cloudSpecificAttenuation(frequency, 273.15);
+  return Kl * L / Math.sin(elevation * CONSTANTS.PI / 180);
 }
 
 /**
@@ -2371,6 +2453,8 @@ function findClosestFrequency(freq) {
 function scaleRainAttenP618_14(A001, p, latDeg, elevDeg) {
   // 可用度 100% → p = 0 → 晴天，直接返回 0
   if (p <= 0 || A001 <= 0) return 0;
+  // P.618-14 公式(8) 仅在 0.001%~5% 有效；p>5% 时雨衰记为 0（与 §2.5 总衰减合并一致）
+  if (p > 5) return 0;
 
   const absLat = Math.abs(latDeg);
   const elevRad = elevDeg * CONSTANTS.PI / 180;

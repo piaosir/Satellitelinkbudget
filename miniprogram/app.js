@@ -1,6 +1,7 @@
 // app.js
 const { setFullPrecisionData } = require('./utils/rainRate');
 const { setFullPrecisionElevation } = require('./utils/elevation');
+const { setData: setCloudParamsData } = require('./data/cloudParamsGrid');
 
 App({
   onLaunch: function (options) {
@@ -74,6 +75,66 @@ App({
 
     // 后台静默下载 ITU-R P.1511 全精度海拔数据
     this._loadTopoData();
+
+    // 后台静默下载 ITU-R P.840 全精度云参数数据
+    this._loadP840Data();
+  },
+
+  // ===== P.840 云衰参数数据加载 =====
+  // 云存储文件路径 (上传 p840_logn_v1.bin 后填入实际 fileID)
+  P840_CLOUD_FILE: 'cloud://cloud1-8gjv5ekx41d6fb76.636c-cloud1-8gjv5ekx41d6fb76-1385987144/P840/p840_logn_v1.bin',
+  P840_LOCAL_PATH: wx.env.USER_DATA_PATH + '/p840_logn_v1.bin',
+  P840_VERSION_KEY: 'p840_data_version',
+  P840_CURRENT_VERSION: 'v1',
+  P840_EXPECTED_SIZE: 721 * 1441 * 3 * 2, // 6,233,766 bytes (Int16 ×3图)
+
+  _loadP840Data() {
+    const fs = wx.getFileSystemManager();
+    const savedVersion = wx.getStorageSync(this.P840_VERSION_KEY);
+
+    // 优先尝试加载本地缓存
+    if (savedVersion === this.P840_CURRENT_VERSION) {
+      try {
+        const arrayBuffer = fs.readFileSync(this.P840_LOCAL_PATH);
+        if (arrayBuffer && arrayBuffer.byteLength === this.P840_EXPECTED_SIZE) {
+          setCloudParamsData(arrayBuffer);
+          console.log('[P.840] 从本地缓存加载成功');
+          return;
+        }
+      } catch (e) {
+        console.warn('[P.840] 本地缓存读取失败，重新下载:', e.message);
+      }
+    }
+
+    // 后台下载
+    this._downloadP840Data(fs);
+  },
+
+  _downloadP840Data(fs) {
+    console.log('[P.840] 开始后台下载全精度云参数...');
+    wx.cloud.downloadFile({
+      fileID: this.P840_CLOUD_FILE,
+      success: (res) => {
+        if (res.statusCode === 200 && res.tempFilePath) {
+          try {
+            const arrayBuffer = fs.readFileSync(res.tempFilePath);
+            if (arrayBuffer.byteLength !== this.P840_EXPECTED_SIZE) {
+              console.warn('[P.840] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              return;
+            }
+            fs.writeFileSync(this.P840_LOCAL_PATH, arrayBuffer);
+            wx.setStorageSync(this.P840_VERSION_KEY, this.P840_CURRENT_VERSION);
+            setCloudParamsData(arrayBuffer);
+            console.log('[P.840] 下载并缓存成功');
+          } catch (e) {
+            console.error('[P.840] 保存失败:', e.message);
+          }
+        }
+      },
+      fail: (err) => {
+        console.warn('[P.840] 下载失败(将使用保守回退表):', err.errMsg);
+      }
+    });
   },
 
   // ===== P.837 降雨率数据加载 =====
