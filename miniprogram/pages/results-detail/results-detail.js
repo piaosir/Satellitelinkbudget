@@ -52,7 +52,11 @@ const WF_DICT = {
   '卫星轨道位置': 'Satellite Orbital Position',
   '轨道高度': 'Orbital Altitude',
   '轨道速度': 'Orbital Velocity',
+  '轨道速度(惯性系)': 'Orbital Velocity (Inertial)',
+  '相对地面运动速度': 'Ground-relative Velocity',
   '链路时延(单程)': 'Link Delay (One-way)',
+  '链路时延(单程·分段)': 'Link Delay (One-way, per-leg)',
+  '链路时延(单程·端到端)': 'Link Delay (One-way, end-to-end)',
   '上行最大多普勒': 'Max Uplink Doppler',
   '下行最大多普勒': 'Max Downlink Doppler',
   '卫星饱和 EIRP': 'Satellite Saturated EIRP',
@@ -767,8 +771,9 @@ Page({
     //    卫星载荷参数按收发侧归列：单位面积增益/SFD/IBO 为上行接收侧，EIRP/OBO/PSD 为下行发射侧）
     segs.push(this._dualSeg('卫星参数（上行 / 下行）', [
       ['轨道高度', 'orbitAltitudeUpResult', 'orbitAltitudeResult', 'km'],
-      ['轨道速度', 'orbitVelocityUpResult', 'orbitVelocityResult', 'km/s'],
-      ['链路时延(单程)', 'linkDelayUpResult', 'linkDelayDownResult', 'ms'],
+      ['轨道速度(惯性系)', 'orbitVelocityUpResult', 'orbitVelocityResult', 'km/s'],
+      ['相对地面运动速度', 'groundRelVelUpResult', 'groundRelVelResult', 'km/s'],
+      ['链路时延(单程·端到端)', 'linkDelayResult', '_none', 'ms'],
       ['最大多普勒', 'maxDopplerUplinkResult', 'maxDopplerDownlinkResult', 'kHz'],
       ['卫星天线单位面积增益', 'antennaGainResult', '_none', 'dBi/m²'],
       ['卫星 SFD', 'SFDsResult', '_none', 'dBW/m²'],

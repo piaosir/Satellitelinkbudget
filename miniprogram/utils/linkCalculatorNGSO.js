@@ -1779,11 +1779,12 @@ function performCalculations(satParams, inputs) {
   // 最大多普勒频移（NGSO专属，上下行独立计算）
   // 公式：f_d_max = f_c/c · |v_sat − ω_E·r·cos(i)| · Re·cos(ε_min) / r
   //   v_sat = sqrt(μ/r)：惯性系轨道速度
-  //   ω_E·r·cos(i)：地球自转在轨道平面内的有效分量（i=0° 赤道轨道时最大，i=90° 极轨时为0）
-  //   Re·cos(ε_min)/r：最低仰角处的几何投影系数（由正弦定理推导）
-  // 倾角修正说明：对于倾角 i 的圆形轨道，地球自转对相对径向速度的贡献乘以 cos(i)；
-  //   原始公式(i=0°)高估了顺行赤道轨道以外情况下的多普勒消除量，非赤道倾斜轨道实际
-  //   多普勒比 i=0° 时更大。
+  //   ω_E·r·cos(i)：星下点随地球自转的共转线速度在轨道平面内的有效分量
+  //     （i=0° 顺行赤道轨道时为 ω_E·r；i=90° 极轨时为 0）。务必用轨道半径 r，非地球半径 Re。
+  //   Re·cos(ε_min)/r：最低仰角处的几何投影系数（由正弦定理 sinγ=Re·cosε/r 推导）
+  // 同步轨道校验：i=0、h=35786km 时 v_sat=√(μ/r)=ω_E·r（地球同步定义）→ 相对速度=0 → 多普勒=0。
+  // 倾角修正说明：对于倾角 i 的圆形轨道，地球自转对相对切向速度的贡献乘以 cos(i)；
+  //   非赤道倾斜轨道 (i≠0) 抵消量更小，实际多普勒比同高度赤道轨道更大。
   // 参考：Maral & Bousquet "Satellite Communications Systems" 5th Ed §5.1；ITU-R S.1711
   const MU_EARTH = 3.986004418e5; // km³/s²（WGS-84）
   const RE_KM = 6378.137;         // km（WGS-84）
@@ -1795,20 +1796,27 @@ function performCalculations(satParams, inputs) {
   const h_tx = altitudeFromSlantRange(slantRange, elevation);
   const r_tx = RE_KM + h_tx;
   const v_sat_tx = Math.sqrt(MU_EARTH / r_tx);
-  const v_radial_tx = Math.abs(v_sat_tx - OMEGA_E * RE_KM * Math.cos(inclRad)) * RE_KM * Math.cos(elevation * Math.PI / 180) / r_tx;
+  // 相对地面运动速度 = |v_sat − ω_E·r·cos(i)|：卫星相对随地球自转参考系的切向速度。
+  //   注意此处必须用轨道半径 r（星下点共转线速度 ω_E·r），而非地球半径 RE。
+  //   地球同步轨道(i=0, r=r_GEO)时 v_sat=ω_E·r → 相对速度=0 → 多普勒=0。
+  const v_ground_tx = Math.abs(v_sat_tx - OMEGA_E * r_tx * Math.cos(inclRad));
+  const v_radial_tx = v_ground_tx * RE_KM * Math.cos(elevation * Math.PI / 180) / r_tx;
   const maxDopplerUplink = v_radial_tx / C_KM_S * uplinkFrequency * 1e6;   // kHz
 
   // ── 下行链路 ──
   const h_rx = altitudeFromSlantRange(rxSlantRange, rxElevation);
   const r_rx = RE_KM + h_rx;
   const v_sat_rx = Math.sqrt(MU_EARTH / r_rx);
-  const v_radial_rx = Math.abs(v_sat_rx - OMEGA_E * RE_KM * Math.cos(inclRad)) * RE_KM * Math.cos(rxElevation * Math.PI / 180) / r_rx;
+  const v_ground_rx = Math.abs(v_sat_rx - OMEGA_E * r_rx * Math.cos(inclRad));
+  const v_radial_rx = v_ground_rx * RE_KM * Math.cos(rxElevation * Math.PI / 180) / r_rx;
   const maxDopplerDownlink = v_radial_rx / C_KM_S * downlinkFrequency * 1e6; // kHz
 
   results.orbitAltitudeResult = h_rx.toFixed(1);      // km，下行链路轨道高度
   results.orbitVelocityResult = v_sat_rx.toFixed(3);  // km/s，下行惯性系轨道速度
   results.orbitAltitudeUpResult = h_tx.toFixed(1);     // km，上行链路轨道高度
   results.orbitVelocityUpResult = v_sat_tx.toFixed(3); // km/s，上行惯性系轨道速度
+  results.groundRelVelResult = v_ground_rx.toFixed(3);   // km/s，下行相对地面运动速度
+  results.groundRelVelUpResult = v_ground_tx.toFixed(3); // km/s，上行相对地面运动速度
   results.maxDopplerUplinkResult = maxDopplerUplink.toFixed(1);   // kHz
   results.maxDopplerDownlinkResult = maxDopplerDownlink.toFixed(1); // kHz
 
@@ -1817,15 +1825,22 @@ function performCalculations(satParams, inputs) {
   //   轨道周期    P = 2π·√(r³/μ)
   //   覆盖地心半角 λ = arccos( (Re/r)·cos ε_min ) − ε_min   （地面站最低仰角 ε_min 处的中心角）
   //   地面覆盖半径 = Re·λ（大圆弧长，sub-satellite 点到 ε_min 边界）
-  //   最大过境时长 = λ·P/π（天顶过境、忽略地球自转的标准近似；卫星扫过中心角 2λ）
+  //   最大过境时长 = 2λ / |ω_s − ω_E·cos(i)|（天顶过境，卫星相对地面扫过中心角 2λ）
+  //     ω_s = √(μ/r³) 轨道角速度；ω_E·cos(i) 地球自转在轨道平面内的有效分量。
+  //     顺行轨道地球自转使过境变长；同步轨道(ω_s→ω_E·cos i)时相对角速度→0 即常驻可见(∞)。
+  //     ※ 不可用 2λ/ω_s（忽略地球自转）——该近似仅 LEO 成立，MEO 误差~25%、GEO 完全失真。
   // 上行用(r_tx, elevation)、下行用(r_rx, rxElevation)分别计算——上下行轨道高度/仰角可不同，结果可不同。
   // 注：重访周期 / 可见卫星数需星座规模（轨道面数、每面卫星数），工具无此输入 → 不臆造。
   const visMetrics = (r, epsDeg) => {
     const eps = epsDeg * Math.PI / 180;
-    const P = 2 * Math.PI * Math.sqrt(Math.pow(r, 3) / MU_EARTH); // s
-    const lam = Math.acos((RE_KM / r) * Math.cos(eps)) - eps;     // rad
-    return { periodMin: P / 60, halfAngleDeg: lam * 180 / Math.PI, radiusKm: RE_KM * lam, passMin: lam * P / Math.PI / 60 };
+    const omegaS = Math.sqrt(MU_EARTH / Math.pow(r, 3));          // rad/s 轨道角速度
+    const P = 2 * Math.PI / omegaS;                              // s 轨道周期
+    const lam = Math.acos((RE_KM / r) * Math.cos(eps)) - eps;    // rad 覆盖地心半角
+    const omegaRel = Math.abs(omegaS - OMEGA_E * Math.cos(inclRad)); // rad/s 相对地面过顶角速度
+    const passMin = omegaRel > 1e-7 ? (2 * lam / omegaRel) / 60 : Infinity; // min（≈0 即同步常驻可见）
+    return { periodMin: P / 60, halfAngleDeg: lam * 180 / Math.PI, radiusKm: RE_KM * lam, passMin };
   };
+  const fmtPass = (m) => isFinite(m) ? m.toFixed(2) : '常驻可见(∞)';
   const visUp = visMetrics(r_tx, elevation);
   const visDown = visMetrics(r_rx, rxElevation);
   results.orbitPeriodUpResult = visUp.periodMin.toFixed(2);
@@ -1834,8 +1849,8 @@ function performCalculations(satParams, inputs) {
   results.coverageHalfAngleDownResult = visDown.halfAngleDeg.toFixed(2);
   results.coverageRadiusUpResult = visUp.radiusKm.toFixed(1);
   results.coverageRadiusDownResult = visDown.radiusKm.toFixed(1);
-  results.maxPassDurationUpResult = visUp.passMin.toFixed(2);
-  results.maxPassDurationDownResult = visDown.passMin.toFixed(2);
+  results.maxPassDurationUpResult = fmtPass(visUp.passMin);
+  results.maxPassDurationDownResult = fmtPass(visDown.passMin);
   
   // 通信参数
   results.uplinkFrequencyResult = uplinkFrequency.toFixed(2);

@@ -477,7 +477,7 @@
           </view>
           <!-- NGSO 专属：链路时延 + 最大多普勒频移 -->
           <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'linkDelayResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="linkDelayResult">
-            <text class="detail-label">链路时延（单程）</text>
+            <text class="detail-label">链路时延（单程·端到端）</text>
             <text class="detail-value">{{results.linkDelayResult}} ms</text>
           </view>
           <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'maxDopplerUplinkResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="maxDopplerUplinkResult">
@@ -489,8 +489,12 @@
             <text class="detail-value">±{{results.maxDopplerDownlinkResult}} kHz</text>
           </view>
           <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'orbitVelocityResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="orbitVelocityResult">
-            <text class="detail-label">轨道速度</text>
+            <text class="detail-label">轨道速度（惯性系）</text>
             <text class="detail-value">{{results.orbitVelocityResult}} km/s</text>
+          </view>
+          <view wx:if="{{orbitType === 'NGSO'}}" class="detail-item {{filter.includes(markedParams, 'groundRelVelResult') ? 'marked' : ''}}" bindtap="toggleHighlight" data-param="groundRelVelResult">
+            <text class="detail-label">相对地面运动速度</text>
+            <text class="detail-value">{{results.groundRelVelResult}} km/s</text>
           </view>
         </view>
       </view>
