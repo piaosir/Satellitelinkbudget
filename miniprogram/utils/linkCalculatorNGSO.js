@@ -680,8 +680,13 @@ function performCalculations(satParams, inputs) {
   const theta3 = 70 * rxWavelength / rxAntennaDiameter;
   
   // ============ 大气衰减计算 (ITU-R P.676-13) ============
-  const uplinkAtmosphericAttenuation = calculateAtmosphericAttenuation(uplinkFrequency, elevation);
-  const downlinkAtmosphericAttenuation = calculateAtmosphericAttenuation(downlinkFrequency, rxElevation);
+  // 水汽密度 ρ：晴天 = ceil(当地降雨率 / 10) g/m³；雨天 = 20 g/m³
+  const uplinkRhoWsClear = Math.ceil(rainRate / 10);
+  const uplinkRhoWs = uplinkAvailability >= 100 ? uplinkRhoWsClear : 20;
+  const downlinkRhoWsClear = Math.ceil(rxRainRate / 10);
+  const downlinkRhoWs = rxdownlinkAvailability >= 100 ? downlinkRhoWsClear : 20;
+  const uplinkAtmosphericAttenuation = calculateAtmosphericAttenuation(uplinkFrequency, elevation, undefined, undefined, uplinkRhoWs);
+  const downlinkAtmosphericAttenuation = calculateAtmosphericAttenuation(downlinkFrequency, rxElevation, undefined, undefined, downlinkRhoWs);
   
   // ============ 降雨衰减计算 ============
   // 上行降雨衰减
