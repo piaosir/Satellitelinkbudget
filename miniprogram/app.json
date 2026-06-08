@@ -4,10 +4,24 @@
     "pages/report/report",
     "pages/configs/configs",
     "pages/settings/settings",
-    "pages/ar-align/ar-align",
-    "pages/satellite-coverage/satellite-coverage",
-    "pages/results-detail/results-detail",
-    "pages/isl-visual/isl-visual"
+    "pages/results-detail/results-detail"
+  ],
+  "subpackages": [
+    {
+      "root": "pages/satellite-coverage",
+      "name": "satellite-coverage",
+      "pages": ["satellite-coverage"]
+    },
+    {
+      "root": "pages/ar-align",
+      "name": "ar-align",
+      "pages": ["ar-align"]
+    },
+    {
+      "root": "pages/isl-visual",
+      "name": "isl-visual",
+      "pages": ["isl-visual"]
+    }
   ],
   "permission": {
     "scope.userLocation": {

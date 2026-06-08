@@ -5,6 +5,7 @@ const validator = require('./validator.js');
 const { getIsothermHeight } = require('./isothermHeight.js');
 const { P676_PART1 } = require('./p676Data.js');
 const CLOUD_GRID = require('../data/cloudParamsGrid.js'); // ITU-R P.840-9 Lred 对数正态参数地图
+const { getRhoWs } = require('../data/waterVaporGrid.js'); // ITU-R P.836-6 地面水汽密度地图
 
 /**
  * 解析FEC码率字符串，支持任意形式的分数和小数
@@ -585,13 +586,20 @@ function performCalculations(satParams, inputs) {
   const theta3 = 70 * rxWavelength / rxAntennaDiameter;
   
   // ============ 大气衰减计算 (ITU-R P.676-13) ============
-  // 水汽密度 ρ：晴天 = ceil(当地降雨率 / 10) g/m³；雨天 = 20 g/m³
-  const uplinkRhoWsClear = Math.ceil(rainRate / 10);
-  const uplinkRhoWs = uplinkAvailability >= 100 ? uplinkRhoWsClear : 20;
-  const downlinkRhoWsClear = Math.ceil(rxRainRate / 10);
-  const downlinkRhoWs = rxdownlinkAvailability >= 100 ? downlinkRhoWsClear : 20;
-  const uplinkAtmosphericAttenuation = calculateAtmosphericAttenuation(uplinkFrequency, elevation, undefined, undefined, uplinkRhoWs);
-  const downlinkAtmosphericAttenuation = calculateAtmosphericAttenuation(downlinkFrequency, rxElevation, undefined, undefined, downlinkRhoWs);
+  // 三个气象参数均按地理位置修正：
+  //   Ps  — P.835-6 标准大气公式，按站址海拔 h(km) 修正：Ps = 1013.25×(1−6.5h/288.15)^5.2561
+  //   Ts  — P.835-6 纬度分区参考大气，叠加 6.5 K/km 海拔递减率
+  //   ρ_ws— P.836-6 全球地图，晴天取 RHO_50（年中位数），雨天取 RHO_1
+  const uplinkPs    = 1013.25 * Math.pow(Math.max(0.01, 1 - 6.5 * altitude / 288.15), 5.2561);
+  const uplinkTs    = Math.max(200, (Math.abs(earthLat) < 22 ? 300.4 : Math.abs(earthLat) < 45 ? 283.1 : 272.4) - 6.5 * altitude);
+  const uplinkRhoWs = getRhoWs(earthLat, earthLon, uplinkAvailability < 100);
+
+  const downlinkPs    = 1013.25 * Math.pow(Math.max(0.01, 1 - 6.5 * rxAltitude / 288.15), 5.2561);
+  const downlinkTs    = Math.max(200, (Math.abs(rxLatitude) < 22 ? 300.4 : Math.abs(rxLatitude) < 45 ? 283.1 : 272.4) - 6.5 * rxAltitude);
+  const downlinkRhoWs = getRhoWs(rxLatitude, rxLongitude, rxdownlinkAvailability < 100);
+
+  const uplinkAtmosphericAttenuation   = calculateAtmosphericAttenuation(uplinkFrequency,   elevation,  uplinkPs,   uplinkTs,   uplinkRhoWs);
+  const downlinkAtmosphericAttenuation = calculateAtmosphericAttenuation(downlinkFrequency, rxElevation, downlinkPs, downlinkTs, downlinkRhoWs);
   
   // ============ 降雨衰减计算 ============
   // 上行降雨衰减
@@ -1997,7 +2005,7 @@ function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg, Ps, Ts, rho
   // 默认大气参数：气压/温度取 ITU-R P.835-6 标准参考大气，水汽密度取 10 g/m³（偏保守工程默认值，SatMaster 等商业软件惯例；ITU-R P.835 标准参考值为 7.5 g/m³）
   if (!Ps   || !isFinite(Ps))    Ps    = 1013.25; // hPa
   if (!Ts   || !isFinite(Ts))    Ts    = 288.15;  // K
-  if (!rhoWs || !isFinite(rhoWs)) rhoWs = 20.0;   // g/m³
+  if (rhoWs == null || !isFinite(rhoWs)) rhoWs = 20.0;   // g/m³
 
   const rp  = Ps / 1013.25;       // 气压比
   const rt  = 288.15 / Ts;        // 逆温度比

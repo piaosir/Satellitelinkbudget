@@ -2,6 +2,7 @@
 const { setFullPrecisionData } = require('./utils/rainRate');
 const { setFullPrecisionElevation } = require('./utils/elevation');
 const { setData: setCloudParamsData } = require('./data/cloudParamsGrid');
+const { setData: setWaterVaporData } = require('./data/waterVaporGrid');
 
 App({
   onLaunch: function (options) {
@@ -78,6 +79,62 @@ App({
 
     // 后台静默下载 ITU-R P.840 全精度云参数数据
     this._loadP840Data();
+
+    // 后台静默下载 ITU-R P.836 水汽密度数据
+    this._loadP836Data();
+  },
+
+  // ===== P.836 水汽密度数据加载 =====
+  P836_CLOUD_FILE: 'cloud://cloud1-8gjv5ekx41d6fb76.636c-cloud1-8gjv5ekx41d6fb76-1385987144/P836/p836_rho_v1.bin',  // 上传 p836_rho_v1.bin 后填入 fileID（路径建议：P836/p836_rho_v1.bin）
+  P836_LOCAL_PATH: wx.env.USER_DATA_PATH + '/p836_rho_v1.bin',
+  P836_VERSION_KEY: 'p836_data_version',
+  P836_CURRENT_VERSION: 'v1',
+  P836_EXPECTED_SIZE: 161 * 321 * 2 * 2,  // 两张 Int16LE 图，206,724 bytes
+
+  _loadP836Data() {
+    if (!this.P836_CLOUD_FILE) return;  // fileID 未填写时跳过
+    const fs = wx.getFileSystemManager();
+    const savedVersion = wx.getStorageSync(this.P836_VERSION_KEY);
+    if (savedVersion === this.P836_CURRENT_VERSION) {
+      try {
+        const arrayBuffer = fs.readFileSync(this.P836_LOCAL_PATH);
+        if (arrayBuffer && arrayBuffer.byteLength === this.P836_EXPECTED_SIZE) {
+          setWaterVaporData(arrayBuffer);
+          console.log('[P.836] 从本地缓存加载成功');
+          return;
+        }
+      } catch (e) {
+        console.warn('[P.836] 本地缓存读取失败，重新下载:', e.message);
+      }
+    }
+    this._downloadP836Data(fs);
+  },
+
+  _downloadP836Data(fs) {
+    console.log('[P.836] 开始后台下载水汽密度数据...');
+    wx.cloud.downloadFile({
+      fileID: this.P836_CLOUD_FILE,
+      success: (res) => {
+        if (res.statusCode === 200 && res.tempFilePath) {
+          try {
+            const arrayBuffer = fs.readFileSync(res.tempFilePath);
+            if (arrayBuffer.byteLength !== this.P836_EXPECTED_SIZE) {
+              console.warn('[P.836] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              return;
+            }
+            fs.writeFileSync(this.P836_LOCAL_PATH, arrayBuffer);
+            wx.setStorageSync(this.P836_VERSION_KEY, this.P836_CURRENT_VERSION);
+            setWaterVaporData(arrayBuffer);
+            console.log('[P.836] 下载并缓存成功');
+          } catch (e) {
+            console.error('[P.836] 保存失败:', e.message);
+          }
+        }
+      },
+      fail: (err) => {
+        console.warn('[P.836] 下载失败(将使用P.835纬度带估算):', err.errMsg);
+      }
+    });
   },
 
   // ===== P.840 云衰参数数据加载 =====
