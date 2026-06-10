@@ -207,7 +207,6 @@
                   class="so-field-picker-wrap">
             <view class="so-field-picker">
               <text>{{satellites[sunOutageSatelliteIndex].displayName}}</text>
-              <text class="so-picker-arrow">▾</text>
             </view>
           </picker>
           <input wx:if="{{sunOutageUseCustom}}" class="so-field-input so-field-input-custom"
@@ -221,7 +220,7 @@
       <!-- 经纬度 -->
       <view class="so-field-row-2col">
         <view class="so-field so-field-half">
-          <text class="so-field-label">纬度(°N)</text>
+          <text class="so-field-label">纬度<text class="form-label-unit">(°N)</text></text>
           <input class="so-field-input"
                  type="text"
                  placeholder="39.9042"
@@ -229,7 +228,7 @@
                  bindinput="onSunOutageLatInput" />
         </view>
         <view class="so-field so-field-half">
-          <text class="so-field-label">经度(°E)</text>
+          <text class="so-field-label">经度<text class="form-label-unit">(°E)</text></text>
           <input class="so-field-input"
                  type="text"
                  placeholder="116.4074"
@@ -248,7 +247,7 @@
       </view>
       <!-- 天线口径 -->
       <view class="so-field">
-        <text class="so-field-label">天线口径(m)</text>
+        <text class="so-field-label">天线口径<text class="form-label-unit">(m)</text></text>
         <input class="so-field-input"
                type="text"
                placeholder="3.0"
@@ -274,7 +273,6 @@
                   class="so-field-picker-wrap">
             <view class="so-field-picker">
               <text>{{sunOutageSeasons[sunOutageSeasonIndex]}}</text>
-              <text class="so-picker-arrow">▾</text>
             </view>
           </picker>
         </view>
@@ -289,13 +287,12 @@
                 class="so-field-picker-wrap">
           <view class="so-field-picker">
             <text>{{sunOutageBands[sunOutageBandIndex]}}</text>
-            <text class="so-picker-arrow">▾</text>
           </view>
         </picker>
       </view>
       <!-- 自定义频率 -->
       <view class="so-field" wx:if="{{sunOutageShowCustomFreq}}">
-        <text class="so-field-label">下行频率(GHz)</text>
+        <text class="so-field-label">下行频率<text class="form-label-unit">(GHz)</text></text>
         <input class="so-field-input"
                type="text"
                placeholder="输入频率"
@@ -311,36 +308,57 @@
       </view>
       <!-- 结果区域 -->
       <view class="sunoutage-result" wx:if="{{sunOutageResultReady && sunOutageResult}}">
-        <view class="sunoutage-result-summary">
-          <view class="azel-result-head {{sunOutageResult.totalDays > 0 ? 'warn' : 'ok'}}">
-            {{sunOutageResult.totalDays > 0 ? '存在日凌影响' : '无日凌影响'}}
+        <!-- 报告题头：规则线标题 + 时区切换 -->
+        <view class="so-report-head">
+          <text class="so-report-title">计算结果</text>
+          <view class="sunoutage-time-switch" wx:if="{{sunOutageResult.totalDays > 0}}" bindtap="toggleSunOutageTimeMode">
+            <text class="sunoutage-time-opt {{sunOutageTimeMode === 'bjt' ? 'active' : ''}}">BJT</text>
+            <text class="sunoutage-time-opt {{sunOutageTimeMode === 'gmt' ? 'active' : ''}}">GMT</text>
           </view>
-          <!-- 时间模式切换 -->
-          <view class="sunoutage-time-toggle" wx:if="{{sunOutageResult.totalDays > 0}}">
-            <text class="sunoutage-time-label">时间显示:</text>
-            <view class="sunoutage-time-switch" bindtap="toggleSunOutageTimeMode">
-              <text class="sunoutage-time-opt {{sunOutageTimeMode === 'bjt' ? 'active' : ''}}">北京时间</text>
-              <text class="sunoutage-time-opt {{sunOutageTimeMode === 'gmt' ? 'active' : ''}}">GMT</text>
+        </view>
+        <!-- 结论句 -->
+        <text class="so-report-conclusion {{sunOutageResult.totalDays > 0 ? 'warn' : 'ok'}}">{{sunOutageResult.totalDays > 0 ? '存在日凌影响' : '无日凌影响'}}</text>
+        <view class="sunoutage-result-summary">
+          <!-- 参数与结论：标签-数值对齐行 -->
+          <view class="so-sum-grid">
+            <view class="so-sum-row">
+              <text class="so-sum-label">卫星</text>
+              <text class="so-sum-value">{{sunOutageResult.satName}}（{{sunOutageResult.satLonDisplay}}°E）</text>
+            </view>
+            <view class="so-sum-row">
+              <text class="so-sum-label">方位 / 仰角</text>
+              <text class="so-sum-value">{{sunOutageResult.satAz}}° / {{sunOutageResult.satEl}}°</text>
+            </view>
+            <view class="so-sum-row">
+              <text class="so-sum-label">地球站</text>
+              <text class="so-sum-value">{{sunOutageResult.stationLat}}°N, {{sunOutageResult.stationLon}}°E</text>
+            </view>
+            <view class="so-sum-row">
+              <text class="so-sum-label">口径 / 频率</text>
+              <text class="so-sum-value">{{sunOutageResult.antennaD}} m / {{sunOutageResult.frequency}} GHz</text>
+            </view>
+            <view class="so-sum-row" wx:if="{{sunOutageResult.totalDays > 0}}">
+              <text class="so-sum-label">影响期</text>
+              <text class="so-sum-value">{{sunOutageResult.startDate}} ~ {{sunOutageResult.endDate}}（{{sunOutageResult.totalDays}}天）</text>
+            </view>
+            <view class="so-sum-row" wx:if="{{sunOutageResult.peakRecord}}">
+              <text class="so-sum-label">最长中断</text>
+              <text class="so-sum-value">{{sunOutageResult.maxDurationStr}}</text>
+            </view>
+            <view class="so-sum-row" wx:if="{{sunOutageResult.peakRecord}}">
+              <text class="so-sum-label">峰值时刻（{{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}}）</text>
+              <text class="so-sum-value">{{sunOutageResult.peakRecord.date}} {{sunOutageTimeMode === 'bjt' ? sunOutageResult.peakRecord.peakTimeBJT : sunOutageResult.peakRecord.peakTimeUTC}}</text>
             </view>
           </view>
-          <!-- 基本参数 -->
-          <text class="azel-result-line">卫星: {{sunOutageResult.satName}} ({{sunOutageResult.satLonDisplay}}°E)  仰角: {{sunOutageResult.satEl}}°  方位角: {{sunOutageResult.satAz}}°</text>
-          <text class="azel-result-line">地球站: {{sunOutageResult.stationLat}}°N, {{sunOutageResult.stationLon}}°E  口径: {{sunOutageResult.antennaD}}m  频率: {{sunOutageResult.frequency}} GHz</text>
-          <!-- 日凌影响 -->
-          <text class="azel-result-line" wx:if="{{sunOutageResult.totalDays > 0}}">{{sunOutageResult.seasonName}}  影响天数: {{sunOutageResult.totalDays}} 天  影响期: {{sunOutageResult.startDate}} ~ {{sunOutageResult.endDate}}</text>
-          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">峰值日最长中断: {{sunOutageResult.maxDurationStr}}</text>
-          <text class="azel-result-line" wx:if="{{sunOutageResult.peakRecord}}">峰值日期/日凌最大时刻({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}}): {{sunOutageResult.peakRecord.date}} {{sunOutageTimeMode === 'bjt' ? sunOutageResult.peakRecord.peakTimeBJT : sunOutageResult.peakRecord.peakTimeUTC}}</text>
         </view>
-        <!-- 展开/收起详细列表 -->
-        <view class="sunoutage-detail-toggle" bindtap="toggleSunOutageDetail" wx:if="{{sunOutageResult.totalDays > 0}}">
-          <text>{{sunOutageShowDetail ? '收起逐日详情 ▲' : '查看逐日详情 ▼'}}</text>
-        </view>
-        <view class="sunoutage-detail-list" wx:if="{{sunOutageShowDetail && sunOutageResult.dailyResults.length > 0}}">
+        <!-- 逐日详情（常显三线表） -->
+        <view class="so-table-caption" wx:if="{{sunOutageResult.dailyResults.length > 0}}">逐日详情</view>
+        <view class="sunoutage-detail-list" wx:if="{{sunOutageResult.dailyResults.length > 0}}">
           <view class="sunoutage-detail-header">
             <text class="so-col so-col-date">日期</text>
-            <text class="so-col so-col-time">开始({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}})</text>
-            <text class="so-col so-col-time">峰值({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}})</text>
-            <text class="so-col so-col-time">结束({{sunOutageTimeMode === 'bjt' ? 'BJT' : 'GMT'}})</text>
+            <text class="so-col so-col-time">开始</text>
+            <text class="so-col so-col-time">峰值</text>
+            <text class="so-col so-col-time">结束</text>
             <text class="so-col so-col-dur">时长</text>
             <text class="so-col so-col-cn">强度</text>
           </view>
@@ -365,7 +383,7 @@
   <view class="visual-popup-mask {{showVisualPopup ? 'show' : ''}}" wx:if="{{showVisualPopup}}" bindtap="hideVisualPanel" catchtouchmove="preventTouchMove"></view>
 
   <!-- 余量/正向计算弹出面板 -->
-  <view class="margin-popup {{showMarginPopup ? 'show' : ''}}" wx:if="{{showMarginPopup}}" catchtouchmove="preventTouchMove">
+  <view class="margin-popup {{showMarginPopup ? 'show' : ''}}" wx:if="{{showMarginPopup}}" style="top: {{navBarTop + navBarHeight + 4}}px; left: {{navBarRight}}px;" catchtouchmove="preventTouchMove">
     <view class="margin-popup-header">
       <view class="margin-mode-tabs">
         <view class="margin-mode-tab {{calcMode === 'reverse' ? 'active' : ''}}" bindtap="setCalcMode" data-mode="reverse">
@@ -419,13 +437,12 @@
         </view>
       </view>
       <view class="margin-popup-hint">
-        <text>💡 输入功放功率，反推可达余量</text>
+        <text>输入功放功率，反推可达余量</text>
       </view>
     </view>
   </view>
   
-  <!-- 余量面板遮罩 -->
-  <view class="margin-popup-mask {{showMarginPopup ? 'show' : ''}}" wx:if="{{showMarginPopup}}" bindtap="hideMarginPanel" catchtouchmove="preventTouchMove"></view>
+  <!-- 余量面板为非模态：无遮罩，页面可正常滚动，点击内容区或✕关闭 -->
 
   <!-- 历史记录面板 -->
   <view class="history-panel {{showHistoryPanel ? 'show' : ''}}" style="top: {{navBarTop + navBarHeight + 8}}px; height: calc(100vh - {{navBarTop + navBarHeight + 8}}px);">
@@ -525,13 +542,14 @@
     </view>
   </view>
 
-  <scroll-view scroll-y class="content-scroll" 
-               scroll-top="{{contentScrollTop}}" 
-               scroll-with-animation 
-               bindscroll="onContentScroll" 
-               enhanced 
+  <scroll-view scroll-y class="content-scroll"
+               scroll-top="{{contentScrollTop}}"
+               scroll-with-animation
+               bindscroll="onContentScroll"
+               binddragstart="onContentDragStart"
+               enhanced
                show-scrollbar="{{true}}">
-  <view class="content-wrapper" style="padding-top: {{navBarTop + navBarHeight + (isEditingConfig ? 40 : 0)}}px;" bindtouchstart="onContentTouchStart">
+  <view class="content-wrapper" style="padding-top: {{navBarTop + navBarHeight + (isEditingConfig ? 40 : 0)}}px;" bindtouchstart="onContentTouchStart" bindtap="onContentTap">
 
   <!-- 卫星参数卡片 -->
   <view class="card">
@@ -542,7 +560,7 @@
         <view class="orbit-seg-item {{orbitType === 'NGSO' ? 'active' : ''}}" data-type="NGSO" bindtap="onOrbitTypeChange">NGSO</view>
       </view>
     </view>
-    <view class="collapse-content {{satelliteParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+    <view class="collapse-content show">
       <!-- 第一行：卫星选择 + 卫星名称 + 轨道位置（GEO）；卫星名称 + ISL单跳C/N + ISL跳数（NGSO） -->
       <view class="grid-3" wx:if="{{orbitType !== 'NGSO'}}">
         <view class="form-group">
@@ -560,8 +578,8 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">卫星名称 *</text>
-          <input class="form-input" 
+          <text class="form-label">卫星名称<text class="required-mark"> *</text></text>
+          <input class="form-input {{focusedField === 'satelliteName' ? 'input-focused' : ''}}" 
                  placeholder="请输入" 
                  value="{{satelliteParams.satelliteName}}"
                  data-field="satelliteName"
@@ -570,8 +588,8 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">轨道位置(°E) *</text>
-          <input class="form-input" 
+          <text class="form-label">轨道位置<text class="form-label-unit">(°E)</text><text class="required-mark"> *</text></text>
+          <input class="form-input {{focusedField === 'orbitPosition' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="110.5" 
                  value="{{satelliteParams.orbitPosition}}"
@@ -585,9 +603,9 @@
       <view class="grid-3" wx:if="{{orbitType === 'NGSO'}}">
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">卫星名称 *</text>
+            <text class="form-label">卫星名称<text class="required-mark"> *</text></text>
           </view>
-          <input class="form-input"
+          <input class="form-input {{focusedField === 'satelliteName' ? 'input-focused' : ''}}"
                  placeholder="请输入"
                  value="{{satelliteParams.satelliteName}}"
                  data-field="satelliteName"
@@ -597,9 +615,9 @@
 
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">轨道倾角(°)</text>
+            <text class="form-label">轨道倾角<text class="form-label-unit">(°)</text></text>
           </view>
-          <input class="form-input"
+          <input class="form-input {{focusedField === 'orbitInclination' ? 'input-focused' : ''}}"
                  type="digit"
                  placeholder="50"
                  value="{{satelliteParams.orbitInclination}}"
@@ -612,7 +630,7 @@
           <view class="form-label-row">
             <text class="form-label">ISL跳数</text>
           </view>
-          <input class="form-input"
+          <input class="form-input {{focusedField === 'islHops' ? 'input-focused' : ''}}"
                  type="text"
                  placeholder="0"
                  value="{{satelliteParams.islHops}}"
@@ -639,10 +657,10 @@
       <view class="grid-2" wx:if="{{orbitType === 'NGSO' && (satelliteParams.islMode || 'manual') === 'manual'}}">
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">{{islInputMode === 'cno' ? 'ISL C/N₀(dBHz)' : 'ISL SNR(dB)'}}</text>
-            <button class="toggle-btn-emoji" bindtap="toggleIslInputMode">🔄</button>
+            <text class="form-label">{{islInputMode === 'cno' ? 'ISL C/N₀' : 'ISL SNR'}}<text class="form-label-unit">{{islInputMode === 'cno' ? '(dBHz)' : '(dB)'}}</text></text>
+            <view class="unit-toggle" bindtap="toggleIslInputMode"><view class="unit-toggle-icon"></view></view>
           </view>
-          <input class="form-input" type="text" placeholder="{{islInputMode === 'cno' ? '105.56' : '30'}}"
+          <input class="form-input {{focusedField === 'cIslDisplay' ? 'input-focused' : ''}}" type="text" placeholder="{{islInputMode === 'cno' ? '105.56' : '30'}}"
                  value="{{satelliteParams.cIslDisplay}}" data-field="cIslDisplay"
                  adjust-position="{{isNotIOS ? '' : false}}"
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
@@ -652,28 +670,28 @@
       <!-- 射频模式：EIRP / G/T / 频率 / 单跳距离 / 其他损耗 -->
       <view class="grid-3" wx:if="{{orbitType === 'NGSO' && satelliteParams.islMode === 'rf'}}">
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">ISL EIRP(dBW)</text></view>
-          <input class="form-input" type="text" placeholder="45" value="{{satelliteParams.islEirp}}" data-field="islEirp"
+          <view class="form-label-row"><text class="form-label">ISL EIRP<text class="form-label-unit">(dBW)</text></text></view>
+          <input class="form-input {{focusedField === 'islEirp' ? 'input-focused' : ''}}" type="text" placeholder="45" value="{{satelliteParams.islEirp}}" data-field="islEirp"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">ISL G/T(dB/K)</text></view>
-          <input class="form-input" type="text" placeholder="12" value="{{satelliteParams.islGT}}" data-field="islGT"
+          <view class="form-label-row"><text class="form-label">ISL G/T<text class="form-label-unit">(dB/K)</text></text></view>
+          <input class="form-input {{focusedField === 'islGT' ? 'input-focused' : ''}}" type="text" placeholder="12" value="{{satelliteParams.islGT}}" data-field="islGT"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">ISL 频率(GHz)</text></view>
-          <input class="form-input" type="digit" placeholder="23" value="{{satelliteParams.islFreq}}" data-field="islFreq"
+          <view class="form-label-row"><text class="form-label">ISL 频率<text class="form-label-unit">(GHz)</text></text></view>
+          <input class="form-input {{focusedField === 'islFreq' ? 'input-focused' : ''}}" type="digit" placeholder="23" value="{{satelliteParams.islFreq}}" data-field="islFreq"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">单跳距离(km)</text></view>
-          <input class="form-input" type="digit" placeholder="2000" value="{{satelliteParams.islHopDistance}}" data-field="islHopDistance"
+          <view class="form-label-row"><text class="form-label">单跳距离<text class="form-label-unit">(km)</text></text></view>
+          <input class="form-input {{focusedField === 'islHopDistance' ? 'input-focused' : ''}}" type="digit" placeholder="2000" value="{{satelliteParams.islHopDistance}}" data-field="islHopDistance"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">其他损耗(dB)</text></view>
-          <input class="form-input" type="digit" placeholder="1" value="{{satelliteParams.islMiscLoss}}" data-field="islMiscLoss"
+          <view class="form-label-row"><text class="form-label">其他损耗<text class="form-label-unit">(dB)</text></text></view>
+          <input class="form-input {{focusedField === 'islMiscLoss' ? 'input-focused' : ''}}" type="digit" placeholder="1" value="{{satelliteParams.islMiscLoss}}" data-field="islMiscLoss"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
       </view>
@@ -681,48 +699,48 @@
       <!-- 光学模式：发射光功率 / 收发口径 / 波长 / 指向损耗 / 单跳距离 / 噪声 PSD -->
       <view class="grid-3" wx:if="{{orbitType === 'NGSO' && satelliteParams.islMode === 'optical'}}">
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">发射光功率(dBm)</text></view>
-          <input class="form-input" type="text" placeholder="20" value="{{satelliteParams.islOptTxPower}}" data-field="islOptTxPower"
+          <view class="form-label-row"><text class="form-label">发射光功率<text class="form-label-unit">(dBm)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptTxPower' ? 'input-focused' : ''}}" type="text" placeholder="20" value="{{satelliteParams.islOptTxPower}}" data-field="islOptTxPower"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">发射口径(m)</text></view>
-          <input class="form-input" type="digit" placeholder="0.08" value="{{satelliteParams.islOptTxAperture}}" data-field="islOptTxAperture"
+          <view class="form-label-row"><text class="form-label">发射口径<text class="form-label-unit">(m)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptTxAperture' ? 'input-focused' : ''}}" type="digit" placeholder="0.08" value="{{satelliteParams.islOptTxAperture}}" data-field="islOptTxAperture"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">接收口径(m)</text></view>
-          <input class="form-input" type="digit" placeholder="0.08" value="{{satelliteParams.islOptRxAperture}}" data-field="islOptRxAperture"
+          <view class="form-label-row"><text class="form-label">接收口径<text class="form-label-unit">(m)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptRxAperture' ? 'input-focused' : ''}}" type="digit" placeholder="0.08" value="{{satelliteParams.islOptRxAperture}}" data-field="islOptRxAperture"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">波长(nm)</text></view>
-          <input class="form-input" type="digit" placeholder="1550" value="{{satelliteParams.islOptWavelength}}" data-field="islOptWavelength"
+          <view class="form-label-row"><text class="form-label">波长<text class="form-label-unit">(nm)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptWavelength' ? 'input-focused' : ''}}" type="digit" placeholder="1550" value="{{satelliteParams.islOptWavelength}}" data-field="islOptWavelength"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">指向+光学损耗(dB)</text></view>
-          <input class="form-input" type="digit" placeholder="3" value="{{satelliteParams.islOptPointingLoss}}" data-field="islOptPointingLoss"
+          <view class="form-label-row"><text class="form-label">指向+光学损耗<text class="form-label-unit">(dB)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptPointingLoss' ? 'input-focused' : ''}}" type="digit" placeholder="3" value="{{satelliteParams.islOptPointingLoss}}" data-field="islOptPointingLoss"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">单跳距离(km)</text></view>
-          <input class="form-input" type="digit" placeholder="2000" value="{{satelliteParams.islHopDistance}}" data-field="islHopDistance"
+          <view class="form-label-row"><text class="form-label">单跳距离<text class="form-label-unit">(km)</text></text></view>
+          <input class="form-input {{focusedField === 'islHopDistance' ? 'input-focused' : ''}}" type="digit" placeholder="2000" value="{{satelliteParams.islHopDistance}}" data-field="islHopDistance"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">接收灵敏度(dBm)</text></view>
-          <input class="form-input" type="text" placeholder="-30" value="{{satelliteParams.islOptSensitivity}}" data-field="islOptSensitivity"
+          <view class="form-label-row"><text class="form-label">接收灵敏度<text class="form-label-unit">(dBm)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptSensitivity' ? 'input-focused' : ''}}" type="text" placeholder="-30" value="{{satelliteParams.islOptSensitivity}}" data-field="islOptSensitivity"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">灵敏度参考速率(Mbps)</text></view>
-          <input class="form-input" type="digit" placeholder="1000" value="{{satelliteParams.islOptSensRate}}" data-field="islOptSensRate"
+          <view class="form-label-row"><text class="form-label">灵敏度参考速率<text class="form-label-unit">(Mbps)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptSensRate' ? 'input-focused' : ''}}" type="digit" placeholder="1000" value="{{satelliteParams.islOptSensRate}}" data-field="islOptSensRate"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
         <view class="form-group">
-          <view class="form-label-row"><text class="form-label">灵敏度 Eb/N₀(dB)</text></view>
-          <input class="form-input" type="digit" placeholder="13" value="{{satelliteParams.islOptSensEbN0}}" data-field="islOptSensEbN0"
+          <view class="form-label-row"><text class="form-label">灵敏度 Eb/N₀<text class="form-label-unit">(dB)</text></text></view>
+          <input class="form-input {{focusedField === 'islOptSensEbN0' ? 'input-focused' : ''}}" type="text" placeholder="13" value="{{satelliteParams.islOptSensEbN0}}" data-field="islOptSensEbN0"
                  adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
       </view>
@@ -744,7 +762,7 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">工作频段 *</text>
+          <text class="form-label">工作频段<text class="required-mark"> *</text></text>
           <picker mode="selector" 
                   range="{{frequencyBandOptions}}" 
                   range-key="label"
@@ -758,8 +776,8 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">SFD(dBW/m²)</text>
-          <input class="form-input" 
+          <text class="form-label">SFD<text class="form-label-unit">(dBW/m²)</text></text>
+          <input class="form-input {{focusedField === 'sfdRef' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="-84" 
                  value="{{satelliteParams.sfdRef}}"
@@ -769,8 +787,8 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">Tpdr.带宽(MHz)</text>
-          <input class="form-input" 
+          <text class="form-label">Tpdr.带宽<text class="form-label-unit">(MHz)</text></text>
+          <input class="form-input {{focusedField === 'transponderBandwidth' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="36" 
                  value="{{satelliteParams.transponderBandwidth}}"
@@ -780,8 +798,8 @@
         </view>
 
         <view class="form-group" wx:if="{{orbitType !== 'NGSO'}}">
-          <text class="form-label">邻星离轴角(°)</text>
-          <input class="form-input" 
+          <text class="form-label">邻星离轴角<text class="form-label-unit">(°)</text></text>
+          <input class="form-input {{focusedField === 'deltaTheta' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="0" 
                  value="{{satelliteParams.deltaTheta}}"
@@ -791,8 +809,19 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">Tpdr. IBO(dB)</text>
-          <input class="form-input" 
+          <text class="form-label">G/Tref<text class="form-label-unit">(dB/K)</text></text>
+          <input class="form-input {{focusedField === 'sfdGtRef' ? 'input-focused' : ''}}"
+                 type="text"
+                 placeholder="0"
+                 value="{{satelliteParams.sfdGtRef}}"
+                 data-field="sfdGtRef"
+                 adjust-position="{{isNotIOS ? '' : false}}"
+                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+        </view>
+
+        <view class="form-group">
+          <text class="form-label">Tpdr. IBO<text class="form-label-unit">(dB)</text></text>
+          <input class="form-input {{focusedField === 'BOi' ? 'input-focused' : ''}}"
                  type="text"
                  placeholder="6" 
                  value="{{satelliteParams.BOi}}"
@@ -802,8 +831,8 @@
         </view>
 
         <view class="form-group">
-          <text class="form-label">Tpdr. OBO(dB)</text>
-          <input class="form-input" 
+          <text class="form-label">Tpdr. OBO<text class="form-label-unit">(dB)</text></text>
+          <input class="form-input {{focusedField === 'BOo' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="3" 
                  value="{{satelliteParams.BOo}}"
@@ -817,12 +846,11 @@
         </view>
       </view>
 
-      <!-- 部分收起时隐藏以下内容 -->
-      <view wx:if="{{satelliteParamsExpandState === 'full'}}">
+      <view>
         <view class="grid-4">
           <view class="form-group">
-            <text class="form-label">上行C/ACI(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">上行C/ACI<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'aciUplinkFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="30" 
                    value="{{satelliteParams.aciUplinkFactor}}"
@@ -832,8 +860,8 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">上行C/ASI(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">上行C/ASI<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'adjUplinkFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="25" 
                    value="{{satelliteParams.adjUplinkFactor}}"
@@ -843,8 +871,8 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">下行C/ACI(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">下行C/ACI<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'aciDownlinkFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="30" 
                    value="{{satelliteParams.aciDownlinkFactor}}"
@@ -854,8 +882,8 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">下行C/ASI(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">下行C/ASI<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'adjDownlinkFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="25" 
                    value="{{satelliteParams.adjDownlinkFactor}}"
@@ -867,8 +895,8 @@
 
         <view class="grid-4">
           <view class="form-group">
-            <text class="form-label">上行C/XPI(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">上行C/XPI<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'xpolUplinkFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="26" 
                    value="{{satelliteParams.xpolUplinkFactor}}"
@@ -878,8 +906,8 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">HPA C/IM(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">HPA C/IM<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'hpaIntermodFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="24" 
                    value="{{satelliteParams.hpaIntermodFactor}}"
@@ -889,8 +917,8 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">下行C/XPI(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">下行C/XPI<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'xpolDownlinkFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="26" 
                    value="{{satelliteParams.xpolDownlinkFactor}}"
@@ -900,8 +928,8 @@
           </view>
 
           <view class="form-group">
-            <text class="form-label">Tpdr. C/IM(dB)</text>
-            <input class="form-input" 
+            <text class="form-label">Tpdr. C/IM<text class="form-label-unit">(dB)</text></text>
+            <input class="form-input {{focusedField === 'xpdrIntermodFactor' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="21" 
                    value="{{satelliteParams.xpdrIntermodFactor}}"
@@ -911,7 +939,6 @@
           </view>
         </view>
       </view>
-      <!-- 部分收起结束 -->
     </view>
   </view>
 
@@ -925,7 +952,7 @@
         </view>
       </view>
       
-      <view class="collapse-content {{uplinkParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+      <view class="collapse-content show">
         <!-- 城市选择 -->
         <view class="station-form-group city-selector-group">
           <text class="form-label">地面站位置</text>
@@ -964,8 +991,8 @@
         <!-- 经纬度 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">经度(°E)</text>
-            <input class="form-input" 
+            <text class="form-label">经度<text class="form-label-unit">(°E)</text></text>
+            <input class="form-input {{focusedField === 'longitude' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="116.4" 
                    value="{{linkParams.longitude}}"
@@ -975,8 +1002,8 @@
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">纬度(°N)</text>
-            <input class="form-input" 
+            <text class="form-label">纬度<text class="form-label-unit">(°N)</text></text>
+            <input class="form-input {{focusedField === 'latitude' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="39.9" 
                    value="{{linkParams.latitude}}"
@@ -991,9 +1018,9 @@
         <view class="station-grid-2" wx:if="{{orbitType === 'NGSO'}}">
           <view class="station-form-group">
             <view class="form-label-row">
-              <text class="form-label">最低仰角(°)</text>
+              <text class="form-label">最低仰角<text class="form-label-unit">(°)</text></text>
             </view>
-            <input class="form-input" 
+            <input class="form-input {{focusedField === 'minElevation' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="10" 
                    value="{{linkParams.minElevation}}"
@@ -1003,10 +1030,10 @@
           </view>
           <view class="station-form-group">
             <view class="form-label-row">
-              <text class="form-label">{{linkParams.distanceMode === 'slantRange' ? '星地斜距(km)' : '轨道高度(km)'}}</text>
-              <button class="toggle-btn-emoji" data-type="uplink" bindtap="onDistanceModeToggle">🔄</button>
+              <text class="form-label">{{linkParams.distanceMode === 'slantRange' ? '星地斜距' : '轨道高度'}}<text class="form-label-unit">(km)</text></text>
+              <view class="unit-toggle" data-type="uplink" bindtap="onDistanceModeToggle"><view class="unit-toggle-icon"></view></view>
             </view>
-            <input class="form-input" 
+            <input class="form-input {{focusedField === 'slantRange' || focusedField === 'orbitAltitude' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="{{linkParams.distanceMode === 'slantRange' ? '2500' : '1200'}}" 
                    value="{{linkParams.distanceMode === 'slantRange' ? linkParams.slantRange : linkParams.orbitAltitude}}"
@@ -1019,8 +1046,8 @@
         <!-- 天线参数 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">天线口径(m)</text>
-            <input class="form-input" 
+            <text class="form-label">天线口径<text class="form-label-unit">(m)</text></text>
+            <input class="form-input {{focusedField === 'antennaDiameter' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="6.2" 
                    value="{{linkParams.antennaDiameter}}"
@@ -1029,8 +1056,8 @@
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">天线效率(%)</text>
-            <input class="form-input" 
+            <text class="form-label">天线效率<text class="form-label-unit">(%)</text></text>
+            <input class="form-input {{focusedField === 'antennaEfficiency' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="65" 
                    value="{{linkParams.antennaEfficiency}}"
@@ -1043,8 +1070,8 @@
         <!-- 频率和极化 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">上行频率(GHz)</text>
-            <input class="form-input" 
+            <text class="form-label">上行频率<text class="form-label-unit">(GHz)</text></text>
+            <input class="form-input {{focusedField === 'centerFrequency' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="14.25" 
                    value="{{linkParams.centerFrequency}}"
@@ -1070,8 +1097,8 @@
         <!-- 卫星G/T和可用度 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">卫星G/T(dB/K)</text>
-            <input class="form-input" 
+            <text class="form-label">卫星G/T<text class="form-label-unit">(dB/K)</text></text>
+            <input class="form-input {{focusedField === 'G_Ts' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="2.0" 
                    value="{{linkParams.G_Ts}}"
@@ -1082,8 +1109,8 @@
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">可用度(%)</text>
-            <input class="form-input" 
+            <text class="form-label">可用度<text class="form-label-unit">(%)</text></text>
+            <input class="form-input {{focusedField === 'uplinkAvailability' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="99.90" 
                    value="{{linkParams.uplinkAvailability}}"
@@ -1095,12 +1122,12 @@
           </view>
         </view>
 
-        <!-- 展开更多参数 -->
-        <view wx:if="{{uplinkParamsExpandState === 'full'}}">
+        <!-- 更多参数 -->
+        <view>
           <view class="station-grid-2">
             <view class="station-form-group">
-              <text class="form-label">海拔(m)</text>
-              <input class="form-input" 
+              <text class="form-label">海拔<text class="form-label-unit">(m)</text></text>
+              <input class="form-input {{focusedField === 'altitude' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="0" 
                      value="{{linkParams.altitude}}"
@@ -1111,8 +1138,8 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <text class="form-label">R0.01%(mm/h)</text>
-              <input class="form-input" 
+              <text class="form-label">R0.01%<text class="form-label-unit">(mm/h)</text></text>
+              <input class="form-input {{focusedField === 'rainRate' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="40" 
                      value="{{linkParams.rainRate}}"
@@ -1126,8 +1153,8 @@
 
           <view class="station-grid-2">
             <view class="station-form-group">
-              <text class="form-label">功放回退(dB)</text>
-              <input class="form-input" 
+              <text class="form-label">功放回退<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input {{focusedField === 'paBackoff' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="5" 
                      value="{{linkParams.paBackoff}}"
@@ -1138,8 +1165,8 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <text class="form-label">馈线损耗(dB)</text>
-              <input class="form-input" 
+              <text class="form-label">馈线损耗<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input {{focusedField === 'feederLoss' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="3.5" 
                      value="{{linkParams.feederLoss}}"
@@ -1166,8 +1193,8 @@
               </picker>
             </view>
             <view class="station-form-group" wx:if="{{linkParams.uplinkPowerControl === '自定义'}}">
-              <text class="form-label">UPC值(dB)</text>
-              <input class="form-input" 
+              <text class="form-label">UPC值<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input {{focusedField === 'upcValue' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="3.0" 
                      value="{{linkParams.upcValue}}"
@@ -1181,8 +1208,8 @@
 
           <view class="station-grid-2">
             <view class="station-form-group">
-              <text class="form-label">其他损耗(dB)</text>
-              <input class="form-input" 
+              <text class="form-label">其他损耗<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input {{focusedField === 'uplinkOtherLoss' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="0.3" 
                      value="{{linkParams.uplinkOtherLoss}}"
@@ -1220,7 +1247,7 @@
         </view>
       </view>
       
-      <view class="collapse-content {{downlinkParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+      <view class="collapse-content show">
         <!-- 城市选择 -->
         <view class="station-form-group city-selector-group">
           <text class="form-label">地面站位置</text>
@@ -1259,8 +1286,8 @@
         <!-- 经纬度 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">经度(°E)</text>
-            <input class="form-input" 
+            <text class="form-label">经度<text class="form-label-unit">(°E)</text></text>
+            <input class="form-input {{focusedField === 'rxLongitude' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="116.4" 
                    value="{{linkParams.rxLongitude}}"
@@ -1270,8 +1297,8 @@
                    bindblur="onCoordinateBlur" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">纬度(°N)</text>
-            <input class="form-input" 
+            <text class="form-label">纬度<text class="form-label-unit">(°N)</text></text>
+            <input class="form-input {{focusedField === 'rxLatitude' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="39.9" 
                    value="{{linkParams.rxLatitude}}"
@@ -1286,9 +1313,9 @@
         <view class="station-grid-2" wx:if="{{orbitType === 'NGSO'}}">
           <view class="station-form-group">
             <view class="form-label-row">
-              <text class="form-label">最低仰角(°)</text>
+              <text class="form-label">最低仰角<text class="form-label-unit">(°)</text></text>
             </view>
-            <input class="form-input" 
+            <input class="form-input {{focusedField === 'rxMinElevation' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="10" 
                    value="{{linkParams.rxMinElevation}}"
@@ -1298,10 +1325,10 @@
           </view>
           <view class="station-form-group">
             <view class="form-label-row">
-              <text class="form-label">{{linkParams.rxDistanceMode === 'slantRange' ? '星地斜距(km)' : '轨道高度(km)'}}</text>
-              <button class="toggle-btn-emoji" data-type="downlink" bindtap="onDistanceModeToggle">🔄</button>
+              <text class="form-label">{{linkParams.rxDistanceMode === 'slantRange' ? '星地斜距' : '轨道高度'}}<text class="form-label-unit">(km)</text></text>
+              <view class="unit-toggle" data-type="downlink" bindtap="onDistanceModeToggle"><view class="unit-toggle-icon"></view></view>
             </view>
-            <input class="form-input" 
+            <input class="form-input {{focusedField === 'rxSlantRange' || focusedField === 'rxOrbitAltitude' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="{{linkParams.rxDistanceMode === 'slantRange' ? '2500' : '1200'}}" 
                    value="{{linkParams.rxDistanceMode === 'slantRange' ? linkParams.rxSlantRange : linkParams.rxOrbitAltitude}}"
@@ -1314,8 +1341,8 @@
         <!-- 天线参数 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">天线口径(m)</text>
-            <input class="form-input" 
+            <text class="form-label">天线口径<text class="form-label-unit">(m)</text></text>
+            <input class="form-input {{focusedField === 'rxAntennaDiameter' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="3.7" 
                    value="{{linkParams.rxAntennaDiameter}}"
@@ -1324,8 +1351,8 @@
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">天线效率(%)</text>
-            <input class="form-input" 
+            <text class="form-label">天线效率<text class="form-label-unit">(%)</text></text>
+            <input class="form-input {{focusedField === 'rxAntennaEfficiency' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="65" 
                    value="{{linkParams.rxAntennaEfficiency}}"
@@ -1338,8 +1365,8 @@
         <!-- 频率和极化 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">下行频率(GHz)</text>
-            <input class="form-input" 
+            <text class="form-label">下行频率<text class="form-label-unit">(GHz)</text></text>
+            <input class="form-input {{focusedField === 'rxCenterFrequency' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="12.5" 
                    value="{{linkParams.rxCenterFrequency}}"
@@ -1365,8 +1392,8 @@
         <!-- 卫星EIRP和可用度 -->
         <view class="station-grid-2">
           <view class="station-form-group">
-            <text class="form-label">卫星EIRP(dBW)</text>
-            <input class="form-input" 
+            <text class="form-label">卫星EIRP<text class="form-label-unit">(dBW)</text></text>
+            <input class="form-input {{focusedField === 'rxEIRP' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="46.0" 
                    value="{{linkParams.rxEIRP}}"
@@ -1377,8 +1404,8 @@
                    bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
           </view>
           <view class="station-form-group">
-            <text class="form-label">可用度(%)</text>
-            <input class="form-input" 
+            <text class="form-label">可用度<text class="form-label-unit">(%)</text></text>
+            <input class="form-input {{focusedField === 'rxDownlinkAvailability' ? 'input-focused' : ''}}" 
                    type="text"
                    placeholder="99.90" 
                    value="{{linkParams.rxDownlinkAvailability}}"
@@ -1390,12 +1417,12 @@
           </view>
         </view>
 
-        <!-- 展开更多参数 -->
-        <view wx:if="{{downlinkParamsExpandState === 'full'}}">
+        <!-- 更多参数 -->
+        <view>
           <view class="station-grid-2">
             <view class="station-form-group">
-              <text class="form-label">海拔(m)</text>
-              <input class="form-input" 
+              <text class="form-label">海拔<text class="form-label-unit">(m)</text></text>
+              <input class="form-input {{focusedField === 'rxAltitude' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="0" 
                      value="{{linkParams.rxAltitude}}"
@@ -1406,8 +1433,8 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <text class="form-label">R0.01%(mm/h)</text>
-              <input class="form-input" 
+              <text class="form-label">R0.01%<text class="form-label-unit">(mm/h)</text></text>
+              <input class="form-input {{focusedField === 'rxRainRate' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="40" 
                      value="{{linkParams.rxRainRate}}"
@@ -1421,8 +1448,8 @@
 
           <view class="station-grid-2">
             <view class="station-form-group">
-              <text class="form-label">天线噪温(K)</text>
-              <input class="form-input" 
+              <text class="form-label">天线噪温<text class="form-label-unit">(K)</text></text>
+              <input class="form-input {{focusedField === 'rxAntennaNoiseTemp' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="35" 
                      value="{{linkParams.rxAntennaNoiseTemp}}"
@@ -1433,8 +1460,8 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <text class="form-label">接收机噪温(K)</text>
-              <input class="form-input" 
+              <text class="form-label">接收机噪温<text class="form-label-unit">(K)</text></text>
+              <input class="form-input {{focusedField === 'rxReceiverNoiseTemp' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="75" 
                      value="{{linkParams.rxReceiverNoiseTemp}}"
@@ -1448,8 +1475,8 @@
 
           <view class="station-grid-2">
             <view class="station-form-group">
-              <text class="form-label">馈线损耗(dB)</text>
-              <input class="form-input" 
+              <text class="form-label">馈线损耗<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input {{focusedField === 'rxFeederLoss' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="0.2" 
                      value="{{linkParams.rxFeederLoss}}"
@@ -1460,8 +1487,8 @@
                      bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
             </view>
             <view class="station-form-group">
-              <text class="form-label">其他损耗(dB)</text>
-              <input class="form-input" 
+              <text class="form-label">其他损耗<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input {{focusedField === 'downlinkOtherLoss' ? 'input-focused' : ''}}" 
                      type="text"
                      placeholder="0.3" 
                      value="{{linkParams.downlinkOtherLoss}}"
@@ -1490,7 +1517,7 @@
     <view class="card-title">
       基带参数
     </view>
-    <view class="collapse-content {{carrierParamsExpandState !== 'collapsed' ? 'show' : ''}}">
+    <view class="collapse-content show">
       <!-- MODCOD快速选择行 -->
       <view class="modcod-row">
         <view class="modcod-item">
@@ -1523,9 +1550,9 @@
       <view class="grid-4">
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">信息速率(kbps)</text>
+            <text class="form-label">信息速率<text class="form-label-unit">(kbps)</text></text>
           </view>
-          <input class="form-input" 
+          <input class="form-input {{focusedField === 'infoRate' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="2048" 
                  value="{{linkParams.infoRate}}"
@@ -1556,7 +1583,7 @@
           <view class="form-label-row">
             <text class="form-label">FEC码率</text>
           </view>
-          <input class="form-input" 
+          <input class="form-input {{focusedField === 'fec' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="3/4" 
                  value="{{linkParams.fec}}"
@@ -1569,10 +1596,10 @@
 
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">{{noiseRatioMode === 'ebno' ? 'Eb/N₀' : 'Es/N₀'}}门限(dB)</text>
-            <button class="toggle-btn-emoji" bindtap="toggleEbnoEsno">🔄</button>
+            <text class="form-label">{{noiseRatioMode === 'ebno' ? 'Eb/N₀' : 'Es/N₀'}}门限<text class="form-label-unit">(dB)</text></text>
+            <view class="unit-toggle" bindtap="toggleEbnoEsno"><view class="unit-toggle-icon"></view></view>
           </view>
-          <input class="form-input" 
+          <input class="form-input {{focusedField === 'ebno' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="5.50" 
                  value="{{linkParams.ebno}}"
@@ -1584,13 +1611,13 @@
         </view>
       </view>
 
-      <!-- 第二行：扩展参数（完全展开时显示） -->
-      <view class="grid-4" wx:if="{{carrierParamsExpandState === 'full'}}">
+      <!-- 第二行：扩展参数 -->
+      <view class="grid-4">
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">误码率 (1×10⁻ⁿ)</text>
+            <text class="form-label">误码率 <text class="form-label-unit">(1×10⁻ⁿ)</text></text>
           </view>
-          <input class="form-input" 
+          <input class="form-input {{focusedField === 'ber' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="7" 
                  value="{{linkParams.ber}}"
@@ -1605,7 +1632,7 @@
           <view class="form-label-row">
             <text class="form-label">扩频增益</text>
           </view>
-          <input class="form-input" 
+          <input class="form-input {{focusedField === 'm' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="1.00" 
                  value="{{linkParams.m}}"
@@ -1618,9 +1645,9 @@
 
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">滚降系数(1+α)</text>
+            <text class="form-label">滚降系数<text class="form-label-unit">(1+α)</text></text>
           </view>
-          <input class="form-input" 
+          <input class="form-input {{focusedField === 'bandwidthFactor' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="1.20" 
                  value="{{linkParams.bandwidthFactor}}"
@@ -1633,10 +1660,10 @@
 
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">{{rsCodeMode === 'spectral' ? '频谱效率(bps/Hz)' : '帧效率'}}</text>
-            <button class="toggle-btn-emoji" bindtap="toggleRsCodeMode">🔄</button>
+            <text class="form-label">{{rsCodeMode === 'spectral' ? '频谱效率' : '帧效率'}}<text class="form-label-unit">{{rsCodeMode === 'spectral' ? '(bps/Hz)' : ''}}</text></text>
+            <view class="unit-toggle" bindtap="toggleRsCodeMode"><view class="unit-toggle-icon"></view></view>
           </view>
-          <input class="form-input" 
+          <input class="form-input {{focusedField === 'rsCode' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="{{rsCodeMode === 'spectral' ? '0.9216' : '188/204'}}" 
                  value="{{rsCodeMode === 'spectral' ? realtimeParams.spectralEfficiency : linkParams.rsCode}}"
@@ -1652,10 +1679,11 @@
       <view class="station-result station-result-row">
         <view class="station-result-item station-result-editable">
           <text class="station-result-label">载波带宽</text>
-          <input class="station-result-input" 
+          <input class="station-result-input {{focusedField === 'carrierBandwidth' ? 'input-focused' : ''}}"
                  type="text"
-                 placeholder="--" 
+                 placeholder="--"
                  value="{{realtimeParams.carrierBandwidth}}"
+                 data-field="carrierBandwidth"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -1668,10 +1696,11 @@
         </view>
         <view class="station-result-item station-result-editable">
           <text class="station-result-label">符号率</text>
-          <input class="station-result-input" 
+          <input class="station-result-input {{focusedField === 'symbolRate' ? 'input-focused' : ''}}"
                  type="text"
-                 placeholder="--" 
+                 placeholder="--"
                  value="{{realtimeParams.symbolRate}}"
+                 data-field="symbolRate"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -1696,10 +1725,10 @@
       </view>
     </view>
     
-    <view class="collapse-content {{resultsExpandState !== 'collapsed' ? 'show' : ''}}">
+    <view class="collapse-content show">
     
     <!-- 核心结论区 - 置顶 -->
-    <view class="core-results">
+    <view class="core-results {{resultsFlash ? 'results-flash' : ''}}">
 
       <!-- 仰角警告置顶提示 -->
       <view wx:if="{{elevationWarningInfo.tx || elevationWarningInfo.rx}}" class="elevation-warning-banner">

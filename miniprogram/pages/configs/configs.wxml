@@ -10,6 +10,7 @@
   }
   module.exports = { includes: includes };
 </wxs>
+<wxs module="dragWxs" src="./drag.wxs"></wxs>
 <wxs module="dragUtil">
   function itemStyle(isDragging, origIdx, targetIdx, index, itemH) {
     if (!isDragging || origIdx < 0) return '';
@@ -25,7 +26,7 @@
   }
   module.exports = { itemStyle: itemStyle };
 </wxs>
-<view class="container">
+<view class="container" dragstate="{{dragWxsState}}" change:dragstate="{{dragWxs.stateChange}}">
   <!-- 悬浮顶部操作栏 - 左对齐 -->
   <view class="floating-action-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: 8px;">
     <!-- 返回按钮 -->
@@ -71,8 +72,9 @@
       <view class="config-card-wrapper {{utils.includes(selectedConfigs, item._id) ? 'selected' : ''}}" wx:for="{{configs}}" wx:key="_id"
         style="{{dragUtil.itemStyle(isDragging, dragOrigIndex, dragTargetIndex, index, dragItemHeight)}}"
         bindtouchstart="{{selectMode ? '' : 'onConfigTouchStart'}}"
-        bindtouchmove="{{selectMode ? '' : 'onConfigTouchMove'}}"
+        bindtouchmove="{{dragWxs.touchmove}}"
         bindtouchend="{{selectMode ? '' : 'onConfigTouchEnd'}}"
+        bindtouchcancel="{{selectMode ? '' : 'onConfigTouchCancel'}}"
         bindlongpress="{{selectMode ? '' : 'onConfigLongPress'}}"
         bindtap="{{selectMode ? 'toggleConfigSelection' : ''}}"
         data-id="{{item._id}}"
@@ -390,8 +392,9 @@
 
   <!-- 拖拽触摸遮罩 - 全屏捕获触摸事件防止页面滚动/下拉刷新 -->
   <view class="drag-touch-overlay" wx:if="{{isDragging}}"
-    catchtouchmove="onConfigTouchMove"
-    catchtouchend="onConfigTouchEnd">
+    catchtouchmove="{{dragWxs.touchmove}}"
+    catchtouchend="onConfigTouchEnd"
+    catchtouchcancel="onConfigTouchCancel">
   </view>
 
   <!-- 拖拽幽灵元素 - 跟随手指移动 -->

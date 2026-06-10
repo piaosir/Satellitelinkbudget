@@ -3,15 +3,15 @@
    工业级专业化设计系统 - 卫星链路预算计算器
    ======================================== */
 
-/* 系统字体栈 - 优化可读性 */
+/* 期刊衬线字体栈 - 全局继承 */
 .container {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   box-sizing: border-box;
-  background-color: #f0f2f5;
+  background-color: #ffffff;
   min-height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   width: 100%;
   padding: 0;
   margin: 0;
@@ -21,28 +21,38 @@
 
 /* 公共样式 */
 page {
-  background-color: #f0f2f5;
+  background-color: #ffffff;
   font-size: 26rpx;
-  color: #1f2937;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
-/* 数值专用字体类 */
+/* 原生输入组件不可靠继承祖先字体，元素级兜底声明 */
+input,
+textarea,
+picker {
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+}
+
+input::placeholder,
+textarea::placeholder {
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+}
+
+/* 数值专用字体类 - 期刊衬线 */
 .numeric {
-  font-family: "SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
 }
 
-/* 卡片样式 - 工业级设计 */
+/* 卡片样式 - 期刊版面：白纸上的章节，结构由标题规则线承担 */
 .card {
   background: #ffffff;
-  border-radius: 4rpx;
-  margin: 0 0 2rpx 0;
-  padding: 20rpx 16rpx;
-  box-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.04);
+  border-radius: 0;
+  margin: 0 0 8rpx 0;
+  padding: 24rpx 16rpx;
+  box-shadow: none;
   border: none;
-  border-bottom: 1rpx solid #e5e7eb;
 }
 
 /* 全宽卡片样式 - 用于计算结果 */
@@ -72,21 +82,14 @@ page {
 .card-title {
   font-size: 32rpx;
   font-weight: 600;
-  color: #111827;
-  margin-bottom: 16rpx;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
+  margin-bottom: 20rpx;
   display: flex;
   align-items: center;
   letter-spacing: 0.02em;
-  padding: 0 8rpx;
-}
-
-.card-title::before {
-  content: '';
-  width: 4rpx;
-  height: 32rpx;
-  background: linear-gradient(180deg, #3b82f6, #1d4ed8);
-  border-radius: 2rpx;
-  margin-right: 12rpx;
+  padding: 0 4rpx 12rpx;
+  border-bottom: 2rpx solid #1a1a1a;
 }
 
 /* 卫星参数卡片标题行（含轨道切换器） */
@@ -99,70 +102,89 @@ page {
   min-width: 0;
 }
 
-/* 轨道类型分段切换器 */
+/* 轨道类型分段切换器 - 期刊黑白：选中即墨块 */
 .orbit-seg {
   display: flex;
   flex-shrink: 0;
-  background: #f3f4f6;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 4rpx;
-  padding: 2rpx;
+  background: transparent;
+  border: 1rpx solid #1a1a1a;
+  border-radius: 0;
+  padding: 0;
   height: 44rpx;
 }
 
 .orbit-seg-item {
   min-width: 64rpx;
   padding: 0 16rpx;
-  line-height: 40rpx;
+  line-height: 42rpx;
   font-size: 22rpx;
   font-weight: 500;
-  color: #6b7280;
+  color: #1a1a1a;
   text-align: center;
-  border-radius: 2rpx;
+  border-radius: 0;
   letter-spacing: 0.02em;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
+.orbit-seg-item + .orbit-seg-item {
+  border-left: 1rpx solid #1a1a1a;
+}
+
 .orbit-seg-item.active {
-  background: #ffffff;
-  color: #1d4ed8;
+  background: #1a1a1a;
+  color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.06);
+  box-shadow: none;
 }
 
 /* 表单样式 */
 .form-group {
-  margin-bottom: 12rpx;
+  margin-bottom: 16rpx;
 }
 
 .form-label {
   display: block;
   font-size: 22rpx;
-  color: #6b7280;
-  margin-bottom: 6rpx;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  margin-bottom: 4rpx;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
 
+/* 标签内的括号单位 - 比参数名浅一级，形成两层对比 */
+.form-label-unit {
+  color: #8c8c8c;
+  font-weight: 400;
+}
+
+/* 必填标记 - 全页唯一的常驻彩色：警示红 */
+.required-mark {
+  color: #9b1c1c;
+  font-weight: 600;
+}
+
+/* 填空线式输入 - 印刷表格的填空线，聚焦时底线转墨黑 */
 .form-input {
   width: 100%;
   height: 64rpx;
-  background: #f9fafb;
-  border: 1rpx solid #d1d5db;
-  border-radius: 6rpx;
-  padding: 0 16rpx;
-  font-size: 26rpx;
-  font-family: "SF Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
-  font-variant-numeric: tabular-nums;
+  background: transparent;
+  border: none;
+  border-bottom: 2rpx solid #d4d4d4;
+  border-radius: 0;
+  padding: 0 4rpx;
+  font-size: 28rpx;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   box-sizing: border-box;
-  transition: all 0.15s ease;
-  color: #111827;
+  transition: border-color 0.15s ease;
+  color: #1a1a1a;
 }
 
-.form-input:focus {
-  border-color: #3b82f6;
-  background: #ffffff;
-  box-shadow: 0 0 0 3rpx rgba(59, 130, 246, 0.1);
+/* 原生input的:focus伪类在部分机型不生效，input-focused 类由 focusedField 驱动 */
+.form-input:focus,
+.form-input.input-focused {
+  border-bottom-color: #1a1a1a;
+  background: transparent;
 }
 
 .form-input-readonly {
@@ -170,66 +192,72 @@ page {
   width: 100%;
   height: 64rpx;
   line-height: 64rpx;
-  background: #f3f4f6;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 6rpx;
-  padding: 0 16rpx;
-  font-size: 26rpx;
-  font-family: "SF Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
-  font-variant-numeric: tabular-nums;
+  background: transparent;
+  border: none;
+  border-bottom: 2rpx solid #d9d9d9;
+  border-radius: 0;
+  padding: 0 4rpx;
+  font-size: 28rpx;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   box-sizing: border-box;
-  color: #6b7280;
+  color: #595959;
 }
 
 .form-picker {
   width: 100%;
   height: 64rpx;
-  background: #f9fafb;
-  border: 1rpx solid #d1d5db;
-  border-radius: 6rpx;
-  padding: 0 16rpx;
-  font-size: 26rpx;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4rpx center;
+  background-size: 26rpx 26rpx;
+  border: none;
+  border-bottom: 2rpx solid #d4d4d4;
+  border-radius: 0;
+  padding: 0 36rpx 0 4rpx;
+  font-size: 28rpx;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   line-height: 62rpx;
   box-sizing: border-box;
-  color: #111827;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* 按钮样式 */
 .btn-primary {
   width: 100%;
   height: 72rpx;
-  background: linear-gradient(135deg, #1e3a5f, #0f172a);
+  background: #1a1a1a;
   color: #ffffff;
-  border-radius: 6rpx;
+  border-radius: 4rpx;
   font-size: 26rpx;
   font-weight: 600;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  box-shadow: 0 2rpx 8rpx rgba(15, 23, 42, 0.15);
-  transition: all 0.2s ease;
+  box-shadow: none;
+  transition: background 0.2s ease;
   letter-spacing: 0.05em;
 }
 
 .btn-primary:active {
-  transform: translateY(1rpx);
-  background: linear-gradient(135deg, #0f172a, #020617);
-  box-shadow: 0 1rpx 4rpx rgba(15, 23, 42, 0.2);
+  background: #000000;
 }
 
 .btn-secondary {
   width: 100%;
   height: 64rpx;
   background: #ffffff;
-  color: #374151;
-  border: 1rpx solid #d1d5db;
-  border-radius: 6rpx;
+  color: #1a1a1a;
+  border: 1rpx solid #d4d4d4;
+  border-radius: 4rpx;
   font-size: 24rpx;
   font-weight: 500;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -245,19 +273,19 @@ page {
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12rpx;
+  gap: 20rpx;
 }
 
 .grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 10rpx;
+  gap: 16rpx;
 }
 
 .grid-4 {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8rpx;
+  gap: 14rpx;
 }
 
 .grid-auto {
@@ -435,7 +463,7 @@ page {
 .form-group-compact .form-label {
   font-size: 20rpx;
   margin-bottom: 4rpx;
-  color: #6b7280;
+  color: #404040;
 }
 
 .form-group-compact .form-input {

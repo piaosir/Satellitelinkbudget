@@ -35,9 +35,9 @@
   "window": {
     "backgroundColor": "#F6F6F6",
     "backgroundTextStyle": "light",
-    "navigationBarBackgroundColor": "#2C3E50",
+    "navigationBarBackgroundColor": "#ffffff",
     "navigationBarTitleText": "卫星链路计算系统",
-    "navigationBarTextStyle": "white"
+    "navigationBarTextStyle": "black"
   },
   "style": "v2",
   "sitemapLocation": "sitemap.json",

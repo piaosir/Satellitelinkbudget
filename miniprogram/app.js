@@ -325,6 +325,7 @@ App({
       frequencyBand: 'Ku',
       uplinkPolarization: 'V',
       sfdRef: -84,
+      sfdGtRef: 0, // SFD 的参考 G/T(dB/K)，引擎入口换算回 G/T=0 参考
       transponderBandwidth: 36,
       beamInput: '中国波束',
       BOi: 6,

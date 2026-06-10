@@ -1,0 +1,45 @@
+// drag.wxs - 拖拽幽灵卡片视图层直驱
+// touchmove 在视图层直接 setStyle，绕开 setData 渲染链路，保证跟手；
+// 事件同时转发逻辑层做目标槽位计算/边缘自动滚动/左滑删除。
+var state = {
+  active: false,
+  offsetY: 0,
+  left: 0,
+  width: 0
+};
+
+function stateChange(newVal, oldVal, ownerInstance, instance) {
+  if (newVal && newVal.active) {
+    state.active = true;
+    state.offsetY = newVal.offsetY || 0;
+    state.left = newVal.left || 0;
+    state.width = newVal.width || 0;
+  } else {
+    state.active = false;
+  }
+}
+
+function touchmove(e, ownerInstance) {
+  var touch = e.touches && e.touches[0];
+  if (!touch) return;
+
+  if (state.active) {
+    var ghost = ownerInstance.selectComponent('.drag-ghost');
+    if (ghost) {
+      ghost.setStyle({
+        top: (touch.clientY - state.offsetY) + 'px',
+        left: state.left + 'px',
+        width: state.width + 'px'
+      });
+    }
+  }
+
+  ownerInstance.callMethod('onConfigTouchMove', {
+    touches: [{ clientX: touch.clientX, clientY: touch.clientY }]
+  });
+}
+
+module.exports = {
+  stateChange: stateChange,
+  touchmove: touchmove
+};

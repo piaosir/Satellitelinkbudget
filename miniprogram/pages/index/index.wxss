@@ -15,6 +15,13 @@ page {
 }
 
 /* scroll-view内容滚动容器 */
+/* 锁死页面级滚动：所有滚动只发生在内部 scroll-view，
+   悬浮层不会被页面滚动/iOS 橡皮筋回弹带动（与原生胶囊行为一致） */
+page {
+  overflow: hidden;
+  height: 100%;
+}
+
 .content-scroll {
   height: 100vh;
   width: 100%;
@@ -26,19 +33,25 @@ page {
   padding: 0;
 }
 
-/* 编辑配置提示条 - 悬浮固定风格，跟随顶部操作栏 */
+/* 编辑配置提示条 - 与顶部操作栏同款液态玻璃 */
 .editing-config-bar {
   position: fixed;
   z-index: 998;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10rpx 16rpx;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(10px);
-  border-radius: 8rpx;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 10rpx 20rpx;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 999rpx;
+  border: 1rpx solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8rpx 28rpx rgba(0, 0, 0, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.85);
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .editing-config-bar {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(32rpx) saturate(180%);
+  }
 }
 
 .editing-config-content {
@@ -53,7 +66,7 @@ page {
   width: 24rpx;
   height: 24rpx;
   flex-shrink: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'%3E%3C/path%3E%3Cpath d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'%3E%3C/path%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'%3E%3C/path%3E%3Cpath d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'%3E%3C/path%3E%3C/svg%3E");
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
@@ -61,17 +74,17 @@ page {
 
 .editing-config-label {
   font-size: 24rpx;
-  color: rgba(255, 255, 255, 0.7);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: rgba(0, 0, 0, 0.55);
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   flex-shrink: 0;
   white-space: nowrap;
 }
 
 .editing-config-input {
   font-size: 24rpx;
-  color: #ffffff;
+  color: #1a1a1a;
   font-weight: 500;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   background: transparent;
   border: none;
   border-radius: 0;
@@ -99,25 +112,25 @@ page {
   color: #ffffff;
   font-weight: 600;
   padding: 6rpx 16rpx;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 6rpx;
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: #1a1a1a;
+  border-radius: 999rpx;
+  border: none;
   white-space: nowrap;
 }
 
 .editing-config-save:active {
-  background: rgba(255, 255, 255, 0.25);
+  background: #000000;
 }
 
 .editing-config-cancel {
   font-size: 22rpx;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.55);
   padding: 6rpx 10rpx;
   white-space: nowrap;
 }
 
 .editing-config-cancel:active {
-  color: #ffffff;
+  color: #1a1a1a;
 }
 
 /* 内容区域包装器 */
@@ -131,52 +144,73 @@ page {
   padding-top: 0;
 }
 
-/* 悬浮顶部操作栏 */
+/* 悬浮顶部操作栏 - 液态玻璃胶囊（仿原生胶囊形态：单一玻璃药丸，内部分隔） */
 .floating-action-bar {
   position: fixed;
   /* top, height, left set by inline style */
   z-index: 999;
   display: flex;
   align-items: center;
-  gap: 16rpx;
-  background: transparent;
-  backdrop-filter: none;
-  box-shadow: none;
+  gap: 0;
   padding: 0;
+  border-radius: 999rpx;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1rpx solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8rpx 28rpx rgba(0, 0, 0, 0.12), inset 0 1rpx 0 rgba(255, 255, 255, 0.85);
+  overflow: hidden;
 }
 
-/* 悬浮按钮基础样式 */
+/* 支持 backdrop-filter 的环境升级为真·液态玻璃 */
+@supports (backdrop-filter: blur(1px)) {
+  .floating-action-bar {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(32rpx) saturate(180%);
+  }
+}
+
+/* 悬浮按钮 - 玻璃胶囊内的透明分格 */
 .float-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   height: 100%;
   min-width: 64rpx;
   padding: 0 20rpx;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(10px);
-  border-radius: 8rpx;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: all 0.15s ease;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  transition: background 0.15s ease;
   box-sizing: border-box;
 }
 
+/* 分格间的发丝分隔线 */
+.float-btn + .float-btn::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 22%;
+  bottom: 22%;
+  width: 1rpx;
+  background: rgba(0, 0, 0, 0.14);
+}
+
 .float-btn:active {
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.07);
   transform: none;
 }
 
 /* 主按钮 - 开始计算 */
 .float-btn-primary {
-  background: rgba(0, 0, 0, 0.6);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: transparent;
+  border: none;
   width: auto;
   height: 100%;
 }
 
 .float-btn-primary:active {
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.07);
 }
 
 /* 余量按钮 */
@@ -191,26 +225,25 @@ page {
 
 .float-margin-value {
   font-size: 28rpx;
-  color: #fff;
+  color: #1a1a1a;
   font-weight: 600;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .float-margin-unit {
   font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.55);
   font-weight: 500;
 }
 
 /* AR对星按钮 */
 .float-btn-ar {
-  background: rgba(0, 0, 0, 0.6);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: transparent;
+  border: none;
 }
 
 .float-btn-ar:active {
-  background: rgba(0, 0, 0, 0.75);
+  background: rgba(0, 0, 0, 0.07);
 }
 
 /* 悬浮按钮图标 */
@@ -223,107 +256,94 @@ page {
 }
 
 .icon-play {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='5 3 19 12 5 21 5 3'%3E%3C/polygon%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolygon points='5 3 19 12 5 21 5 3'%3E%3C/polygon%3E%3C/svg%3E");
 }
 
 .icon-settings {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'%3E%3C/circle%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'%3E%3C/path%3E%3C/svg%3E");
-}
-
-.icon-ar {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7V5a2 2 0 0 1 2-2h2'%3E%3C/path%3E%3Cpath d='M17 3h2a2 2 0 0 1 2 2v2'%3E%3C/path%3E%3Cpath d='M21 17v2a2 2 0 0 1-2 2h-2'%3E%3C/path%3E%3Cpath d='M7 21H5a2 2 0 0 1-2-2v-2'%3E%3C/path%3E%3Ccircle cx='12' cy='12' r='3'%3E%3C/circle%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'%3E%3C/circle%3E%3Cpath d='M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z'%3E%3C/path%3E%3C/svg%3E");
 }
 
 .icon-visual {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'%3E%3C/path%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z'%3E%3C/path%3E%3C/svg%3E");
 }
 
 .icon-history {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpolyline points='12 6 12 12 16 14'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpolyline points='12 6 12 12 16 14'%3E%3C/polyline%3E%3C/svg%3E");
 }
 
-/* 余量弹出面板 - 工业风格 */
+/* 余量/正向计算弹出面板 - 从悬浮玻璃胶囊下方弹出，同款液态玻璃（半一体） */
 .margin-popup {
   position: fixed;
-  top: calc(env(safe-area-inset-top) + 88rpx);
-  left: 16rpx;
+  /* top/left 由内联样式按胶囊实际位置定位，与悬浮栏同基准 */
   right: 16rpx;
-  background: #ffffff;
-  border-radius: 8rpx;
-  border: none;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 28rpx;
+  border: 1rpx solid rgba(0, 0, 0, 0.12);
   z-index: 1001;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-16rpx);
+  transform: translateY(-12rpx) scale(0.96);
+  transform-origin: 100rpx top;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15), 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12rpx 40rpx rgba(0, 0, 0, 0.14), inset 0 1rpx 0 rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .margin-popup {
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(40rpx) saturate(180%);
+  }
 }
 
 .margin-popup.show {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
-}
-
-.margin-popup-mask {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(15, 23, 42, 0.5);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.25s ease;
-}
-
-.margin-popup-mask.show {
-  opacity: 1;
-  visibility: visible;
+  transform: translateY(0) scale(1);
 }
 
 .margin-popup-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20rpx 24rpx;
-  border-bottom: 1rpx solid #e5e7eb;
+  padding: 16rpx 20rpx;
+  border-bottom: 1rpx solid rgba(0, 0, 0, 0.10);
 }
 
+/* 模式切换 - 玻璃内嵌药丸分段（与胶囊形态呼应） */
 .margin-mode-tabs {
   display: flex;
-  background: #f3f4f6;
-  border-radius: 8rpx;
+  background: rgba(0, 0, 0, 0.06);
+  border: none;
+  border-radius: 999rpx;
   padding: 4rpx;
 }
 
 .margin-mode-tab {
-  padding: 12rpx 28rpx;
-  border-radius: 6rpx;
-  transition: all 0.2s ease;
+  padding: 8rpx 26rpx;
+  border-radius: 999rpx;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
 .margin-mode-tab text {
   font-size: 26rpx;
-  color: #6b7280;
+  color: rgba(0, 0, 0, 0.6);
   font-weight: 500;
 }
 
 .margin-mode-tab.active {
-  background: #ffffff;
-  box-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.08);
+  background: #1a1a1a;
+  box-shadow: none;
 }
 
 .margin-mode-tab.active text {
-  color: #111827;
+  color: #ffffff;
   font-weight: 600;
 }
 
 .margin-popup-close {
   font-size: 36rpx;
-  color: #9ca3af;
+  color: rgba(0, 0, 0, 0.45);
   padding: 8rpx;
   line-height: 1;
 }
@@ -340,7 +360,8 @@ page {
 
 .margin-popup-label {
   font-size: 26rpx;
-  color: #374151;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -348,45 +369,44 @@ page {
 .margin-popup-input {
   flex: 1;
   height: 72rpx;
-  background: #f9fafb;
-  border: 1rpx solid #d1d5db;
-  border-radius: 8rpx;
+  background: transparent;
+  border: none;
+  border-bottom: 2rpx solid rgba(0, 0, 0, 0.18);
+  border-radius: 0;
   padding: 0 20rpx;
   font-size: 32rpx;
-  color: #111827;
+  color: #1a1a1a;
   text-align: center;
-  font-weight: 600;
-  font-family: "SF Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
-  font-variant-numeric: tabular-nums;
-  transition: all 0.15s ease;
+  font-weight: 700;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  transition: border-color 0.15s ease;
 }
 
 .margin-popup-input:focus {
-  border-color: #3b82f6;
-  background: #fff;
-  box-shadow: 0 0 0 3rpx rgba(59, 130, 246, 0.1);
+  border-bottom-color: #1a1a1a;
+  background: transparent;
 }
 
 .margin-popup-unit {
   font-size: 26rpx;
-  color: #6b7280;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   min-width: 48rpx;
   font-weight: 500;
 }
 
 .margin-popup-balance,
 .margin-popup-calc {
-  background: linear-gradient(135deg, #1e293b, #0f172a);
-  padding: 14rpx 28rpx;
-  border-radius: 8rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.12);
-  transition: all 0.15s ease;
+  background: #1a1a1a;
+  padding: 12rpx 28rpx;
+  border-radius: 999rpx;
+  box-shadow: none;
+  transition: background 0.15s ease;
 }
 
 .margin-popup-balance:active,
 .margin-popup-calc:active {
-  transform: scale(0.98);
-  background: linear-gradient(135deg, #0f172a, #020617);
+  background: #000000;
 }
 
 .margin-popup-balance text,
@@ -407,7 +427,7 @@ page {
 
 .margin-popup-hint text {
   font-size: 24rpx;
-  color: #9ca3af;
+  color: #8c8c8c;
 }
 
 /* 旧的操作栏样式保留（隐藏） */
@@ -485,42 +505,38 @@ page {
   margin-bottom: 0;
 }
 
-/* 切换按钮 - 工业风格 */
-.toggle-btn-emoji {
-  padding: 0;
-  font-size: 22rpx;
-  background: transparent;
-  color: #6b7280;
-  border: none;
-  white-space: nowrap;
-  flex: 0 0 auto;
-  width: 28rpx;
-  max-width: 28rpx;
-  min-height: 22rpx;
-  line-height: 1.2;
+/* 单位/模式切换按钮 - 双向箭头，配合标签中的当前单位文字（如 Eb/N₀ ⇄） */
+.unit-toggle {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0;
-  opacity: 0.8;
-  transition: all 0.15s ease;
+  flex: 0 0 auto;
   flex-shrink: 0;
+  /* 扩大触控热区但不撑高标签行 */
+  padding: 12rpx;
+  margin: -12rpx -8rpx -12rpx 0;
 }
 
-.toggle-btn-emoji:active {
+.unit-toggle-icon {
+  width: 28rpx;
+  height: 28rpx;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23737373' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4.5 9.3 A8 8 0 0 1 19.5 9.3'%3E%3C/path%3E%3Cpolyline points='17.1 6.9 19.5 9.3 19.8 5.9'%3E%3C/polyline%3E%3Cpath d='M19.5 14.7 A8 8 0 0 1 4.5 14.7'%3E%3C/path%3E%3Cpolyline points='6.9 17.1 4.5 14.7 4.2 18.1'%3E%3C/polyline%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  opacity: 0.8;
+  transition: opacity 0.15s ease;
+}
+
+.unit-toggle:active .unit-toggle-icon {
   opacity: 1;
-  transform: rotate(180deg);
-}
-
-.toggle-btn-emoji::after {
-  border: none;
 }
 
 /* 小型切换按钮 - 工业风格 */
 .toggle-btn-small {
   padding: 4rpx 12rpx;
   font-size: 20rpx;
-  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   background: linear-gradient(135deg, #1e293b, #0f172a);
   color: #ffffff;
   border-radius: 4rpx;
@@ -543,7 +559,7 @@ page {
 .toggle-btn {
   padding: 8rpx 16rpx;
   font-size: 22rpx;
-  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   background: linear-gradient(135deg, #1e293b, #0f172a);
   color: #ffffff;
   border-radius: 6rpx;
@@ -589,16 +605,17 @@ page {
   padding-top: 12rpx;
 }
 
-/* 查看更多计算结果按钮 */
+/* 查看更多计算结果按钮 - 期刊式黑色下划线链接 */
 .more-results-btn {
   display: flex;
   align-items: center;
   margin-left: auto;
   padding: 4rpx 0;
   font-size: 22rpx;
-  color: #3b82f6;
+  color: #1a1a1a;
   font-weight: 500;
   letter-spacing: 0;
+  text-decoration: underline;
 }
 
 .more-results-btn:active {
@@ -612,12 +629,14 @@ page {
 }
 
 /* 核心结论区样式 */
+/* 核心结论区 - 期刊摘要：不加底色框，以中线收尾 */
 .core-results {
-  background: #f8fafc;
-  border-radius: 8rpx;
-  padding: 12rpx 16rpx;
+  background: transparent;
+  border-radius: 0;
+  padding: 0 4rpx 14rpx;
   margin-bottom: 20rpx;
-  border: 1rpx solid #e2e8f0;
+  border: none;
+  border-bottom: 1rpx solid #c4c4c4;
 }
 
 .core-results-grid {
@@ -637,18 +656,18 @@ page {
 
 .core-result-label {
   font-size: 20rpx;
-  color: #475569;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   font-weight: 500;
   flex-shrink: 0;
   margin-right: 8rpx;
 }
 
 .core-result-value {
-  font-size: 22rpx;
-  color: #0f172a;
-  font-weight: 600;
-  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
-  font-variant-numeric: tabular-nums;
+  font-size: 24rpx;
+  color: #1a1a1a;
+  font-weight: 700;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   white-space: nowrap;
   text-align: right;
   overflow: hidden;
@@ -665,11 +684,21 @@ page {
   padding-bottom: 4rpx;
 }
 
+/* 计算完成的非打扰式反馈：结果区一次轻微的高亮脉冲 */
+.core-results.results-flash {
+  animation: results-flash-pulse 0.7s ease-out;
+}
+
+@keyframes results-flash-pulse {
+  0% { background-color: rgba(0, 0, 0, 0.05); }
+  100% { background-color: transparent; }
+}
+
 .core-ratio-bar {
   width: 100%;
   height: 6rpx;
-  background: #e2e8f0;
-  border-radius: 3rpx;
+  background: #ededed;
+  border-radius: 0;
   overflow: hidden;
   margin-bottom: 2rpx;
   box-sizing: border-box;
@@ -677,25 +706,25 @@ page {
 
 .core-ratio-bar-fill {
   height: 100%;
-  border-radius: 3rpx;
+  border-radius: 0;
   transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   min-width: 2rpx;
 }
 
 .core-ratio-bar-fill.bar-normal {
-  background: linear-gradient(90deg, #1e293b, #334155);
+  background: #1a1a1a;
 }
 
 .core-ratio-bar-fill.bar-warn {
-  background: linear-gradient(90deg, #d97706, #f59e0b);
+  background: #1a1a1a;
 }
 
 .core-ratio-bar-fill.bar-danger {
-  background: linear-gradient(90deg, #dc2626, #ef4444);
+  background: #9b1c1c;
 }
 
 .core-result-value.value-danger {
-  color: #ef4444;
+  color: #9b1c1c;
 }
 
 /* 仰角警告置顶提示 */
@@ -725,17 +754,17 @@ page {
 }
 
 .elevation-warning-item.elevation-warning-warning .elevation-warning-icon {
-  color: #d97706;
+  color: #9b1c1c;
 }
 
 .elevation-warning-item.elevation-warning-error .elevation-warning-icon {
-  color: #dc2626;
+  color: #9b1c1c;
 }
 
 .elevation-warning-text {
   font-size: 20rpx;
   font-weight: 500;
-  color: #475569;
+  color: #404040;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -796,7 +825,7 @@ page {
   font-size: 20rpx;
   font-weight: 600;
   color: #111827;
-  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -807,12 +836,13 @@ page {
 }
 
 .result-section-title {
-  font-size: 24rpx;
+  font-size: 26rpx;
   font-weight: 600;
-  color: #111827;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
   margin-bottom: 12rpx;
-  padding: 0 8rpx 10rpx 8rpx;
-  border-bottom: 2rpx solid #1e293b;
+  padding: 0 4rpx 10rpx;
+  border-bottom: 2rpx solid #1a1a1a;
   letter-spacing: 0.02em;
 }
 
@@ -838,14 +868,16 @@ page {
   padding: 0 8rpx;
 }
 
+/* 结果条目 - 期刊表格行：去框，仅留行底发丝线 */
 .result-item {
   display: flex;
   flex-direction: column;
-  padding: 10rpx 8rpx;
-  background: #f9fafb;
-  border: 1rpx solid #e5e7eb;
-  border-radius: 4rpx;
-  transition: all 0.15s ease;
+  padding: 10rpx 4rpx;
+  background: transparent;
+  border: none;
+  border-bottom: 1rpx solid #ececec;
+  border-radius: 0;
+  transition: background 0.15s ease;
   cursor: pointer;
 }
 
@@ -856,18 +888,17 @@ page {
 /* 标记样式 - 专业指示器 */
 .result-item-marked {
   position: relative;
-  background: #fef3c7;
-  border-color: #fbbf24;
+  background: #f5f5f5;
 }
 
 .result-item-marked::after {
   content: '';
   position: absolute;
-  top: 4rpx;
-  right: 4rpx;
+  top: 6rpx;
+  right: 6rpx;
   width: 8rpx;
   height: 8rpx;
-  background: #f59e0b;
+  background: #1a1a1a;
   border-radius: 50%;
 }
 
@@ -879,7 +910,8 @@ page {
 
 .result-label {
   font-size: 20rpx;
-  color: #6b7280;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   margin-bottom: 4rpx;
   letter-spacing: 0.01em;
   line-height: 1.3;
@@ -887,9 +919,9 @@ page {
 
 .result-value {
   font-size: 24rpx;
-  color: #111827;
+  color: #1a1a1a;
   font-weight: 600;
-  font-family: "SF Mono", "Fira Code", Menlo, Monaco, Consolas, monospace;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
@@ -910,11 +942,11 @@ page {
 }
 
 .result-elevation-warn.result-elevation-warn-warning {
-  color: #d97706;
+  color: #9b1c1c;
 }
 
 .result-elevation-warn.result-elevation-warn-error {
-  color: #dc2626;
+  color: #9b1c1c;
 }
 
 /* 城市选择器样式 - 工业风格 */
@@ -924,11 +956,12 @@ page {
 
 .city-toggle-wrapper {
   width: 100%;
-  height: 64rpx;
-  background: #f9fafb;
-  border: 1rpx solid #d1d5db;
-  border-radius: 6rpx;
-  padding: 0 16rpx;
+  height: 56rpx;
+  background: transparent;
+  border: none;
+  border-bottom: 2rpx solid #d4d4d4;
+  border-radius: 0;
+  padding: 0 4rpx;
   font-size: 26rpx;
   box-sizing: border-box;
   display: flex;
@@ -938,8 +971,8 @@ page {
 }
 
 .city-toggle-wrapper:active {
-  background: #ffffff;
-  border-color: #3b82f6;
+  background: transparent;
+  border-bottom-color: #1a1a1a;
 }
 
 .city-toggle-text {
@@ -999,16 +1032,18 @@ page {
 .city-search-input {
   flex: 1;
   height: 56rpx;
-  padding: 12rpx 16rpx;
+  padding: 12rpx 4rpx;
   font-size: 26rpx;
-  background: #ffffff;
-  border: 1rpx solid #d1d5db;
-  border-radius: 6rpx;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  background: transparent;
+  border: none;
+  border-bottom: 2rpx solid #d4d4d4;
+  border-radius: 0;
   box-sizing: border-box;
 }
 
 .city-search-input:focus {
-  border-color: #3b82f6;
+  border-bottom-color: #1a1a1a;
 }
 
 .city-group {
@@ -1042,7 +1077,7 @@ page {
 }
 
 .city-item:active {
-  background-color: #eff6ff;
+  background-color: #f5f5f5;
 }
 
 .city-item:last-child {
@@ -1082,7 +1117,7 @@ page {
   left: 0;
   width: 100%;
   height: 100vh;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(26, 26, 26, 0.4);
   backdrop-filter: blur(4px);
   z-index: 1000;
   opacity: 0;
@@ -1119,7 +1154,7 @@ page {
 
 .history-clear {
   font-size: 26rpx;
-  color: #dc2626;
+  color: #9b1c1c;
   font-weight: 500;
 }
 
@@ -1251,7 +1286,7 @@ page {
   justify-content: center;
   width: 140rpx;
   height: 100%;
-  background: #3b82f6;
+  background: #1a1a1a;
   color: #fff;
   font-size: 26rpx;
   font-weight: 500;
@@ -1263,7 +1298,7 @@ page {
   justify-content: center;
   width: 140rpx;
   height: 100%;
-  background: #ef4444;
+  background: #9b1c1c;
   color: #fff;
   font-size: 26rpx;
   font-weight: 500;
@@ -1300,7 +1335,7 @@ page {
 .history-time {
   font-size: 22rpx;
   color: #9ca3af;
-  font-family: "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1317,38 +1352,28 @@ page {
   padding: 2rpx 12rpx;
   border-radius: 4rpx;
   letter-spacing: 1rpx;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   border: 1px solid transparent;
   line-height: 1.6;
 }
 
 .orbit-tag-geo {
-  background: rgba(0, 0, 0, 0.78);
+  background: #1a1a1a;
   color: #ffffff;
-  border-color: rgba(0, 0, 0, 0.78);
+  border-color: #1a1a1a;
 }
 
 .orbit-tag-ngso {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: transparent;
+  border-color: #1a1a1a;
 }
 
-.orbit-tag-LEO {
-  background: rgba(46, 125, 50, 0.18);
-  color: #1b5e20;
-  border-color: rgba(46, 125, 50, 0.45);
-}
-
-.orbit-tag-MEO {
-  background: rgba(25, 118, 210, 0.18);
-  color: #0d47a1;
-  border-color: rgba(25, 118, 210, 0.45);
-}
-
+.orbit-tag-LEO,
+.orbit-tag-MEO,
 .orbit-tag-HEO {
-  background: rgba(216, 67, 21, 0.18);
-  color: #bf360c;
-  border-color: rgba(216, 67, 21, 0.45);
+  background: transparent;
+  color: #1a1a1a;
+  border-color: #1a1a1a;
 }
 
 .history-item-body {
@@ -1429,8 +1454,8 @@ page {
 }
 
 .station-column {
-  padding: 16rpx 12rpx;
-  border-right: 1rpx solid #e5e7eb;
+  padding: 4rpx 12rpx 16rpx;
+  border-right: 1rpx solid #d9d9d9;
 }
 
 .station-column:last-child {
@@ -1441,15 +1466,15 @@ page {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 12rpx;
+  padding-bottom: 4rpx;
   margin-bottom: 12rpx;
-  border-bottom: 1rpx solid #f3f4f6;
 }
 
 .station-title {
-  font-size: 24rpx;
+  font-size: 26rpx;
   font-weight: 600;
-  color: #111827;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
   display: flex;
   align-items: center;
   gap: 6rpx;
@@ -1467,38 +1492,37 @@ page {
 
 /* 紧凑表单适配双栏 */
 .station-form-group {
-  margin-bottom: 8rpx;
+  margin-bottom: 12rpx;
 }
 
 .station-form-group .form-label {
-  font-size: 20rpx;
+  font-size: 22rpx;
   margin-bottom: 4rpx;
-  color: #6b7280;
+  color: #404040;
 }
 
 .station-form-group .form-input {
-  height: 52rpx;
-  font-size: 24rpx;
+  height: 56rpx;
+  font-size: 26rpx;
 }
 
 .station-form-group .form-picker {
-  height: 52rpx;
-  font-size: 24rpx;
-  line-height: 50rpx;
+  height: 56rpx;
+  font-size: 26rpx;
+  line-height: 54rpx;
 }
 
 /* 双栏内部网格 */
 .station-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6rpx;
+  gap: 14rpx;
 }
 
 /* 站点实时结果 */
+/* 实时计算结果 - 期刊表格的中线之下放结论 */
 .station-result {
-  margin-top: 12rpx;
-  padding-top: 10rpx;
-  border-top: 1rpx solid #f3f4f6;
+  margin-top: 6rpx;
 }
 
 /* MODCOD快速选择行 */
@@ -1533,18 +1557,20 @@ page {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6rpx 0;
+  padding: 3rpx 0;
 }
 
 .station-result-label {
   font-size: 20rpx;
-  color: #6b7280;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .station-result-value {
-  font-size: 22rpx;
-  font-weight: 600;
-  color: #111827;
+  font-size: 24rpx;
+  font-weight: 700;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
 }
 
 /* 可编辑的实时结果项 */
@@ -1552,17 +1578,18 @@ page {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6rpx 0;
+  padding: 3rpx 0;
 }
 
 .station-result-input {
   font-size: 26rpx;
-  font-weight: 600;
-  color: #111827;
+  font-weight: 700;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
   text-align: right;
   width: 180rpx;
   padding: 4rpx 8rpx;
-  border-bottom: 2rpx solid #d1d5db;
+  border-bottom: 2rpx solid #d4d4d4;
   background: transparent;
 }
 
@@ -1605,7 +1632,7 @@ page {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(26, 26, 26, 0.4);
   backdrop-filter: blur(4px);
   z-index: 1000;
   opacity: 0;
@@ -1630,7 +1657,7 @@ page {
   font-size: 28rpx;
   font-weight: 600;
   color: #1f2937;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .visual-popup-close {
@@ -1682,7 +1709,7 @@ page {
 }
 
 .icon-az-el {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cline x1='2' y1='21' x2='22' y2='21' stroke='%231f2937' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M4 21a8 8 0 0 1 16 0' stroke='%231f2937' stroke-width='2.2' fill='none'/%3E%3Cpath d='M7.5 21a4.5 4.5 0 0 1 9 0' stroke='%231f2937' stroke-width='1.2' fill='none' stroke-dasharray='1.5 2.5'/%3E%3Cline x1='12' y1='21' x2='18' y2='9.5' stroke='%231f2937' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='18' cy='9.5' r='1.8' fill='%231f2937'/%3E%3Ccircle cx='12' cy='21' r='2' fill='%231f2937'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 10a7.31 7.31 0 0 0 10 10Z'/%3E%3Cpath d='m9 15 3-3'/%3E%3Cpath d='M17 13a6 6 0 0 0-6-6'/%3E%3Cpath d='M21 13A10 10 0 0 0 11 3'/%3E%3C/svg%3E");
 }
 
 .icon-isl {
@@ -1700,13 +1727,13 @@ page {
   font-weight: 500;
   color: #1f2937;
   margin-bottom: 4rpx;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .visual-option-desc {
   font-size: 22rpx;
   color: #6b7280;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .visual-option-arrow {
@@ -1722,13 +1749,14 @@ page {
   left: 16rpx;
   right: 16rpx;
   background: #ffffff;
-  border-radius: 8rpx;
+  border-radius: 0;
+  border: 1rpx solid #1a1a1a;
   z-index: 1003;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-16rpx);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.15), 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
 }
 
 .azel-popup.show {
@@ -1743,7 +1771,7 @@ page {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(26, 26, 26, 0.4);
   backdrop-filter: blur(4px);
   z-index: 1002;
   opacity: 0;
@@ -1761,18 +1789,19 @@ page {
   align-items: center;
   justify-content: space-between;
   padding: 24rpx 28rpx;
-  border-bottom: 1rpx solid #e5e7eb;
+  border-bottom: 1rpx solid #d9d9d9;
 }
 
 .azel-popup-title {
   font-size: 28rpx;
   font-weight: 600;
-  color: #1f2937;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
 }
 
 .azel-popup-close {
   font-size: 32rpx;
-  color: #9ca3af;
+  color: #737373;
   padding: 8rpx;
 }
 
@@ -1790,7 +1819,8 @@ page {
 .azel-label {
   width: 88rpx;
   font-size: 26rpx;
-  color: #374151;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   font-weight: 500;
 }
 
@@ -1798,15 +1828,38 @@ page {
 .azel-picker {
   flex: 1;
   height: 72rpx;
-  background: #f9fafb;
-  border: 1rpx solid #d1d5db;
-  border-radius: 8rpx;
-  padding: 0 20rpx;
+  background-color: transparent;
+  border: none;
+  border-bottom: 2rpx solid #d4d4d4;
+  border-radius: 0;
+  padding: 0 4rpx;
   font-size: 28rpx;
-  color: #111827;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
   display: flex;
   align-items: center;
   box-sizing: border-box;
+}
+
+/* 下拉箭头仅用于 picker，输入框不加 */
+.azel-picker {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4rpx center;
+  background-size: 26rpx 26rpx;
+  padding-right: 36rpx;
+}
+
+/* 输入框聚焦：底线转墨黑（与全局 .form-input 一致） */
+.azel-input:focus,
+.so-field-input:focus {
+  border-bottom-color: #1a1a1a;
+  background-color: transparent;
+}
+
+.station-result-input:focus,
+.station-result-input.input-focused {
+  border-bottom-color: #1a1a1a;
 }
 
 .azel-sat-toggle,
@@ -1872,10 +1925,10 @@ page {
 
 .azel-result {
   margin-top: 16rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid #e5e7eb;
+  border-radius: 0;
+  border: 1rpx solid #d9d9d9;
   padding: 14rpx 16rpx;
-  background: #f8fafc;
+  background: #ffffff;
 }
 
 .azel-result-head {
@@ -1885,15 +1938,15 @@ page {
 }
 
 .azel-result-head.ok {
-  color: #065f46;
+  color: #1a1a1a;
 }
 
 .azel-result-head.warn {
-  color: #92400e;
+  color: #9b1c1c;
 }
 
 .azel-result-head.danger {
-  color: #991b1b;
+  color: #9b1c1c;
 }
 
 .azel-result-highlight {
@@ -1937,7 +1990,8 @@ page {
 .azel-result-line {
   display: block;
   font-size: 24rpx;
-  color: #1f2937;
+  color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   margin-bottom: 4rpx;
 }
 
@@ -1967,7 +2021,8 @@ page {
 
 .sunoutage-freq-toggle text {
   font-size: 22rpx;
-  color: #3b82f6;
+  color: #1a1a1a;
+  text-decoration: underline;
 }
 
 .btn-disabled {
@@ -1975,97 +2030,159 @@ page {
   pointer-events: none;
 }
 
+/* ====== 日凌结果 - 论文报告版式 ====== */
 .sunoutage-result {
-  margin-top: 16rpx;
-  border-radius: 8rpx;
-  border: 1rpx solid #e5e7eb;
-  background: #f8fafc;
-  overflow: hidden;
+  margin-top: 28rpx;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 
 .sunoutage-result-summary {
-  padding: 14rpx 16rpx;
+  padding: 0;
 }
 
-/* 时间模式切换 */
-.sunoutage-time-toggle {
+/* 报告题头：标题 + 2rpx 黑规则线（与卡片标题同语法） */
+.so-report-head {
   display: flex;
   align-items: center;
-  margin: 8rpx 0 4rpx;
+  justify-content: space-between;
+  padding-bottom: 10rpx;
+  border-bottom: 2rpx solid #1a1a1a;
 }
 
-.sunoutage-time-label {
-  font-size: 22rpx;
-  color: #6b7280;
-  margin-right: 8rpx;
+.so-report-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
+  letter-spacing: 0.02em;
 }
 
+/* 结论句 - 报告摘要式的一句话结论 */
+.so-report-conclusion {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 700;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  padding: 14rpx 0 6rpx;
+}
+
+.so-report-conclusion.ok {
+  color: #1a1a1a;
+}
+
+.so-report-conclusion.warn {
+  color: #9b1c1c;
+}
+
+/* 时区切换 - 墨块分段 */
 .sunoutage-time-switch {
   display: flex;
-  background: #e5e7eb;
-  border-radius: 8rpx;
+  background: transparent;
+  border: 1rpx solid #1a1a1a;
+  border-radius: 0;
   overflow: hidden;
 }
 
 .sunoutage-time-opt {
   font-size: 20rpx;
   padding: 4rpx 14rpx;
-  color: #6b7280;
-  transition: all 0.2s;
+  color: #1a1a1a;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sunoutage-time-opt + .sunoutage-time-opt {
+  border-left: 1rpx solid #1a1a1a;
 }
 
 .sunoutage-time-opt.active {
-  background: #3b82f6;
+  background: #1a1a1a;
   color: #fff;
-  border-radius: 8rpx;
 }
 
-.sunoutage-detail-toggle {
-  text-align: center;
-  padding: 12rpx 0;
-  border-top: 1rpx solid #e5e7eb;
+/* 摘要：标签-数值对齐行，发丝线分隔 */
+.so-sum-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16rpx;
+  padding: 8rpx 0;
+  border-bottom: 1rpx solid #ececec;
 }
 
-.sunoutage-detail-toggle text {
+.so-sum-row:last-child {
+  border-bottom: none;
+}
+
+.so-sum-label {
   font-size: 22rpx;
-  color: #3b82f6;
-  font-weight: 500;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  flex-shrink: 0;
 }
 
+.so-sum-value {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  text-align: right;
+  min-width: 0;
+}
+
+/* 表题 - 期刊表格的标题行 */
+.so-table-caption {
+  font-size: 22rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  padding: 18rpx 0 8rpx;
+}
+
+/* 逐日详情 - 三线表（booktabs）：顶线/中线/底线，无竖线无底纹 */
 .sunoutage-detail-list {
-  border-top: 1rpx solid #e5e7eb;
+  border-top: 2rpx solid #1a1a1a;
+  border-bottom: 2rpx solid #1a1a1a;
 }
 
 .sunoutage-detail-header {
   display: flex;
-  padding: 10rpx 12rpx;
-  background: #f1f5f9;
-  border-bottom: 1rpx solid #e2e8f0;
+  padding: 10rpx 4rpx;
+  background: transparent;
+  border-bottom: 1rpx solid #1a1a1a;
 }
 
 .sunoutage-detail-header .so-col {
   font-size: 20rpx;
-  color: #64748b;
+  color: #1a1a1a;
   font-weight: 600;
 }
 
 .sunoutage-detail-row {
   display: flex;
-  padding: 8rpx 12rpx;
-  border-bottom: 1rpx solid #f1f5f9;
+  padding: 8rpx 4rpx;
+  border-bottom: 1rpx solid #f0f0f0;
 }
 
 .sunoutage-detail-row:last-child {
   border-bottom: none;
 }
 
+/* 峰值日：加粗强调，不用底纹（期刊表格的强调方式） */
 .sunoutage-detail-row.peak-row {
-  background: #fef3c7;
+  background: transparent;
+}
+
+.sunoutage-detail-row.peak-row .so-col {
+  font-weight: 700;
 }
 
 .so-col {
   font-size: 20rpx;
-  color: #374151;
+  color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .so-col-date {
@@ -2088,9 +2205,9 @@ page {
   font-weight: 600;
 }
 
-.so-intensity-high { color: #dc2626; }
-.so-intensity-mid  { color: #f59e0b; }
-.so-intensity-low  { color: #22c55e; }
+.so-intensity-high { color: #9b1c1c; }
+.so-intensity-mid  { color: #404040; }
+.so-intensity-low  { color: #8c8c8c; }
 
 /* ====== 日凌输入区域 ====== */
 .so-form {
@@ -2098,25 +2215,30 @@ page {
 }
 
 .so-field {
-  margin-bottom: 10rpx;
+  margin-bottom: 14rpx;
 }
 
 .so-field-label {
   display: block;
-  font-size: 24rpx;
-  color: #6b7280;
+  font-size: 22rpx;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   margin-bottom: 4rpx;
 }
 
 .so-field-input {
   width: 100%;
   height: 64rpx;
-  background: #f9fafb;
-  border: 1rpx solid #d1d5db;
-  border-radius: 8rpx;
-  padding: 0 16rpx;
+  background: transparent;
+  border: none;
+  border-bottom: 2rpx solid #d4d4d4;
+  border-radius: 0;
+  padding: 0 4rpx;
   font-size: 28rpx;
-  color: #111827;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
   box-sizing: border-box;
 }
 
@@ -2127,20 +2249,20 @@ page {
 .so-field-picker {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   height: 64rpx;
-  background: #f9fafb;
-  border: 1rpx solid #d1d5db;
-  border-radius: 8rpx;
-  padding: 0 16rpx;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23a3a3a3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 4rpx center;
+  background-size: 26rpx 26rpx;
+  border: none;
+  border-bottom: 2rpx solid #d4d4d4;
+  border-radius: 0;
+  padding: 0 36rpx 0 4rpx;
   font-size: 28rpx;
-  color: #111827;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+  color: #1a1a1a;
   box-sizing: border-box;
-}
-
-.so-picker-arrow {
-  font-size: 22rpx;
-  color: #9ca3af;
 }
 
 .so-field-row-2col {
@@ -2156,7 +2278,7 @@ page {
 .so-loc-btns {
   display: flex;
   gap: 12rpx;
-  margin-bottom: 10rpx;
+  margin-bottom: 14rpx;
 }
 
 .so-loc-btn {
@@ -2165,15 +2287,17 @@ page {
   align-items: center;
   justify-content: center;
   height: 56rpx;
-  background: #475569;
-  border-radius: 8rpx;
+  background: #ffffff;
+  border: 1rpx solid #d4d4d4;
+  border-radius: 4rpx;
   font-size: 24rpx;
-  color: #ffffff;
+  color: #1a1a1a;
   font-weight: 500;
 }
 
 .so-loc-btn:active {
-  opacity: 0.85;
+  background: #f5f5f5;
+  border-color: #8c8c8c;
 }
 
 .so-freq-link {
@@ -2183,7 +2307,8 @@ page {
 
 .so-freq-link text {
   font-size: 22rpx;
-  color: #3b82f6;
+  color: #1a1a1a;
+  text-decoration: underline;
 }
 
 .so-calc-btn {
@@ -2192,13 +2317,13 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0f172a;
-  border-radius: 8rpx;
+  background: #1a1a1a;
+  border-radius: 4rpx;
   margin-bottom: 8rpx;
 }
 
 .so-calc-btn:active {
-  opacity: 0.85;
+  background: #000000;
 }
 
 .so-calc-btn text {
@@ -2233,14 +2358,10 @@ page {
 /* ====== 非iOS平台参数输入框字体+3rpx ====== */
 .non-ios .form-input {
   font-size: 30rpx;
-  background: #fcfcfd;
-  border-color: #e5e7eb;
 }
 
 .non-ios .form-picker {
   font-size: 30rpx;
-  background: #fcfcfd;
-  border-color: #e5e7eb;
 }
 
 .non-ios .form-group-compact .form-input {

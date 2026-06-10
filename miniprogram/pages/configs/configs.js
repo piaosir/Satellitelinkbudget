@@ -138,6 +138,7 @@ Page({
     dragItemHeight: 0,
     dragConfig: null,
     dragScrollTop: 0,
+    dragWxsState: null, // WXS 视图层直驱幽灵的激活状态
     isCloudReady: false, // 云开发是否就绪
     // 导航栏相关数据
     statusBarHeight: 20,
@@ -341,7 +342,9 @@ Page({
     this._configTouchStartY = touch.clientY;
     this._configTouchId = e.currentTarget.dataset.id;
     this._configTouchMoved = false;
-    
+    this._configIsHorizontal = false;
+    this._touchActive = true;
+
     // 获取当前项的偏移量
     const config = this.data.configs.find(c => c._id === this._configTouchId);
     this._configStartOffsetX = config ? (config.offsetX || 0) : 0;
@@ -349,11 +352,14 @@ Page({
 
   // 长按配置卡片 - 进入拖拽排序模式
   onConfigLongPress(e) {
-    if (this.data.selectMode || this.data.isDragging) return;
-    
+    if (this.data.selectMode || this.data.isDragging || this._dragPending) return;
+
     const index = e.currentTarget.dataset.index;
     const touch = e.touches[0];
-    
+
+    // 拖拽待启动：阻断横滑分支，并防止快速松手后异步回调误入拖拽态
+    this._dragPending = true;
+
     wx.vibrateShort({ type: 'heavy' });
     
     // 记录屏幕高度，用于边缘自动滚动
@@ -367,26 +373,36 @@ Page({
     query.selectViewport().scrollOffset();
     query.selectAll('.config-card-wrapper').boundingClientRect();
     query.exec(results => {
+      // 手指已离开（快速长按即松）或拖拽已被取消，放弃进入拖拽态，避免卡死
+      if (!this._dragPending || !this._touchActive) {
+        this._dragPending = false;
+        return;
+      }
+
       const scrollRes = results[0];
       const rects = results[1];
-      
-      if (!rects || rects.length === 0) return;
-      
+
+      if (!rects || rects.length === 0 || !rects[index]) {
+        this._dragPending = false;
+        return;
+      }
+
       const scrollTop = scrollRes.scrollTop || 0;
       this._savedScrollTop = scrollTop;
       this._dragInitScrollTop = scrollTop; // 初始滚动位置，拖拽期间不变
-      
+
       const itemRect = rects[index];
-      const itemHeight = itemRect.height;
-      
+      // 槽位高度取相邻两项 top 间距（含卡片 margin），单项高度跨多格拖动会累计漂移
+      const slotHeight = rects.length > 1 ? (rects[1].top - rects[0].top) : itemRect.height;
+
       // 手指到卡片顶部的偏移，用于跟手计算
       this._dragTouchOffsetY = touch.clientY - itemRect.top;
       this._dragStartTouchY = touch.clientY;
       this._dragOrigIndex = index;
-      this._dragItemHeight = itemHeight;
+      this._dragItemHeight = slotHeight;
       this._isDraggingMode = true;
-      
-      this.setData({
+
+      const updateData = {
         dragScrollTop: scrollTop,
         isDragging: true,
         dragOrigIndex: index,
@@ -394,14 +410,29 @@ Page({
         dragGhostTop: itemRect.top,
         dragGhostLeft: itemRect.left,
         dragGhostWidth: itemRect.width,
-        dragItemHeight: itemHeight,
+        dragItemHeight: slotHeight,
         dragConfig: this.data.configs[index],
-      });
+        // 激活 WXS 视图层直驱：拖动期间幽灵位置不再走 setData
+        dragWxsState: {
+          active: true,
+          offsetY: this._dragTouchOffsetY,
+          left: itemRect.left,
+          width: itemRect.width,
+        },
+      };
+      // 进入拖拽前收起左滑展开的删除按钮，避免卡片带着横向位移参与排序
+      if (this.data.configs.some(c => c.offsetX)) {
+        updateData.configs = this.data.configs.map(it => ({ ...it, offsetX: 0, animating: false }));
+        updateData.dragConfig = updateData.configs[index];
+      }
+      this.setData(updateData);
     });
   },
 
-  // 配置卡片滑动移动
+  // 配置卡片滑动移动（由 drag.wxs 转发，多选模式下不处理）
   onConfigTouchMove(e) {
+    if (this.data.selectMode) return;
+
     // 拖拽排序模式 - 幽灵跟手 + 计算目标位置 + 边缘自动滚动
     if (this._isDraggingMode && this.data.isDragging) {
       const touch = e.touches[0];
@@ -427,6 +458,9 @@ Page({
       this._updateDragPosition(currentY);
       return;
     }
+
+    // 长按已触发、拖拽态待生效的间隙期：不响应横滑分支，防止卡片被误位移
+    if (this._dragPending) return;
 
     const touch = e.touches[0];
     const deltaX = touch.clientX - this._configTouchStartX;
@@ -465,22 +499,31 @@ Page({
 
   // 配置卡片滑动结束
   onConfigTouchEnd(e) {
+    this._touchActive = false;
+    this._dragPending = false;
+
     // 拖拽排序模式结束
     if (this._isDraggingMode && this.data.isDragging) {
       this._isDraggingMode = false;
+      this._configIsHorizontal = false;
       this._stopAutoScroll();
-      
+
       const origIndex = this.data.dragOrigIndex;
       const targetIndex = this.data.dragTargetIndex;
-      
+
       // 重新排序数组：将拖拽项从原位置移动到目标位置
       const configs = [...this.data.configs];
-      const [movedItem] = configs.splice(origIndex, 1);
-      configs.splice(targetIndex, 0, movedItem);
-      
+      const orderChanged = origIndex >= 0 && targetIndex >= 0 &&
+        origIndex < configs.length && targetIndex < configs.length &&
+        origIndex !== targetIndex;
+      if (orderChanged) {
+        const [movedItem] = configs.splice(origIndex, 1);
+        configs.splice(targetIndex, 0, movedItem);
+      }
+
       // 恢复滚动位置（使用拖拽结束时的滚动位置）
       const finalScrollTop = this.data.dragScrollTop || 0;
-      
+
       this.setData({
         configs,
         isDragging: false,
@@ -488,14 +531,17 @@ Page({
         dragTargetIndex: -1,
         dragConfig: null,
         dragScrollTop: 0,
+        dragWxsState: { active: false },
       });
-      
+
       if (finalScrollTop > 0) {
         wx.pageScrollTo({ scrollTop: finalScrollTop, duration: 0 });
       }
-      
+
       // 保存自定义排序
-      this.saveConfigOrder();
+      if (orderChanged) {
+        this.saveConfigOrder();
+      }
       return;
     }
 
@@ -536,6 +582,11 @@ Page({
     this._configIsHorizontal = false;
   },
 
+  // 触摸被系统打断（来电/通知下拉等）：按结束处理，避免卡死在拖拽态
+  onConfigTouchCancel(e) {
+    this.onConfigTouchEnd(e);
+  },
+
   // 重置所有配置卡片的滑动状态
   resetConfigsSlideState() {
     const configs = this.data.configs.map(item => ({
@@ -546,26 +597,22 @@ Page({
     this.setData({ configs: configs });
   },
 
-  // 更新拖拽位置（幽灵 + 目标索引）
+  // 更新拖拽目标索引（幽灵位置由 drag.wxs 在视图层直驱，这里只在跨槽位时 setData）
   _updateDragPosition(touchY) {
-    const ghostTop = touchY - this._dragTouchOffsetY;
-    
     // scrollDelta: 拖拽期间自动滚动累计的偏移量
     const scrollDelta = (this.data.dragScrollTop || 0) - (this._dragInitScrollTop || 0);
-    
+
     // 将屏幕触摸坐标转换为文档坐标来计算目标索引
     const docY = touchY + scrollDelta;
     const docStartY = this._dragStartTouchY;
-    
+
     const deltaSlots = Math.round((docY - docStartY) / this._dragItemHeight);
     let targetIndex = this._dragOrigIndex + deltaSlots;
     targetIndex = Math.max(0, Math.min(this.data.configs.length - 1, targetIndex));
-    
-    const updateData = { dragGhostTop: ghostTop };
+
     if (targetIndex !== this.data.dragTargetIndex) {
-      updateData.dragTargetIndex = targetIndex;
+      this.setData({ dragTargetIndex: targetIndex });
     }
-    this.setData(updateData);
   },
 
   // 开始自动滚动

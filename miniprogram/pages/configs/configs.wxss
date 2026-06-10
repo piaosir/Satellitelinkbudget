@@ -1,15 +1,15 @@
 /* configs.wxss */
-/* 配置管理页面样式 - 与主界面一致的通透风格 */
+/* 配置管理页面样式 - 期刊版面，与主界面参数输入区同体系 */
 
 page {
-  background-color: #f5f5f5;
+  background-color: #ffffff;
 }
 
 .container {
   width: 100%;
   min-height: 100vh;
   position: relative;
-  background-color: #f5f5f5;
+  background-color: #ffffff;
 }
 
 /* 悬浮操作栏 - 与主界面一致 */
@@ -54,7 +54,7 @@ page {
   font-size: 24rpx;
   color: #ffffff;
   font-weight: 500;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 /* 悬浮按钮图标 */
@@ -120,9 +120,10 @@ page {
   position: fixed;
   z-index: 9999;
   pointer-events: none;
-  border-radius: 12rpx;
+  border-radius: 0;
+  border: 1rpx solid #1a1a1a;
   background: #ffffff;
-  box-shadow: 0 16rpx 48rpx rgba(0, 0, 0, 0.22), 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.15);
   padding: 20rpx 24rpx;
   opacity: 0.95;
   transform: scale(1.04);
@@ -193,11 +194,11 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #e53935;
+  background: #9b1c1c;
   color: #ffffff;
   font-size: 26rpx;
   font-weight: 500;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 /* 配置行 - 紧凑布局 */
@@ -216,7 +217,7 @@ page {
   font-size: 28rpx;
   font-weight: 600;
   color: #1a1a1a;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   word-break: break-all;
   line-height: 1.4;
   margin-bottom: 6rpx;
@@ -232,40 +233,29 @@ page {
   padding: 2rpx 12rpx;
   border-radius: 4rpx;
   letter-spacing: 1rpx;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   border: 1px solid transparent;
   line-height: 1.6;
 }
 
-/* GEO：与 .action-btn.load 一致的深灰填充，体现"默认/主流"语义 */
+/* GEO：墨块填充；NGSO 三类：墨线描边，靠文字本身区分 */
 .orbit-tag-geo {
-  background: rgba(0, 0, 0, 0.78);
+  background: #1a1a1a;
   color: #ffffff;
-  border-color: rgba(0, 0, 0, 0.78);
+  border-color: #1a1a1a;
 }
 
-/* NGSO 三类：提高对比度以保证可读性 */
 .orbit-tag-ngso {
-  background: rgba(0, 0, 0, 0.04);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: transparent;
+  border-color: #1a1a1a;
 }
 
-.orbit-tag-LEO {
-  background: rgba(46, 125, 50, 0.18);
-  color: #1b5e20;
-  border-color: rgba(46, 125, 50, 0.45);
-}
-
-.orbit-tag-MEO {
-  background: rgba(25, 118, 210, 0.18);
-  color: #0d47a1;
-  border-color: rgba(25, 118, 210, 0.45);
-}
-
+.orbit-tag-LEO,
+.orbit-tag-MEO,
 .orbit-tag-HEO {
-  background: rgba(216, 67, 21, 0.18);
-  color: #bf360c;
-  border-color: rgba(216, 67, 21, 0.45);
+  background: transparent;
+  color: #1a1a1a;
+  border-color: #1a1a1a;
 }
 
 .config-meta {
@@ -274,7 +264,7 @@ page {
   flex-wrap: wrap;
   font-size: 22rpx;
   color: rgba(0, 0, 0, 0.45);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .config-satellite,
@@ -290,7 +280,7 @@ page {
 
 .config-date {
   font-weight: bold;
-  color: #1890ff;
+  color: #404040;
 }
 
 .config-sep {
@@ -313,37 +303,37 @@ page {
   font-size: 22rpx;
   font-weight: 500;
   border: none;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   transition: all 0.15s ease;
 }
 
 .action-btn.load {
-  background: rgba(0, 0, 0, 0.75);
+  background: #1a1a1a;
   color: #ffffff;
 }
 
 .action-btn.load:active {
-  background: rgba(0, 0, 0, 0.9);
+  background: #000000;
 }
 
 .action-btn.edit {
-  background: rgba(0, 0, 0, 0.08);
-  color: #333333;
+  background: #f5f5f5;
+  color: #1a1a1a;
 }
 
 .action-btn.share {
-  background: rgba(82, 140, 96, 0.12);
-  color: #4a7c59;
+  background: #f5f5f5;
+  color: #1a1a1a;
 }
 
 .action-btn.report {
-  background: rgba(70, 130, 180, 0.12);
-  color: #4682b4;
+  background: #f5f5f5;
+  color: #1a1a1a;
 }
 
 .action-btn.delete {
-  background: rgba(229, 57, 53, 0.15);
-  color: #e53935;
+  background: rgba(155, 28, 28, 0.08);
+  color: #9b1c1c;
 }
 
 .action-btn:active {
@@ -383,14 +373,14 @@ page {
   font-size: 30rpx;
   color: rgba(0, 0, 0, 0.45);
   font-weight: 500;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   margin-bottom: 12rpx;
 }
 
 .empty-hint {
   font-size: 24rpx;
   color: rgba(0, 0, 0, 0.35);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   margin-bottom: 48rpx;
 }
 
@@ -399,18 +389,18 @@ page {
   height: 76rpx;
   line-height: 76rpx;
   text-align: center;
-  background: rgba(0, 0, 0, 0.75);
+  background: #1a1a1a;
   color: #ffffff;
   font-size: 28rpx;
   font-weight: 500;
   border-radius: 4rpx;
   border: none;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   transition: all 0.15s ease;
 }
 
 .btn-action:active {
-  background: rgba(0, 0, 0, 0.9);
+  background: #000000;
 }
 
 /* 云端/本地配置样式 */
@@ -427,7 +417,7 @@ page {
   border-radius: 6rpx;
   font-weight: 500;
   white-space: nowrap;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .badge-cloud {
@@ -452,18 +442,18 @@ page {
 
 /* ========== 多选模式样式 ========== */
 
-/* 多选按钮激活状态 */
+/* 多选按钮激活状态 - 实心墨块 */
 .float-btn.active {
-  background: rgba(70, 130, 180, 0.9);
+  background: rgba(0, 0, 0, 0.9);
 }
 
 /* 导出按钮 */
 .float-btn.export-btn {
-  background: rgba(76, 175, 80, 0.85);
+  background: rgba(0, 0, 0, 0.6);
 }
 
 .float-btn.export-btn:active {
-  background: rgba(56, 142, 60, 0.95);
+  background: rgba(0, 0, 0, 0.75);
 }
 
 /* 多选图标 */
@@ -497,8 +487,8 @@ page {
 }
 
 .select-indicator.checked .select-checkbox {
-  background: #4a7c59;
-  border-color: #4a7c59;
+  background: #1a1a1a;
+  border-color: #1a1a1a;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
   background-size: 24rpx;
   background-repeat: no-repeat;
@@ -512,8 +502,8 @@ page {
 
 /* 选中状态的卡片 */
 .config-card-wrapper.selected .config-card-content {
-  background: rgba(74, 124, 89, 0.08);
-  border-left: 3px solid #4a7c59;
+  background: #f5f5f5;
+  border-left: 3px solid #1a1a1a;
 }
 
 /* ========== 导出面板样式 ========== */
@@ -542,7 +532,8 @@ page {
   right: 0;
   bottom: 0;
   background: #fff;
-  border-radius: 24rpx 24rpx 0 0;
+  border-radius: 0;
+  border-top: 1rpx solid #1a1a1a;
   z-index: 1001;
   transform: translateY(100%);
   transition: transform 0.3s ease;
@@ -565,6 +556,7 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .export-panel-close {
@@ -604,18 +596,18 @@ page {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 8rpx;
+  background: transparent;
+  border-radius: 0;
   font-size: 28rpx;
-  color: #333;
-  border: 2px solid transparent;
+  color: #1a1a1a;
+  border: 1rpx solid #c8c8c8;
   transition: all 0.15s ease;
 }
 
 .export-lang-btn.active {
-  background: rgba(74, 124, 89, 0.1);
-  border-color: #4a7c59;
-  color: #4a7c59;
+  background: #1a1a1a;
+  border-color: #1a1a1a;
+  color: #ffffff;
   font-weight: 500;
 }
 
@@ -629,14 +621,14 @@ page {
   display: flex;
   align-items: center;
   padding: 24rpx;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 12rpx;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: transparent;
+  border-radius: 0;
+  border: 1rpx solid #d9d9d9;
   transition: all 0.15s ease;
 }
 
 .export-format-btn:active {
-  background: rgba(0, 0, 0, 0.08);
+  background: #f5f5f5;
 }
 
 .export-format-icon {
@@ -648,6 +640,7 @@ page {
   background-position: center;
 }
 
+/* 品牌图标保留官方色 - 颜色即识别符号，不属于装饰 */
 .icon-excel {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 48 48'%3E%3Crect x='4' y='8' width='40' height='32' rx='2' fill='%23217346'/%3E%3Cpath d='M20 16L28 32M28 16L20 32' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E");
 }
@@ -705,7 +698,8 @@ page {
   right: 0;
   bottom: 0;
   background: #ffffff;
-  border-radius: 24rpx 24rpx 0 0;
+  border-radius: 0;
+  border-top: 1rpx solid #1a1a1a;
   z-index: 1001;
   transform: translateY(100%);
   transition: transform 0.3s ease;
@@ -726,7 +720,8 @@ page {
 .share-panel-title {
   font-size: 32rpx;
   font-weight: 600;
-  color: #333;
+  color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .share-panel-close {
@@ -763,14 +758,14 @@ page {
   display: flex;
   align-items: center;
   padding: 24rpx;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 12rpx;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: transparent;
+  border-radius: 0;
+  border: 1rpx solid #d9d9d9;
   transition: all 0.15s ease;
 }
 
 .share-option-btn:active {
-  background: rgba(0, 0, 0, 0.08);
+  background: #f5f5f5;
 }
 
 /* 重置 button 默认样式 */
@@ -784,9 +779,9 @@ page {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.03);
-  border-radius: 12rpx;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: transparent;
+  border-radius: 0;
+  border: 1rpx solid #d9d9d9;
   min-height: 0;
 }
 
@@ -805,7 +800,7 @@ page {
 }
 
 .icon-link {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%234682b4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'%3E%3C/path%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'%3E%3C/path%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48' viewBox='0 0 24 24' fill='none' stroke='%231a1a1a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'%3E%3C/path%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'%3E%3C/path%3E%3C/svg%3E");
 }
 
 .icon-code {
@@ -843,7 +838,7 @@ page {
 }
 
 .qrcode-btn {
-  background: linear-gradient(135deg, #1a7f37 0%, #0d5524 100%) !important;
+  background: rgba(0, 0, 0, 0.6) !important;
 }
 
 /* 批量分享二维码面板 */
@@ -885,9 +880,10 @@ page {
 .batch-qr-card {
   width: 580rpx;
   background: #ffffff;
-  border-radius: 24rpx;
+  border-radius: 0;
+  border: 1rpx solid #1a1a1a;
   overflow: hidden;
-  box-shadow: 0 20rpx 60rpx rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8rpx 32rpx rgba(0, 0, 0, 0.15);
   position: relative;
 }
 
@@ -933,8 +929,8 @@ page {
 .loading-spinner {
   width: 64rpx;
   height: 64rpx;
-  border: 4rpx solid rgba(74, 124, 89, 0.3);
-  border-top-color: #4a7c59;
+  border: 4rpx solid rgba(26, 26, 26, 0.2);
+  border-top-color: #1a1a1a;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -977,7 +973,7 @@ page {
 .batch-code-text {
   font-size: 48rpx;
   font-weight: bold;
-  color: #4a7c59;
+  color: #1a1a1a;
   letter-spacing: 4rpx;
 }
 
@@ -1003,7 +999,7 @@ page {
 .count-number {
   font-size: 56rpx;
   font-weight: bold;
-  color: #4a7c59;
+  color: #1a1a1a;
 }
 
 .count-label {
@@ -1023,9 +1019,9 @@ page {
 .config-name-item {
   font-size: 22rpx;
   color: #666666;
-  background: rgba(74, 124, 89, 0.1);
+  background: #f5f5f5;
   padding: 4rpx 12rpx;
-  border-radius: 6rpx;
+  border-radius: 0;
   max-width: 200rpx;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1042,9 +1038,9 @@ page {
   margin-top: 24rpx;
   display: flex;
   align-items: center;
-  background: rgba(74, 124, 89, 0.08);
+  background: #f5f5f5;
   padding: 16rpx 20rpx;
-  border-radius: 12rpx;
+  border-radius: 0;
   width: 100%;
   box-sizing: border-box;
 }
@@ -1058,20 +1054,20 @@ page {
   flex: 1;
   font-size: 30rpx;
   font-weight: 600;
-  color: #4a7c59;
+  color: #1a1a1a;
   letter-spacing: 2rpx;
 }
 
 .batch-code-copy {
   font-size: 24rpx;
   color: #ffffff;
-  background: #4a7c59;
+  background: #1a1a1a;
   padding: 8rpx 20rpx;
-  border-radius: 6rpx;
+  border-radius: 4rpx;
 }
 
 .batch-code-copy:active {
-  background: #3d6b4a;
+  background: #000000;
 }
 
 /* 提示文字 */
@@ -1112,7 +1108,8 @@ page {
   right: 0;
   bottom: 0;
   background: #ffffff;
-  border-radius: 24rpx 24rpx 0 0;
+  border-radius: 0;
+  border-top: 1rpx solid #1a1a1a;
   z-index: 1001;
   transform: translateY(100%);
   transition: transform 0.3s ease;
@@ -1139,6 +1136,7 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .batch-import-close {
@@ -1160,13 +1158,13 @@ page {
 
 .batch-import-info {
   padding: 20rpx 32rpx;
-  background: rgba(74, 124, 89, 0.1);
+  background: #f5f5f5;
   flex-shrink: 0;
 }
 
 .import-count {
   font-size: 28rpx;
-  color: #4a7c59;
+  color: #1a1a1a;
   font-weight: 500;
 }
 
@@ -1220,16 +1218,16 @@ page {
   justify-content: center;
   font-size: 30rpx;
   font-weight: 500;
-  border-radius: 12rpx;
+  border-radius: 4rpx;
 }
 
 .batch-import-btn.cancel {
-  background: rgba(0, 0, 0, 0.05);
+  background: #f5f5f5;
   color: #666;
 }
 
 .batch-import-btn.confirm {
-  background: linear-gradient(135deg, #4a7c59 0%, #3d6b4a 100%);
+  background: #1a1a1a;
   color: #ffffff;
 }
 
@@ -1259,7 +1257,8 @@ page {
   right: 0;
   bottom: 0;
   background: #ffffff;
-  border-radius: 24rpx 24rpx 0 0;
+  border-radius: 0;
+  border-top: 1rpx solid #1a1a1a;
   z-index: 1001;
   transform: translateY(100%);
   transition: transform 0.3s ease;
@@ -1286,6 +1285,7 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .overwrite-picker-close {
@@ -1314,7 +1314,7 @@ page {
 }
 
 .overwrite-picker-item:active {
-  background: rgba(74, 124, 89, 0.08);
+  background: #f5f5f5;
 }
 
 .overwrite-picker-name {
@@ -1330,19 +1330,19 @@ page {
 .overwrite-picker-tag {
   font-size: 22rpx;
   padding: 2rpx 12rpx;
-  border-radius: 6rpx;
+  border-radius: 4rpx;
   font-weight: 400;
   flex-shrink: 0;
 }
 
 .overwrite-picker-tag.cloud {
-  background: rgba(74, 124, 89, 0.12);
-  color: #4a7c59;
+  background: #f5f5f5;
+  color: #1a1a1a;
 }
 
 .overwrite-picker-tag.local {
-  background: rgba(230, 162, 60, 0.12);
-  color: #e6a23c;
+  background: #f5f5f5;
+  color: #404040;
 }
 
 .overwrite-picker-meta {
@@ -1398,7 +1398,8 @@ page {
   left: 0;
   right: 0;
   background: #ffffff;
-  border-radius: 24rpx 24rpx 0 0;
+  border-radius: 0;
+  border-top: 1rpx solid #1a1a1a;
   z-index: 1001;
   transform: translateY(100%);
   transition: transform 0.3s ease;
@@ -1423,6 +1424,7 @@ page {
   font-size: 32rpx;
   font-weight: 600;
   color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
 }
 
 .filter-panel-close {
@@ -1448,7 +1450,8 @@ page {
 .filter-group-label {
   font-size: 26rpx;
   font-weight: 600;
-  color: #333;
+  color: #404040;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
   margin-bottom: 16rpx;
   display: block;
 }
@@ -1461,18 +1464,18 @@ page {
 
 .filter-tag {
   padding: 12rpx 28rpx;
-  border-radius: 8rpx;
+  border-radius: 0;
   font-size: 24rpx;
-  color: #666;
-  background: rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: #1a1a1a;
+  background: transparent;
+  border: 1rpx solid #c8c8c8;
   transition: all 0.15s ease;
 }
 
 .filter-tag.active {
-  background: rgba(0, 0, 0, 0.8);
+  background: #1a1a1a;
   color: #ffffff;
-  border-color: rgba(0, 0, 0, 0.8);
+  border-color: #1a1a1a;
 }
 
 .filter-tag:active {
@@ -1495,15 +1498,15 @@ page {
   justify-content: center;
   font-size: 30rpx;
   font-weight: 500;
-  border-radius: 8rpx;
+  border-radius: 4rpx;
 }
 
 .filter-btn.reset {
-  background: rgba(0, 0, 0, 0.05);
+  background: #f5f5f5;
   color: #666;
 }
 
 .filter-btn.confirm {
-  background: rgba(0, 0, 0, 0.8);
+  background: #1a1a1a;
   color: #ffffff;
 }

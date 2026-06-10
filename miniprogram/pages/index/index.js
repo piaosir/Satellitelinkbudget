@@ -105,17 +105,10 @@ Page({
 
     // 卫星参数
     satelliteParams: {},
-    satelliteParamsExpandState: 'full', // 'full', 'partial', 'collapsed'
-    
+
     // 链路参数
     linkParams: {},
-    uplinkParamsExpandState: 'full', // 'full', 'partial', 'collapsed'
-    downlinkParamsExpandState: 'full', // 'full', 'partial', 'collapsed'
-    carrierParamsExpandState: 'full', // 'full', 'partial', 'collapsed' - 基带参数默改为默认全展开
-    
-    // 计算结果展开状态
-    resultsExpandState: 'full', // 'full', 'partial', 'collapsed'
-    
+
     // 噪声比模式
     noiseRatioMode: 'ebno', // 'ebno' 或 'esno'
 
@@ -186,7 +179,6 @@ Page({
     sunOutageCalculating: false,
     sunOutageResultReady: false,
     sunOutageResult: null,
-    sunOutageShowDetail: false,
     sunOutageTimeMode: 'bjt', // 'bjt' 北京时间 | 'gmt' GMT时间
     
     // 选项数据
@@ -222,6 +214,7 @@ Page({
     
     // 计算状态
     calculating: false,
+    resultsFlash: false, // 计算完成时结果区短暂高亮（非打扰式完成反馈）
     hasResults: false,
     
     // 速率计算模式: 'infoRate' 以信息速率为准, 'symbolRate' 以符号率为准
@@ -245,6 +238,9 @@ Page({
     
     // 输入框全选控制
     inputSelectAll: false,
+
+    // 当前聚焦的输入框字段（原生input的:focus伪类不可靠，用类名驱动聚焦样式）
+    focusedField: '',
     
     // 键盘高度（用于底部占位）
     keyboardHeight: 0,
@@ -340,6 +336,7 @@ Page({
     this._lastTouchY = 0;
     this._focusingInput = false;
     this._useSystemFocusAdjust = false;
+    this._preFocusScrollTop = null; // 键盘避让滚动前的阅读位置，键盘收起后回位
     this._scrollCounter = 0; // 用于确保scroll-top每次值不同以触发滚动
     try {
       const windowInfo = wx.getWindowInfo();
@@ -356,8 +353,20 @@ Page({
         this._adjustScrollForKeyboard();
       }
       if (res.height === 0 && prevHeight > 0) {
-        // 键盘收起
-        this.setData({ keyboardHeight: 0 });
+        // 键盘收起：清除聚焦高亮
+        this.setData({ focusedField: '' });
+        // 若做过键盘避让滚动且用户未手动接管，先平滑回位，
+        // 再收起底部占位（先收占位会导致内容被钳位下坠）
+        if (this._preFocusScrollTop !== null) {
+          const target = this._preFocusScrollTop;
+          this._preFocusScrollTop = null;
+          this._scrollTo(target);
+          setTimeout(() => {
+            this.setData({ keyboardHeight: 0 });
+          }, 250);
+        } else {
+          this.setData({ keyboardHeight: 0 });
+        }
       } else if (res.height > 0) {
         this.setData({ keyboardHeight: res.height });
       }
@@ -375,12 +384,15 @@ Page({
   // scroll-view滚动事件：记录滚动位置（替代onPageScroll）
   onContentScroll(e) {
     this._currentScrollTop = e.detail.scrollTop;
-    // 安卓：用户手动滚动时收起键盘，防止原生input覆盖层脱离scroll-view位置
+  },
+
+  // 用户手指开始拖动（enhanced scroll-view 专属事件，编程式滚动不会触发）
+  onContentDragStart() {
+    // 用户手动接管滚动：取消键盘收起后的自动回位
+    this._preFocusScrollTop = null;
+    // 安卓：原生input覆盖层会脱离scroll-view位置，拖动时直接收起键盘
     if (this.data.isNotIOS && this._keyboardHeight > 0) {
-      // 排除编程式滚动（聚焦输入框时的自动定位滚动）
-      if (!this._programmaticScrollUntil || Date.now() > this._programmaticScrollUntil) {
-        wx.hideKeyboard();
-      }
+      wx.hideKeyboard();
     }
   },
 
@@ -853,6 +865,18 @@ Page({
     this.setData(update);
   },
 
+  // 进入计算引擎前的卫星参数预处理：
+  // 表单输入的 SFD 以 G/Tref(dB/K) 为参考，引擎需要 G/T=0 参考的 SFD。
+  // 换算：SFD(G/T=0) = SFD(G/Tref) + G/Tref（G/T 越高越灵敏，饱和通量密度越低）
+  _engineSatParams() {
+    const sp = this.data.satelliteParams;
+    const gtRef = parseFloat(sp.sfdGtRef);
+    if (!gtRef || isNaN(gtRef)) return sp; // 0/空/非法 → 原样（向后兼容）
+    const sfd = parseFloat(sp.sfdRef);
+    if (isNaN(sfd)) return sp;
+    return { ...sp, sfdRef: sfd + gtRef };
+  },
+
   // 根据当前轨道类型路由到对应的链路预算计算模型
   calculateLinkBudget(satelliteParams, linkParams) {
     if (this.data.orbitType === 'NGSO') {
@@ -935,63 +959,9 @@ Page({
     }
   },
 
-  // 折叠/展开卫星参数 - 三态循环
-  toggleSatelliteParams() {
-    const states = ['full', 'partial', 'collapsed'];
-    const currentIndex = states.indexOf(this.data.satelliteParamsExpandState);
-    const nextIndex = (currentIndex + 1) % states.length;
-    
-    this.setData({
-      satelliteParamsExpandState: states[nextIndex]
-    });
-  },
-
-  // 折叠/展开上行站参数 - 三态循环
-  toggleUplinkParams() {
-    const states = ['full', 'partial', 'collapsed'];
-    const currentIndex = states.indexOf(this.data.uplinkParamsExpandState);
-    const nextIndex = (currentIndex + 1) % states.length;
-    
-    this.setData({
-      uplinkParamsExpandState: states[nextIndex]
-    });
-  },
-
-  // 折叠/展开接收站参数 - 三态循环
-  toggleDownlinkParams() {
-    const states = ['full', 'partial', 'collapsed'];
-    const currentIndex = states.indexOf(this.data.downlinkParamsExpandState);
-    const nextIndex = (currentIndex + 1) % states.length;
-    
-    this.setData({
-      downlinkParamsExpandState: states[nextIndex]
-    });
-  },
-
-  // 折叠/展开载波参数 - 三态循环
-  toggleCarrierParams() {
-    const states = ['full', 'partial', 'collapsed'];
-    const currentIndex = states.indexOf(this.data.carrierParamsExpandState);
-    const nextIndex = (currentIndex + 1) % states.length;
-    
-    this.setData({
-      carrierParamsExpandState: states[nextIndex]
-    });
-  },
-
-  // 折叠/展开计算结果 - 三态循环
-  toggleResults() {
-    const states = ['full', 'partial', 'collapsed'];
-    const currentIndex = states.indexOf(this.data.resultsExpandState);
-    const nextIndex = (currentIndex + 1) % states.length;
-    
-    this.setData({
-      resultsExpandState: states[nextIndex]
-    });
-  },
-
   // 卫星参数输入变化
   onSatelliteParamChange(e) {
+    this.disarmSelectAll();
     const field = e.currentTarget.dataset.field;
     const value = e.detail.value;
 
@@ -1084,10 +1054,12 @@ Page({
 
   // 输入框聚焦时全选内容 + 键盘滚动管理
   onInputFocus(e) {
-    this.setData({ inputSelectAll: true });
-    const focusArea = e && e.currentTarget && e.currentTarget.dataset
-      ? e.currentTarget.dataset.focusArea
-      : '';
+    const dataset = (e && e.currentTarget && e.currentTarget.dataset) || {};
+    this.setData({
+      inputSelectAll: true,
+      focusedField: dataset.field || ''
+    });
+    const focusArea = dataset.focusArea || '';
     this._useSystemFocusAdjust = focusArea === 'carrier' || focusArea === 'station';
 
     if (this._useSystemFocusAdjust) {
@@ -1110,7 +1082,7 @@ Page({
 
   // 余量面板输入框聚焦 - 只全选，不滚动页面
   onMarginInputFocus(e) {
-    this.setData({ inputSelectAll: true });
+    this.setData({ inputSelectAll: true, focusedField: '' });
   },
 
   // 阻止触摸移动事件，防止滚动穿透
@@ -1131,6 +1103,10 @@ Page({
 
     // 只有输入框被键盘完全遮挡时才滚动
     if (touchY > keyboardTop) {
+      // 记录本次键盘会话开始前的阅读位置（切换输入框时保留最初锚点）
+      if (this._preFocusScrollTop === null) {
+        this._preFocusScrollTop = this._currentScrollTop;
+      }
       const visibleHeight = keyboardTop;
       const targetY = visibleHeight * 0.4;
       const scrollDelta = touchY - targetY;
@@ -1141,21 +1117,24 @@ Page({
   // 通过scroll-view的scroll-top属性实现编程式滚动
   // 每次设置不同的值以确保scroll-view响应（相同值不会触发滚动）
   _scrollTo(scrollTop) {
-    // 标记编程式滚动时间窗口，防止onContentScroll误收键盘
-    this._programmaticScrollUntil = Date.now() + 400;
     this._scrollCounter++;
     this.setData({
       contentScrollTop: scrollTop + this._scrollCounter * 0.001
     });
   },
 
-  // 输入框失焦时重置全选状态
-  onInputBlur(e) {
-    this.setData({ inputSelectAll: false });
+  // 用户开始输入后立即解除全选状态：
+  // selection-start/end 若在输入过程中保持激活，后续 setData 重渲染会让
+  // 已输入内容被再次全选并被下一个按键覆盖（光标跳动），故首个按键即解除
+  disarmSelectAll() {
+    if (this.data.inputSelectAll) {
+      this.setData({ inputSelectAll: false });
+    }
   },
 
   // 链路参数输入变化
   onLinkParamChange(e) {
+    this.disarmSelectAll();
     const field = e.currentTarget.dataset.field;
     const value = e.detail.value;
     
@@ -1177,6 +1156,7 @@ Page({
 
   // 载波带宽输入变化 - 实时更新显示值
   onCarrierBandwidthInput(e) {
+    this.disarmSelectAll();
     const value = e.detail.value;
     this.setData({
       'realtimeParams.carrierBandwidth': value
@@ -1225,6 +1205,7 @@ Page({
 
   // 符号率输入变化 - 实时更新显示值
   onSymbolRateInput(e) {
+    this.disarmSelectAll();
     const value = e.detail.value;
     this.setData({
       'realtimeParams.symbolRate': value
@@ -1477,6 +1458,7 @@ Page({
 
   // FEC码率输入处理（支持分数和小数，保持原始输入格式）
   onFecInput(e) {
+    this.disarmSelectAll();
     let value = e.detail.value.trim();
     
     // 保持原始输入值（分数或小数），不进行转换
@@ -1491,6 +1473,7 @@ Page({
 
   // RS编码码率输入处理（支持分数和小数，保持原始输入格式）
   onRsCodeInput(e) {
+    this.disarmSelectAll();
     let value = e.detail.value.trim();
 
     if (this.data.rsCodeMode === 'spectral') {
@@ -1924,7 +1907,7 @@ Page({
       };
       
       const response = this.calculateLinkBudget(
-        this.data.satelliteParams,
+        this._engineSatParams(),
         linkParamsWithMode
       );
       
@@ -1948,11 +1931,14 @@ Page({
       
       // 保存到历史记录
       this.saveToHistory(results);
-      
-      wx.showToast({
-        title: '计算完成',
-        icon: 'success'
-      });
+
+      // 非打扰式完成反馈：轻震动 + 结果区短暂高亮，不弹任何遮挡层
+      wx.vibrateShort({ type: 'light' });
+      if (this._resultsFlashTimer) clearTimeout(this._resultsFlashTimer);
+      this.setData({ resultsFlash: true });
+      this._resultsFlashTimer = setTimeout(() => {
+        this.setData({ resultsFlash: false });
+      }, 700);
     } catch (error) {
       console.error('计算错误详情:', error);
       
@@ -1994,7 +1980,7 @@ Page({
       };
       
       const response = this.calculateLinkBudget(
-        this.data.satelliteParams,
+        this._engineSatParams(),
         linkParamsWithMode
       );
       
@@ -2021,8 +2007,7 @@ Page({
     // 直接使用完整的结果对象
     this.setData({
       hasResults: true,
-      results: results,
-      resultsExpandState: 'full' // 自动展开计算结果
+      results: results
     });
     // 计算完成后不再自动滚动到结果区域
   },
@@ -2556,8 +2541,7 @@ Page({
       sunOutageSatelliteIndex: this.data.satelliteIndex,
       sunOutageLatitude: this.data.sunOutageLatitude || defaultLat,
       sunOutageLongitude: this.data.sunOutageLongitude || defaultLon,
-      sunOutageResultReady: false,
-      sunOutageShowDetail: false
+      sunOutageResultReady: false
     });
   },
 
@@ -2607,10 +2591,6 @@ Page({
 
   toggleSunOutageCustomFreq() {
     this.setData({ sunOutageShowCustomFreq: !this.data.sunOutageShowCustomFreq });
-  },
-
-  toggleSunOutageDetail() {
-    this.setData({ sunOutageShowDetail: !this.data.sunOutageShowDetail });
   },
 
   toggleSunOutageTimeMode() {
@@ -2713,8 +2693,7 @@ Page({
       this.setData({
         sunOutageCalculating: false,
         sunOutageResultReady: true,
-        sunOutageResult: result,
-        sunOutageShowDetail: false
+        sunOutageResult: result
       });
     }, 50);
   },
@@ -2812,6 +2791,7 @@ Page({
 
   // 余量输入处理
   onMarginInput(e) {
+    this.disarmSelectAll();
     const value = e.detail.value;
     this.setData({
       marginValue: value,
@@ -2945,7 +2925,7 @@ Page({
         
         // 执行计算
         const results = this.calculateLinkBudget(
-          this.data.satelliteParams,
+          this._engineSatParams(),
           tempLinkParams
         );
         
@@ -3103,7 +3083,7 @@ Page({
       };
       
       // 调用计算函数
-      const results = this.calculateLinkBudget(this.data.satelliteParams, linkParamsWithMargin);
+      const results = this.calculateLinkBudget(this._engineSatParams(), linkParamsWithMargin);
       
       if (results.success) {
         // 频谱效率始终从当前 rsCode + 调制/FEC/扩频/滚降参数实时计算
@@ -3224,6 +3204,13 @@ Page({
     });
   },
 
+  // 内容区点击：余量弹窗为非模态，点击弹窗外侧收起（滚动拖拽不触发 tap，不受影响）
+  onContentTap() {
+    if (this.data.showMarginPopup) {
+      this.hideMarginPanel();
+    }
+  },
+
   // 设置计算模式
   setCalcMode(e) {
     const mode = e.currentTarget.dataset.mode;
@@ -3248,6 +3235,7 @@ Page({
 
   // 功放功率输入 - 实时反推余量并更新参数
   onPaPowerInput(e) {
+    this.disarmSelectAll();
     const value = e.detail.value;
     this.setData({
       inputPaPower: value
@@ -3309,7 +3297,7 @@ Page({
         };
         
         const results = this.calculateLinkBudget(
-          this.data.satelliteParams,
+          this._engineSatParams(),
           tempLinkParams
         );
         
@@ -3410,11 +3398,8 @@ Page({
           });
           
           wx.hideLoading();
-          wx.showToast({
-            title: `${paPower}W功放 → 余量${result.margin.toFixed(2)}dB`,
-            icon: 'success',
-            duration: 2000
-          });
+          // 反推结果已实时显示在悬浮胶囊的余量位上，轻震动确认即可，不弹居中提示
+          wx.vibrateShort({ type: 'light' });
         } else {
           throw new Error(result.message || '计算失败');
         }
@@ -3444,7 +3429,7 @@ Page({
         };
         
         const results = this.calculateLinkBudget(
-          this.data.satelliteParams,
+          this._engineSatParams(),
           tempLinkParams
         );
         
