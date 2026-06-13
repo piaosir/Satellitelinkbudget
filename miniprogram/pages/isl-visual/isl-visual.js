@@ -5,7 +5,7 @@
 const RE = 6378.137;          // 地球赤道半径 km (WGS-84，与链路计算一致)
 const C_KM_S = 299792.458;    // 光速 km/s
 const DEG = Math.PI / 180;
-const COASTLINE = require('./coastline.js'); // 陆地/海岸线轮廓折线 [[lon,lat,...], ...]（度）
+const COASTLINE = require('./coastline.js'); // 海岸线 + 国界 折线 [[lon,lat,...], ...]（度）
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const num = (v, def) => {
@@ -251,12 +251,13 @@ Page({
   },
 
   // 旋转 + 正交投影
+  // yaw/pitch 的 cos/sin 每帧只算一次(由 _draw 缓存到 this)，避免逐点重复三角运算
   _project(x, y, z, cx, cy, scale) {
-    const cy0 = Math.cos(this._yaw), sy0 = Math.sin(this._yaw);
+    const cy0 = this._cYaw, sy0 = this._sYaw;
     let x1 = x * cy0 + z * sy0;
     let z1 = -x * sy0 + z * cy0;
     let y1 = y;
-    const cp = Math.cos(this._pitch), sp = Math.sin(this._pitch);
+    const cp = this._cPitch, sp = this._sPitch;
     let y2 = y1 * cp - z1 * sp;
     let z2 = y1 * sp + z1 * cp;
     return { x: cx + x1 * scale, y: cy - y2 * scale, z: z2 };
@@ -299,6 +300,10 @@ Page({
     const w = this._cw, h = this._ch;
     const cx = w / 2, cy = h / 2;
     ctx.clearRect(0, 0, w, h);
+
+    // 本帧旋转矩阵的三角量缓存，供 _project 逐点复用
+    this._cYaw = Math.cos(this._yaw); this._sYaw = Math.sin(this._yaw);
+    this._cPitch = Math.cos(this._pitch); this._sPitch = Math.sin(this._pitch);
 
     const d = this.data;
     const R1 = RE + num(d.h1, 0), R2 = RE + num(d.h2, 0);
@@ -453,10 +458,14 @@ Page({
   },
 
   // 陆地/海岸线轮廓：每条折线投到地球表面（与经纬网同坐标系：极轴=Y，经度0在+X，绕Y到+Z）
-  // 复用 _drawPath，背面自动虚淡，正面实线
-  _drawCoastline(cx, cy, scale, Rpx) {
+  // 复用 _drawPath，背面自动虚淡，正面实线。
+  // 球面 XYZ 与经纬度无关、不随旋转变化，故首帧构建一次缓存到 this._coastXYZ，
+  // 后续帧只做投影，避免对 2 万+ 点逐帧重复三角运算（50m 数据下这是性能关键）。
+  _buildCoastXYZ() {
+    const polys = [];
     for (let p = 0; p < COASTLINE.length; p++) {
       const poly = COASTLINE[p];
+      if (poly.length < 4) continue;
       const pts = [];
       for (let k = 0; k < poly.length; k += 2) {
         const lon = poly[k] * DEG, lat = poly[k + 1] * DEG;
@@ -464,8 +473,16 @@ Page({
         // 经度取负：修正东西镜像（与 isl-visual 既有坐标系手性对齐，使大陆朝向正确）
         pts.push([RE * cl * Math.cos(lon), RE * Math.sin(lat), -RE * cl * Math.sin(lon)]);
       }
-      if (pts.length < 2) continue;
-      this._drawPath(pts, cx, cy, scale, Rpx, {
+      polys.push(pts);
+    }
+    return polys;
+  },
+
+  _drawCoastline(cx, cy, scale, Rpx) {
+    if (!this._coastXYZ) this._coastXYZ = this._buildCoastXYZ();
+    const polys = this._coastXYZ;
+    for (let p = 0; p < polys.length; p++) {
+      this._drawPath(polys[p], cx, cy, scale, Rpx, {
         color: 'rgba(150,185,215,0.55)',
         hiddenColor: 'rgba(150,185,215,0.08)',
         width: 0.7
