@@ -13,7 +13,8 @@ const RE = 6378.137;          // 地球赤道半径 km
 const DEG = Math.PI / 180;
 const ENV_ID = 'cloud1-8gjv5ekx41d6fb76';
 const BUCKET = '636c-cloud1-8gjv5ekx41d6fb76-1385987144';
-const MAX_RENDER = 2500;      // 渲染点数上限（数据全保留，仅渲染抽稀以保流畅）
+const MAX_RENDER = 3000;      // 单分组渲染点数上限（数据全保留，仅渲染抽稀以保流畅）
+const MAX_RENDER_ALL = 3500; // “全部卫星”模式渲染上限：先放满非 Starlink，再用 Starlink 垫到该数
 
 // Starlink 太大(~1.77MB)，云函数 60s 内拉不动 -> 前端众包（见 utils/tleStore）：
 // 启动时已后台刷新云存储；进入本页时若云存储无当天数据，再本机直连兜底拉取。
@@ -402,42 +403,52 @@ Page({
     this._meta = meta;
     this.setData({
       satCount: recs.length,
-      dataTime: (data && data.fetchedAt) ? this._fmt(new Date(data.fetchedAt)) : '—'
+      dataTime: (data && data.fetchedAt) ? this._fmtDate(new Date(data.fetchedAt)) : '—'
     });
     this._computePositions();
+  },
+
+  // 均匀抽稀：从 arr 取 n 个（n>=length 则原样返回）
+  _decimate(arr, n) {
+    if (arr.length <= n) return arr;
+    const out = [], step = arr.length / n;
+    for (let k = 0; k < n; k++) out.push(arr[Math.floor(k * step)]);
+    return out;
   },
 
   // 对全部卫星算“此刻”地固坐标 -> 渲染坐标；超出上限则均匀抽稀渲染
   _computePositions() {
     const now = new Date();
     const gmst = sat.gstime(now);
-    const recs = this._recs;
+    const recs = this._recs, meta = this._meta;
     const all = [];
     for (let i = 0; i < recs.length; i++) {
       const pv = sat.propagate(recs[i], now);
       if (!pv || !pv.position) continue;
-      const ecf = sat.eciToEcf(pv.position, gmst);
-      all.push({ idx: i, pos: ecefToRender(ecf) });
+      all.push({ idx: i, pos: ecefToRender(sat.eciToEcf(pv.position, gmst)) });
     }
+
     // 抽稀（仅渲染层面，数据/点击仍基于全量 _recs）
-    let render = all, decimated = false;
-    if (all.length > MAX_RENDER) {
-      const step = all.length / MAX_RENDER;
-      render = [];
-      for (let k = 0; k < MAX_RENDER; k++) render.push(all[Math.floor(k * step)]);
-      decimated = true;
+    let render;
+    if (GROUPS[this.data.groupIndex].key === 'all') {
+      // “全部”模式：先放满非 Starlink，再用 Starlink 垫满到 MAX_RENDER_ALL（Starlink 最后绘制，叠在最上）
+      const nonStar = [], star = [];
+      for (let i = 0; i < all.length; i++) {
+        const m = meta[all[i].idx];
+        (m && m.group === 'starlink' ? star : nonStar).push(all[i]);
+      }
+      const head = this._decimate(nonStar, MAX_RENDER_ALL);
+      const remain = MAX_RENDER_ALL - head.length;
+      render = remain > 0 ? head.concat(this._decimate(star, remain)) : head;
+    } else {
+      render = this._decimate(all, MAX_RENDER);
     }
     this._render = render;
+
     // 若已选中某星，刷新它的轨道/足迹
     if (this._selIdx >= 0) this._buildSelectedGeometry(this._selIdx, now, gmst);
 
-    this.setData({
-      loading: false,
-      statusText: '',
-      shownCount: render.length,
-      decimated,
-      calcTime: this._fmt(now)
-    });
+    this.setData({ loading: false, statusText: '', calcTime: this._fmt(now) });
 
     // 跨分组搜索切组后：定位待选卫星
     if (this._pendingNorad) {
@@ -450,6 +461,10 @@ Page({
   _fmt(d) {
     const p = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  },
+  _fmtDate(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   },
 
   // ===================== 选中卫星几何 =====================
