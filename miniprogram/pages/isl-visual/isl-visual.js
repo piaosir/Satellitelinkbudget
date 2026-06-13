@@ -5,6 +5,7 @@
 const RE = 6378.137;          // 地球赤道半径 km (WGS-84，与链路计算一致)
 const C_KM_S = 299792.458;    // 光速 km/s
 const DEG = Math.PI / 180;
+const COASTLINE = require('./coastline.js'); // 陆地/海岸线轮廓折线 [[lon,lat,...], ...]（度）
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const num = (v, def) => {
@@ -15,9 +16,9 @@ const num = (v, def) => {
 Page({
   data: {
     // 卫星1 轨道根数
-    h1: '1145', i1: '53', raan1: '100', u1: '250',
+    h1: '1145', i1: '53', raan1: '10', u1: '265',
     // 卫星2 轨道根数
-    h2: '1145', i2: '53', raan2: '120', u2: '245',
+    h2: '1145', i2: '53', raan2: '30', u2: '255',
     // 大气遮挡高度 (km)：视距切线需高于 RE+clearance（默认 100 km 大气层/卡门线）
     clearance: '100',
     // 计算结果
@@ -87,11 +88,11 @@ Page({
     ];
   },
 
-  // 地球站地表位置（与经纬网同一坐标系：极轴=Y，经度 0 在 +X）
+  // 地球站地表位置（与海岸线同一坐标系：极轴=Y，经度 0 在 +X，经度取负以对齐地图朝向）
   _stationPos(latDeg, lonDeg) {
     const lat = latDeg * DEG, lon = lonDeg * DEG;
     const cl = Math.cos(lat);
-    return [RE * cl * Math.cos(lon), RE * Math.sin(lat), RE * cl * Math.sin(lon)];
+    return [RE * cl * Math.cos(lon), RE * Math.sin(lat), -RE * cl * Math.sin(lon)];
   },
 
   // 地球站到卫星的斜距 / 仰角 / 方位角（本地 ENU 坐标，极轴=Y）
@@ -334,6 +335,7 @@ Page({
     ctx.stroke();
 
     this._drawGraticule(cx, cy, scale, Rpx);
+    this._drawCoastline(cx, cy, scale, Rpx);
 
     const show1 = d.show1, show2 = d.show2, showSt = d.showStation;
 
@@ -446,6 +448,27 @@ Page({
         color: 'rgba(150,180,210,0.14)',
         hiddenColor: 'rgba(150,180,210,0.04)',
         width: 0.6
+      });
+    }
+  },
+
+  // 陆地/海岸线轮廓：每条折线投到地球表面（与经纬网同坐标系：极轴=Y，经度0在+X，绕Y到+Z）
+  // 复用 _drawPath，背面自动虚淡，正面实线
+  _drawCoastline(cx, cy, scale, Rpx) {
+    for (let p = 0; p < COASTLINE.length; p++) {
+      const poly = COASTLINE[p];
+      const pts = [];
+      for (let k = 0; k < poly.length; k += 2) {
+        const lon = poly[k] * DEG, lat = poly[k + 1] * DEG;
+        const cl = Math.cos(lat);
+        // 经度取负：修正东西镜像（与 isl-visual 既有坐标系手性对齐，使大陆朝向正确）
+        pts.push([RE * cl * Math.cos(lon), RE * Math.sin(lat), -RE * cl * Math.sin(lon)]);
+      }
+      if (pts.length < 2) continue;
+      this._drawPath(pts, cx, cy, scale, Rpx, {
+        color: 'rgba(150,185,215,0.55)',
+        hiddenColor: 'rgba(150,185,215,0.08)',
+        width: 0.7
       });
     }
   },
