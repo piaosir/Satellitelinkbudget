@@ -24,7 +24,8 @@ const path = require('path');
 
 const INPUT = process.argv[2] || 'C:\\tmp\\countries-50m.json';
 const TOL = parseFloat(process.argv[3]) || 0.2; // Douglas-Peucker 容差(度)，小地球视图下 0.2 形状足够且文件轻量
-const OUTPUT = path.join(__dirname, '..', 'miniprogram', 'pages', 'isl-visual', 'coastline.js');
+const OUTPUT = process.argv[4] || path.join(__dirname, '..', 'miniprogram', 'pages', 'isl-visual', 'coastline.js');
+const LEVEL = process.argv[5] || '50m'; // 仅用于输出文件头注释标注数据档位
 
 const topo = JSON.parse(fs.readFileSync(INPUT, 'utf-8'));
 const { scale, translate } = topo.transform;
@@ -98,8 +99,8 @@ for (const arc of topo.arcs) {
 }
 
 const header =
-  '// 海岸线 + 国界 折线（Natural Earth 1:50m countries via world-atlas, 公有领域）\n' +
-  '// 每条折线为扁平 [lon,lat,lon,lat,...]（度）。isl-visual 转成球面点用 _drawPath 绘制。\n' +
+  `// 海岸线 + 国界 折线（Natural Earth 1:${LEVEL} countries via world-atlas, 公有领域）\n` +
+  '// 每条折线为扁平 [lon,lat,lon,lat,...]（度）。转成球面点用 _drawPath 绘制。\n' +
   'module.exports = ';
 const body = '[' + polylines.map(p => '[' + p.join(',') + ']').join(',') + '];\n';
 

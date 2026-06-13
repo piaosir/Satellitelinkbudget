@@ -1,0 +1,9 @@
+{
+  "name": "fetchTLE",
+  "version": "1.0.0",
+  "description": "定时从 CelesTrak 下载各星座 TLE 写入云存储",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

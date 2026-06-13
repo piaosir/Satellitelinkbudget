@@ -1,0 +1,229 @@
+// cloudfunctions/fetchTLE/index.js
+// 从 CelesTrak 下载各星座 TLE，解析为结构化 JSON 写入云存储 celestrak/<group>.json。
+//
+// 触发方式（避免一次跑完所有组导致 60s 超时；starlink 太慢，单独触发器跑）：
+//   - 定时触发器 dailyMain     ：刷新除 starlink 外的全部分组（见 config.json）。
+//   - 定时触发器 dailyStarlink ：只刷新 starlink。
+//   - 手动 wx.cloud.callFunction({ name:'fetchTLE', data:{ group:'starlink' } })：刷新单组。
+//   - 手动 data:{} 或不带参      ：刷新除 starlink 外的全部分组（主集合）。
+//
+// 跨分组搜索索引 _index.json：每次运行都从已保存的各组名单文件 _names_<group>.json 重建，
+//   因此即使某次只刷新部分组、或某组失败，索引仍包含所有“曾成功保存过”的组（含 starlink）。
+//
+// 注意：云存储存的是 TLE 文本（轨道根数），不是坐标。SGP4 推演在前端打开页面时做一次，
+//       这样看到的才是“此刻”真实位置（LEO 每秒移动约 7.5km，云端预存坐标会严重过期）。
+
+const cloud = require('wx-server-sdk');
+const https = require('https');
+const zlib = require('zlib');
+
+const ENV_ID = 'cloud1-8gjv5ekx41d6fb76';
+const BUCKET = '636c-cloud1-8gjv5ekx41d6fb76-1385987144';
+cloud.init({ env: ENV_ID });
+
+const fileID = (path) => `cloud://${ENV_ID}.${BUCKET}/${path}`;
+
+// 显示名 → CelesTrak GP 查询参数。Guowang(国网) 无专门 GROUP，用按名称查询 NAME=GUOWANG。
+const GROUPS = {
+  starlink: { query: 'GROUP=starlink', label: 'Starlink' },
+  oneweb:   { query: 'GROUP=oneweb',   label: 'OneWeb' },
+  gps:      { query: 'GROUP=gps-ops',  label: 'GPS' },
+  beidou:   { query: 'GROUP=beidou',   label: '北斗 BeiDou' },
+  galileo:  { query: 'GROUP=galileo',  label: 'Galileo' },
+  qianfan:  { query: 'GROUP=qianfan',  label: '千帆 Qianfan' },
+  guowang:  { query: 'NAME=HULIANWANG', label: '国网 Guowang' }, // 国网/互联网低轨真实星名为 HULIANWANG（173 颗）；GUOWANG 仅 4 个测试星
+  geo:      { query: 'GROUP=geo',      label: 'GEO 地球静止' },
+  glonass:    { query: 'GROUP=glo-ops',      label: 'GLONASS' },      // 俄 GNSS（MEO，星名 COSMOS）
+  o3b:        { query: 'NAME=O3B',           label: 'O3b' },          // SES O3b/mPOWER（MEO 通信）；无 GROUP，按名称查
+  iridium:    { query: 'GROUP=iridium-NEXT', label: '铱星 Iridium' }, // 铱星 NEXT（LEO 通信）
+  globalstar: { query: 'GROUP=globalstar',   label: 'Globalstar' },   // Globalstar（LEO 通信）
+  stations:   { query: 'GROUP=stations',     label: '空间站' }        // ISS/天宫 等空间站
+};
+
+const CELESTRAK_HOST = 'celestrak.org';
+const MAIN_KEYS = Object.keys(GROUPS).filter((k) => k !== 'starlink'); // 主集合：除 starlink 外全部
+
+function httpsGetText(url) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, {
+      headers: {
+        'User-Agent': 'SatLinkBudget-MiniProgram/1.0 (TLE constellation map)',
+        // 启用压缩：境外大文件(如 Starlink 1.5MB)压缩后 ~300KB，下载快数倍，避免 60s 超时
+        'Accept-Encoding': 'gzip, deflate'
+      },
+      timeout: 25000
+    }, (res) => {
+      // 跟随一次重定向（CelesTrak 偶有 301/302）
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        return resolve(httpsGetText(res.headers.location));
+      }
+      if (res.statusCode !== 200) {
+        // CelesTrak 对“数据自上次下载后未更新”的重复请求返回 403 提示页 -> 视为未更新（非失败）
+        let b = '';
+        res.on('data', (c) => { b += c; });
+        res.on('end', () => {
+          if (res.statusCode === 403 && /not updated/i.test(b)) return reject(new Error('NOT_MODIFIED'));
+          reject(new Error(`HTTP ${res.statusCode}${b ? '：' + b.slice(0, 80).replace(/\s+/g, ' ') : ''}`));
+        });
+        return;
+      }
+      // 按响应的 content-encoding 解压（不支持时服务器返回原文，无 encoding 头）
+      const enc = (res.headers['content-encoding'] || '').toLowerCase();
+      let stream = res;
+      if (enc === 'gzip') stream = res.pipe(zlib.createGunzip());
+      else if (enc === 'deflate') stream = res.pipe(zlib.createInflate());
+      const chunks = [];
+      stream.on('data', (c) => chunks.push(c));
+      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      stream.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(new Error('请求超时')));
+    req.on('error', reject);
+  });
+}
+
+// 带 1 次重试（处理 CelesTrak 偶发请求超时）；“未更新”不重试，直接上抛
+async function httpsGetTextRetry(url) {
+  try {
+    return await httpsGetText(url);
+  } catch (e) {
+    if (e.message === 'NOT_MODIFIED') throw e;
+    return await httpsGetText(url);
+  }
+}
+
+// 把 TLE 文本解析为 [{ name, noradId, line1, line2 }]
+function parseTLE(text) {
+  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+$/, '')).filter((l) => l.length > 0);
+  const sats = [];
+  let pendingName = '';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('1 ') && i + 1 < lines.length && lines[i + 1].startsWith('2 ')) {
+      const line1 = line;
+      const line2 = lines[i + 1];
+      const noradId = line1.substring(2, 7).trim();
+      const name = pendingName || `NORAD ${noradId}`;
+      sats.push({ name: name.trim(), noradId, line1, line2 });
+      pendingName = '';
+      i += 1; // 跳过已消费的 line2
+    } else if (!line.startsWith('1 ') && !line.startsWith('2 ')) {
+      pendingName = line; // 名称行
+    }
+  }
+  return sats;
+}
+
+function uploadJSON(cloudPath, obj) {
+  return cloud.uploadFile({
+    cloudPath,
+    fileContent: Buffer.from(JSON.stringify(obj), 'utf8')
+  });
+}
+
+async function refreshGroup(key) {
+  const g = GROUPS[key];
+  if (!g) throw new Error(`未知分组：${key}`);
+  const url = `https://${CELESTRAK_HOST}/NORAD/elements/gp.php?${g.query}&FORMAT=tle`;
+  const t0 = Date.now();
+  let text;
+  try {
+    text = await httpsGetTextRetry(url);
+  } catch (e) {
+    if (e.message === 'NOT_MODIFIED') {
+      console.log(`[fetchTLE] ${key} 未更新，沿用现有云存储数据`);
+      return { group: key, notModified: true };
+    }
+    throw e;
+  }
+  console.log(`[fetchTLE] ${key} 下载完成：${(text.length / 1024).toFixed(0)}KB / ${Date.now() - t0}ms`);
+
+  // CelesTrak 查询失败会返回纯文本提示（如 "Invalid query" / "No GP data found"）
+  if (!/^1 /m.test(text)) {
+    throw new Error(`无有效 TLE（返回："${text.slice(0, 80).replace(/\s+/g, ' ')}"）`);
+  }
+
+  const sats = parseTLE(text);
+  if (sats.length === 0) throw new Error('解析后卫星数为 0');
+
+  const fetchedAt = new Date().toISOString();
+  const names = sats.map((s) => ({ name: s.name, noradId: s.noradId }));
+
+  // 单文件内联存储（含 starlink）。gzip 下载后体积小、Tencent 内网上传快、前端走国内 CDN 下载快，
+  // 不再切块，避免一次调用做十几次云存储 IO 叠加超时。
+  await uploadJSON(`celestrak/${key}.json`, {
+    group: key, label: g.label, source: url, fetchedAt, count: sats.length, sats
+  });
+  // 精简名单文件（仅名称+编号，供跨分组索引重建用）
+  await uploadJSON(`celestrak/_names_${key}.json`, { group: key, label: g.label, fetchedAt, names });
+
+  return { group: key, count: sats.length };
+}
+
+// 下载并解析云存储 JSON（云函数侧）；不存在返回 null
+async function downloadJSON(path) {
+  try {
+    const r = await cloud.downloadFile({ fileID: fileID(path) });
+    return JSON.parse(r.fileContent.toString('utf8'));
+  } catch (e) {
+    return null;
+  }
+}
+
+// 从所有已保存的 _names_<group>.json 重建跨分组索引 _index.json
+async function rebuildIndex() {
+  const keys = Object.keys(GROUPS);
+  const lists = await Promise.all(keys.map(async (k) => {
+    const d = await downloadJSON(`celestrak/_names_${k}.json`);
+    if (!d || !d.names) return [];
+    return d.names.map((n) => ({ name: n.name, noradId: n.noradId, group: k }));
+  }));
+  const index = [].concat.apply([], lists);
+  await uploadJSON('celestrak/_index.json', { builtAt: new Date().toISOString(), count: index.length, sats: index });
+  return index.length;
+}
+
+// 决定本次运行刷新哪些分组：
+//   event.group 指定单组；定时触发器 dailyStarlink 只跑 starlink；
+//   其余（dailyMain 定时 / 手动 {}）跑主集合（除 starlink 外全部）。
+function pickKeys(event) {
+  if (event && event.group) return [event.group];
+  const trigger = event && (event.TriggerName || event.triggerName);
+  if (trigger === 'dailyStarlink') return ['starlink'];
+  return MAIN_KEYS;
+}
+
+exports.main = async (event) => {
+  const keys = pickKeys(event);
+  const results = await Promise.all(keys.map(async (key) => {
+    try {
+      const r = await refreshGroup(key);
+      if (!r.notModified) console.log(`[fetchTLE] ${key} 完成：${r.count} 颗`);
+      return { ...r, success: true };
+    } catch (err) {
+      console.error(`[fetchTLE] ${key} 失败：`, err.message);
+      return { group: key, success: false, errMsg: err.message };
+    }
+  }));
+
+  // 重建跨分组索引。starlink 单独运行时跳过（省时间、确保 starlink 这次调用压进 60s）；
+  // 索引由跑主集合的 {} / dailyMain 重建，会读取 starlink 上次保存的 _names_starlink.json。
+  const starlinkOnly = keys.length === 1 && keys[0] === 'starlink';
+  let indexCount = -1;
+  if (!starlinkOnly) {
+    try {
+      indexCount = await rebuildIndex();
+      console.log(`[fetchTLE] 索引重建：${indexCount} 条`);
+    } catch (e) {
+      console.error('[fetchTLE] 索引重建失败：', e.message);
+    }
+  }
+
+  return {
+    success: results.every((r) => r.success),
+    updatedAt: new Date().toISOString(),
+    indexCount,
+    results
+  };
+};

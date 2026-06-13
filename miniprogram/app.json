@@ -21,6 +21,11 @@
       "root": "pages/isl-visual",
       "name": "isl-visual",
       "pages": ["isl-visual"]
+    },
+    {
+      "root": "pages/constellation-map",
+      "name": "constellation-map",
+      "pages": ["constellation-map"]
     }
   ],
   "permission": {

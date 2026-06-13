@@ -1,0 +1,73 @@
+<view class="page">
+  <!-- 顶部控制条 -->
+  <view class="ctrl-zone">
+    <view class="ctrl-row">
+      <picker class="grp-picker" mode="selector" range="{{groups}}" range-key="label"
+              value="{{groupIndex}}" bindchange="onGroupChange">
+        <view class="grp-value">{{groups[groupIndex].label}} <text class="grp-caret">▾</text></view>
+      </picker>
+      <view class="search-box">
+        <input class="search-input" value="{{keyword}}" placeholder="搜索卫星名 / 编号"
+               confirm-type="search" bindinput="onSearchInput" />
+        <text wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">✕</text>
+      </view>
+    </view>
+    <view class="ctrl-row btn-row">
+      <view class="btn-mini" bindtap="refreshNow">刷新此刻</view>
+      <view class="btn-mini {{autoRotate ? 'btn-on' : ''}}" bindtap="toggleRotate">{{autoRotate ? '旋转中' : '旋转停'}}</view>
+      <view class="btn-mini {{liveRefresh ? 'btn-on' : ''}}" bindtap="toggleRefresh">{{liveRefresh ? '实时开' : '实时关'}}</view>
+      <view class="meta-inline">
+        <text wx:if="{{loading}}" class="meta-load">{{statusText}}</text>
+        <block wx:else>
+          <text class="meta-item">在轨 {{satCount}}</text>
+          <text class="meta-item" wx:if="{{decimated}}">渲染 {{shownCount}}</text>
+          <text class="meta-item">数据 {{dataTime}}</text>
+        </block>
+      </view>
+    </view>
+    <view wx:if="{{statusText && !loading}}" class="meta-warn">{{statusText}}</view>
+
+    <!-- 搜索结果下拉 -->
+    <view wx:if="{{searchResults.length}}" class="search-panel">
+      <scroll-view scroll-y class="search-scroll">
+        <view wx:for="{{searchResults}}" wx:key="noradId" class="search-item"
+              data-norad="{{item.noradId}}" data-group="{{item.group}}" bindtap="onPickResult">
+          <text class="si-name">{{item.name}}</text>
+          <text class="si-sub">{{item.groupLabel}} · NORAD {{item.noradId}}<text wx:if="{{item.slot}}"> · {{item.slot}}</text></text>
+        </view>
+      </scroll-view>
+    </view>
+  </view>
+
+  <!-- 3D 地球 -->
+  <view class="globe-wrap">
+    <canvas type="2d" id="globeCanvas" class="globe-canvas"
+      bindtouchstart="onTouchStart" catchtouchmove="onTouchMove"
+      bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"></canvas>
+    <view class="globe-hint">轻触星点查看 · 拖动旋转 · 双指缩放</view>
+  </view>
+
+  <!-- 选中卫星信息卡 -->
+  <view class="sat-card {{selected ? 'show' : ''}}" wx:if="{{selected}}">
+    <view class="card-head">
+      <view class="card-title-wrap">
+        <text class="card-name">{{selected.name}}</text>
+        <text wx:if="{{selected.slot}}" class="card-slot">{{selected.slot}}</text>
+      </view>
+      <text class="card-close" bindtap="closeCard">✕</text>
+    </view>
+    <view class="card-grid">
+      <view class="kv"><text class="k">NORAD</text><text class="v">{{selected.noradId}}</text></view>
+      <view class="kv"><text class="k">高度</text><text class="v">{{selected.alt}} km</text></view>
+      <view class="kv"><text class="k">对地速度</text><text class="v">{{selected.speed}} km/s</text></view>
+      <view class="kv"><text class="k">轨道周期</text><text class="v">{{selected.period}} min</text></view>
+      <view class="kv"><text class="k">倾角</text><text class="v">{{selected.incl}}°</text></view>
+      <view class="kv"><text class="k">星下点</text><text class="v">{{selected.lat}}, {{selected.lon}}</text></view>
+    </view>
+    <view class="card-legend">
+      <text class="lg"><text class="lg-dot dot-orbit"></text>轨道</text>
+      <text class="lg"><text class="lg-dot dot-track"></text>星下点轨迹</text>
+      <text class="lg"><text class="lg-dot dot-foot"></text>覆盖足迹</text>
+    </view>
+  </view>
+</view>

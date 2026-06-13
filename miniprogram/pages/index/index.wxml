@@ -65,7 +65,7 @@
       </view>
       <view class="visual-option" bindtap="goToCoverageMap">
         <view class="visual-option-icon">
-          <view class="option-icon icon-coverage"></view>
+          <view class="option-icon icon-coverage-cn"></view>
         </view>
         <view class="visual-option-content">
           <text class="visual-option-title">卫星覆盖</text>
@@ -78,8 +78,18 @@
           <view class="option-icon icon-isl"></view>
         </view>
         <view class="visual-option-content">
-          <text class="visual-option-title">星间链路ISL</text>
-          <text class="visual-option-desc">3D地球展示两星几何，计算最大星间链路长度</text>
+          <text class="visual-option-title">星间链路分析</text>
+          <text class="visual-option-desc">两星链路几何与最大链路长度</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
+      <view class="visual-option" bindtap="goToConstellationMap">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-coverage"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">星座地图</text>
+          <text class="visual-option-desc">3D地球查看各星座实时星位</text>
         </view>
         <view class="visual-option-arrow">›</view>
       </view>

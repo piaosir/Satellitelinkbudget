@@ -2349,6 +2349,14 @@ Page({
     });
   },
 
+  // 跳转到星座地图页面（从云存储读 TLE，前端 SGP4 算当前星位）
+  goToConstellationMap() {
+    this.setData({ showVisualPopup: false });
+    wx.navigateTo({
+      url: '/pages/constellation-map/constellation-map'
+    });
+  },
+
   // 显示方位仰角工具面板
   showAzElToolPanel() {
     const defaultLat = this.data.linkParams.latitude || '';

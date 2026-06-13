@@ -1693,27 +1693,34 @@ page {
 }
 
 .option-icon {
-  width: 36rpx;
-  height: 36rpx;
+  width: 48rpx;
+  height: 48rpx;
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
 }
 
 .icon-ar-satellite {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7V5a2 2 0 0 1 2-2h2'%3E%3C/path%3E%3Cpath d='M17 3h2a2 2 0 0 1 2 2v2'%3E%3C/path%3E%3Cpath d='M21 17v2a2 2 0 0 1-2 2h-2'%3E%3C/path%3E%3Cpath d='M7 21H5a2 2 0 0 1-2-2v-2'%3E%3C/path%3E%3Ccircle cx='12' cy='12' r='3'%3E%3C/circle%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7V5a2 2 0 0 1 2-2h2'%3E%3C/path%3E%3Cpath d='M17 3h2a2 2 0 0 1 2 2v2'%3E%3C/path%3E%3Cpath d='M21 17v2a2 2 0 0 1-2 2h-2'%3E%3C/path%3E%3Cpath d='M7 21H5a2 2 0 0 1-2-2v-2'%3E%3C/path%3E%3Ccircle cx='12' cy='12' r='3'%3E%3C/circle%3E%3C/svg%3E");
 }
 
 .icon-coverage {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpath d='M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20'%3E%3C/path%3E%3Cpath d='M2 12h20'%3E%3C/path%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'%3E%3C/circle%3E%3Cpath d='M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20'%3E%3C/path%3E%3Cpath d='M2 12h20'%3E%3C/path%3E%3C/svg%3E");
+}
+
+/* 卫星覆盖：中国国土轮廓（取自 Natural Earth 1:10m 国界，投影简化）。viewBox 收紧到轮廓 bbox 以撑满图标 */
+.icon-coverage-cn {
+  width: 60rpx;
+  height: 60rpx;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='1.5 4.5 21 15' fill='none' stroke='%231f2937' stroke-width='0.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.8 12.5 L2.7 11.9 L3 11.8 L2.9 11.4 L2.5 11.3 L2.6 10.8 L4.6 10 L4.7 9.6 L4.4 8.9 L5.3 8.8 L5.4 8 L6.2 8.1 L6.6 7.3 L7.7 7.8 L7.9 8.8 L9.3 9.1 L9.6 9.7 L11.2 9.8 L12.2 10.2 L13.9 9.7 L14.4 9.4 L14.4 8.8 L14.9 9 L16.1 8.2 L16.9 8.2 L16.5 7.7 L15.5 7.6 L15.9 7 L16.7 6.9 L17.2 5.6 L18.7 5.7 L19.2 7 L20.2 7.4 L20.3 7.8 L21.5 7.6 L21 8.8 L20.3 8.9 L20.4 9.5 L20.2 9.8 L20 9.6 L19.4 10 L19.4 10.3 L19 10.1 L17.3 11.3 L17.5 10.4 L16.2 11.1 L16.6 11.9 L17.1 11.6 L17.7 11.8 L16.7 12.7 L17.5 14 L16.8 13.8 L17.5 14.3 L17 14.6 L17.6 14.7 L17.3 15.1 L17.4 15.3 L17.1 15.4 L16.9 16.1 L16.6 16.2 L16.8 16.5 L15.8 17.4 L15 17.6 L14.9 17.4 L14.9 17.7 L14.8 17.6 L14.7 17.8 L13.9 18 L13.9 18.5 L13.7 17.9 L13 17.9 L12.8 17.5 L12.3 17.3 L11.9 17.6 L11.2 17.6 L11.2 18.1 L11 17.9 L10.7 18 L10.4 17.7 L10.3 17 L9.9 17 L10.3 15.6 L10 15.3 L9.6 15.3 L9.5 14.9 L9 14.9 L8.2 15.6 L7.6 15.3 L7.3 15.7 L7.2 15.4 L6.3 15.5 L5.1 14.6 L4.8 14.7 L4.1 14.2 L4 13.7 L4.3 13.6 L3.8 12.5 Z'/%3E%3C/svg%3E");
 }
 
 .icon-az-el {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 10a7.31 7.31 0 0 0 10 10Z'/%3E%3Cpath d='m9 15 3-3'/%3E%3Cpath d='M17 13a6 6 0 0 0-6-6'/%3E%3Cpath d='M21 13A10 10 0 0 0 11 3'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 10a7.31 7.31 0 0 0 10 10Z'/%3E%3Cpath d='m9 15 3-3'/%3E%3Cpath d='M17 13a6 6 0 0 0-6-6'/%3E%3Cpath d='M21 13A10 10 0 0 0 11 3'/%3E%3C/svg%3E");
 }
 
 .icon-isl {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='5'%3E%3C/circle%3E%3Ccircle cx='4' cy='6' r='1.6' fill='%231f2937'/%3E%3Ccircle cx='20' cy='18' r='1.6' fill='%231f2937'/%3E%3Cline x1='4' y1='6' x2='20' y2='18' stroke-dasharray='2 2'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='5'%3E%3C/circle%3E%3Ccircle cx='4' cy='6' r='1.6' fill='%231f2937'/%3E%3Ccircle cx='20' cy='18' r='1.6' fill='%231f2937'/%3E%3Cline x1='4' y1='6' x2='20' y2='18' stroke-dasharray='2 2'/%3E%3C/svg%3E");
 }
 
 .visual-option-content {
@@ -2338,7 +2345,7 @@ page {
 }
 
 .icon-sun-outage {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='4' stroke='%231f2937' stroke-width='2'/%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12' stroke='%231f2937' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M6 17L18 7' stroke='%23dc2626' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='4' stroke='%231f2937' stroke-width='1.5'/%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 17L18 7' stroke='%23dc2626' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E");
 }
 
 /* ====== 键盘弹出时的底部占位 ====== */
