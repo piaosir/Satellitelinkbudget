@@ -5,8 +5,9 @@
 // 坐标系：极轴=Y、经度0在+X、绕Y到+Z、经度取负镜像（与 coastline 一致，地球固连/地理系）。
 // 卫星 ECI 先经 eciToEcf(gmstNow) 转到地固系，再 ecef[x,y,z] -> render[x, z, -y]，与海岸线天然对齐。
 
-const sat = require('../../utils/satellite.js');
-const COASTLINE = require('./coastline.js');
+const sat = require('./satellite.js');
+const COASTLINE = require('./coastline.js');        // 全精度海岸线 ~28.7k（静止/自转用）
+const COASTLINE_LO = require('./coastline-lo.js');   // 低精度海岸线 ~10.5k（拖动/缩放用，= ISL 1:50m）
 const tleStore = require('../../utils/tleStore.js');
 
 const RE = 6378.137;          // 地球赤道半径 km
@@ -78,7 +79,7 @@ Page({
   _meta: [],          // [{name, noradId}]
   _render: [],        // 渲染用：[{idx, pos:[x,y,z]}]（已抽稀）
   _screen: [],        // 每帧投影后的屏幕坐标缓存，用于点击命中
-  _coastXYZ: null,
+  _coastXYZ: null, _coastXYZLo: null,
   _selIdx: -1,        // 选中卫星在 _recs 中的下标
   _selOrbit: null, _selTrack: null, _selFootprint: null,
   _selPos: null,      // 选中卫星当前渲染坐标（保证抽稀/搜索命中也能高亮）
@@ -553,7 +554,9 @@ Page({
         const canvas = res[0].node;
         const ctx = canvas.getContext('2d');
         const info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
-        const dpr = info.pixelRatio || 2;
+        // DPR 封顶 2：iPhone 多为 DPR3，光栅化像素是 DPR2 的 2.25 倍，拖动时海岸线重绘会掉帧；
+        // 这个小地球用 2x 与 3x 肉眼几乎无差，却能显著降低 iOS 每帧光栅开销。
+        const dpr = Math.min(info.pixelRatio || 2, 2);
         canvas.width = res[0].width * dpr;
         canvas.height = res[0].height * dpr;
         ctx.scale(dpr, dpr);
@@ -728,10 +731,11 @@ Page({
     }
   },
 
-  _buildCoastXYZ() {
+  // 把扁平 [lon,lat,...] 折线集转成球面 XYZ 折线集
+  _buildCoastXYZ(src) {
     const polys = [];
-    for (let p = 0; p < COASTLINE.length; p++) {
-      const poly = COASTLINE[p];
+    for (let p = 0; p < src.length; p++) {
+      const poly = src[p];
       if (poly.length < 4) continue;
       const pts = [];
       for (let k = 0; k < poly.length; k += 2) {
@@ -744,8 +748,11 @@ Page({
   },
 
   _drawCoastline(cx, cy, scale, Rpx) {
-    if (!this._coastXYZ) this._coastXYZ = this._buildCoastXYZ();
-    const polys = this._coastXYZ;
+    if (!this._coastXYZ) this._coastXYZ = this._buildCoastXYZ(COASTLINE);        // 全精度 ~28.7k
+    if (!this._coastXYZLo) this._coastXYZLo = this._buildCoastXYZ(COASTLINE_LO); // 低精度 ~10.5k(ISL 1:50m)
+    // 仅拖动/缩放时降到低精度；静止与自转都用全精度
+    const interacting = this._dragging || this._pinching;
+    const polys = interacting ? this._coastXYZLo : this._coastXYZ;
     for (let p = 0; p < polys.length; p++) {
       this._drawPath(polys[p], cx, cy, scale, Rpx, {
         color: 'rgba(150,185,215,0.5)', hiddenColor: 'rgba(150,185,215,0.07)', width: 0.7
