@@ -1875,6 +1875,9 @@ function performCalculations(satParams, inputs) {
   results.berResult = `1×10${superscriptExp}`;
   results.ebnoResult = ebno.toFixed(2);
   results.esnoResult = esno.toFixed(2);
+  // 实际 Eb/N₀ / Es/N₀：由实际合成 C/N 折算（门限值 + 链路余量，ISL 已按份额并入合成 C/N）
+  results.ebnoActualResult = (ebno + linkmargin).toFixed(2);
+  results.esnoActualResult = (esno + linkmargin).toFixed(2);
   // 帧效率显示：保持原始输入格式（分数或小数）
   results.rsCodeResult = rsCodeOriginal;
   // FEC码率显示：保持原始输入格式（分数或小数）

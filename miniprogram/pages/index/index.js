@@ -9,6 +9,7 @@ const { getAllCities, getDisplayOrderCities, searchCities, getCityByName } = req
 const { estimateRainRate, getNearestCityInfo } = require('../../utils/rainRate');
 const { queryElevation, isElevationReady } = require('../../utils/elevation');
 const { calculateSunOutage, BAND_PARAMS } = require('../../utils/sunOutageCalculator');
+const { buildWaterfallSegments, buildLinkSummary } = require('../../utils/waterfallBuilder');
 
 // 解析分数或小数字符串的辅助函数
 function parseFractionOrDecimal(input, defaultValue) {
@@ -3552,7 +3553,10 @@ Page({
           ...JSON.parse(JSON.stringify(this.data.linkParams)),
           calcMode: this.data.calcMode,
           inputPaPower: this.data.inputPaPower,
-          margin: this.data.marginValue
+          margin: this.data.marginValue,
+          rateCalcMode: this.data.rateCalcMode,
+          symbolRate: this.data.realtimeParams.symbolRate,
+          carrierBandwidth: this.data.realtimeParams.carrierBandwidth
         },
         calculationResults: JSON.parse(JSON.stringify(results)),
         marginValue: this.data.marginValue,
@@ -3646,18 +3650,19 @@ Page({
     });
   },
 
-  // 导出选中的历史记录为Excel（含对比高亮）
-  async exportHistoryExcel() {
+  // 历史记录导出入口：点 Word/Excel/PDF 后选择「普通版（参数对比）」或「专业版（链路预算瀑布）」
+  exportHistoryWord() { this._chooseHistoryExport('word'); },
+  exportHistoryExcel() { this._chooseHistoryExport('excel'); },
+  exportHistoryPDF() { this._chooseHistoryExport('pdf'); },
+
+  // 取选中且含计算结果的记录；无选择/无可导出数据时给出提示并返回 null
+  _getSelectedHistoryRecords() {
     const { selectedHistoryIds, historyRecords } = this.data;
     if (selectedHistoryIds.length === 0) {
       wx.showToast({ title: '请先选择记录', icon: 'none' });
-      return;
+      return null;
     }
-
-    // 按选择顺序获取记录
     const selectedRecords = selectedHistoryIds.map(id => historyRecords.find(r => r.id === id)).filter(Boolean);
-
-    // 检查是否有计算结果
     const recordsWithResults = selectedRecords.filter(r => r.calculationResults);
     if (recordsWithResults.length === 0) {
       wx.showModal({
@@ -3665,228 +3670,146 @@ Page({
         content: '选中的历史记录没有计算结果数据（旧版记录不支持导出，请重新计算后再试）',
         showCancel: false
       });
-      return;
+      return null;
     }
+    return recordsWithResults;
+  },
 
-    wx.showLoading({ title: '生成Excel参数文档...', mask: true });
+  // 弹出版式选择：普通版 = 参数对比表（generateReport）；专业版 = 链路预算瀑布报告（exportLinkBudget）
+  _chooseHistoryExport(format) {
+    const recordsWithResults = this._getSelectedHistoryRecords();
+    if (!recordsWithResults) return;
+    wx.showActionSheet({
+      itemList: ['普通版（参数对比）', '专业版（链路预算瀑布）'],
+      success: (res) => {
+        if (res.tapIndex === 0) this._exportHistoryStandard(format, recordsWithResults);
+        else if (res.tapIndex === 1) this._exportHistoryPro(format, recordsWithResults);
+      }
+    });
+  },
 
+  // 打开生成的文档（共用：下载 → openDocument → 失败兜底弹窗）
+  async _openExportedDoc(fileID, fileName, fileType) {
+    const downloadRes = await wx.cloud.downloadFile({ fileID });
+    if (!downloadRes.tempFilePath) throw new Error('文件下载失败');
+    wx.hideLoading();
+    wx.openDocument({
+      filePath: downloadRes.tempFilePath,
+      showMenu: true,
+      fileType,
+      success: () => {
+        wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 });
+      },
+      fail: (err) => {
+        console.error('打开文档失败:', err);
+        wx.showModal({
+          title: '导出成功',
+          content: `文件已生成\n\n文件名: ${fileName}\n\n请点击右上角菜单转发或保存`,
+          showCancel: false
+        });
+      }
+    });
+  },
+
+  // 普通版：参数对比表（保持原行为，走 generateReport）
+  async _exportHistoryStandard(format, recordsWithResults) {
+    const cloudFormat = format === 'excel' ? 'excel-params' : format;
+    const fileType = format === 'word' ? 'docx' : (format === 'excel' ? 'xlsx' : 'pdf');
+    const storageKey = { word: 'lastHistoryWordFileID', excel: 'lastHistoryExcelFileID', pdf: 'lastHistoryPDFFileID' }[format];
+    const loadingTitle = { word: '生成Word中...', excel: '生成Excel参数文档...', pdf: '生成PDF中...' }[format];
+
+    wx.showLoading({ title: loadingTitle, mask: true });
     try {
       const configs = this._buildHistoryExportConfigs(recordsWithResults);
-
-      const lastExcelFileID = wx.getStorageSync('lastHistoryExcelFileID') || null;
-
+      const oldFileID = wx.getStorageSync(storageKey) || null;
       const res = await wx.cloud.callFunction({
         name: 'generateReport',
         data: {
-          configs: configs,
-          format: 'excel-params',
+          configs,
+          format: cloudFormat,
           lang: 'zh',
-          compareMode: recordsWithResults.length > 1,
-          oldFileID: lastExcelFileID
+          compareMode: cloudFormat === 'excel-params' && recordsWithResults.length > 1,
+          oldFileID
         }
       });
 
       if (!res.result || !res.result.success) {
         throw new Error(res.result?.error || '云函数返回错误');
       }
-
-      wx.setStorageSync('lastHistoryExcelFileID', res.result.fileID);
-
-      const downloadRes = await wx.cloud.downloadFile({
-        fileID: res.result.fileID
-      });
-
-      if (!downloadRes.tempFilePath) {
-        throw new Error('文件下载失败');
-      }
-
-      wx.hideLoading();
-
-      wx.openDocument({
-        filePath: downloadRes.tempFilePath,
-        showMenu: true,
-        fileType: 'xlsx',
-        success: () => {
-          wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 });
-        },
-        fail: (err) => {
-          console.error('打开文档失败:', err);
-          wx.showModal({
-            title: '导出成功',
-            content: `Excel文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
-            showCancel: false
-          });
-        }
-      });
+      wx.setStorageSync(storageKey, res.result.fileID);
+      await this._openExportedDoc(res.result.fileID, res.result.fileName, fileType);
     } catch (error) {
-      console.error('导出历史Excel失败:', error);
+      console.error('导出历史(普通版)失败:', error);
       wx.hideLoading();
-      wx.showModal({
-        title: '导出失败',
-        content: error.message || '无法导出Excel，请稍后重试',
-        showCancel: false
-      });
+      wx.showModal({ title: '导出失败', content: error.message || '无法导出，请稍后重试', showCancel: false });
     }
   },
 
-  // 导出选中的历史记录为Word
-  async exportHistoryWord() {
-    const { selectedHistoryIds, historyRecords } = this.data;
-    if (selectedHistoryIds.length === 0) {
-      wx.showToast({ title: '请先选择记录', icon: 'none' });
-      return;
-    }
+  // 专业版：链路预算瀑布报告（走 exportLinkBudget，多选→多链路对比 + 逐链路明细）
+  async _exportHistoryPro(format, recordsWithResults) {
+    const fileType = format === 'word' ? 'docx' : (format === 'excel' ? 'xlsx' : 'pdf');
+    const storageKey = { word: 'lastHistoryProWordFileID', excel: 'lastHistoryProExcelFileID', pdf: 'lastHistoryProPdfFileID' }[format];
+    const loadingTitle = { word: '生成 Word…', excel: '生成 Excel…', pdf: '生成 PDF…' }[format];
 
-    const selectedRecords = selectedHistoryIds.map(id => historyRecords.find(r => r.id === id)).filter(Boolean);
-    const recordsWithResults = selectedRecords.filter(r => r.calculationResults);
-    if (recordsWithResults.length === 0) {
-      wx.showModal({
-        title: '无法导出',
-        content: '选中的历史记录没有计算结果数据（旧版记录不支持导出，请重新计算后再试）',
-        showCancel: false
-      });
-      return;
-    }
-
-    wx.showLoading({ title: '生成Word中...', mask: true });
-
+    wx.showLoading({ title: loadingTitle, mask: true });
     try {
-      const configs = this._buildHistoryExportConfigs(recordsWithResults);
-
-      const lastWordFileID = wx.getStorageSync('lastHistoryWordFileID') || null;
-
+      const links = this._buildHistoryProLinks(recordsWithResults);
+      const oldFileID = wx.getStorageSync(storageKey) || null;
       const res = await wx.cloud.callFunction({
-        name: 'generateReport',
-        data: {
-          configs: configs,
-          format: 'word',
-          lang: 'zh',
-          compareMode: false,
-          oldFileID: lastWordFileID
-        }
+        name: 'exportLinkBudget',
+        data: { links, format, lang: 'zh', oldFileID }
       });
 
       if (!res.result || !res.result.success) {
         throw new Error(res.result?.error || '云函数返回错误');
       }
-
-      wx.setStorageSync('lastHistoryWordFileID', res.result.fileID);
-
-      const downloadRes = await wx.cloud.downloadFile({
-        fileID: res.result.fileID
-      });
-
-      if (!downloadRes.tempFilePath) {
-        throw new Error('文件下载失败');
-      }
-
-      wx.hideLoading();
-
-      wx.openDocument({
-        filePath: downloadRes.tempFilePath,
-        showMenu: true,
-        fileType: 'docx',
-        success: () => {
-          wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 });
-        },
-        fail: (err) => {
-          console.error('打开文档失败:', err);
-          wx.showModal({
-            title: '导出成功',
-            content: `Word文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
-            showCancel: false
-          });
-        }
-      });
+      wx.setStorageSync(storageKey, res.result.fileID);
+      await this._openExportedDoc(res.result.fileID, res.result.fileName, fileType);
     } catch (error) {
-      console.error('导出历史Word失败:', error);
+      console.error('导出历史(专业版)失败:', error);
       wx.hideLoading();
-      wx.showModal({
-        title: '导出失败',
-        content: error.message || '无法导出Word，请稍后重试',
-        showCancel: false
-      });
+      wx.showModal({ title: '导出失败', content: error.message || '无法导出，请稍后重试', showCancel: false });
     }
   },
 
-  // 导出选中的历史记录为PDF
-  async exportHistoryPDF() {
-    const { selectedHistoryIds, historyRecords } = this.data;
-    if (selectedHistoryIds.length === 0) {
-      wx.showToast({ title: '请先选择记录', icon: 'none' });
-      return;
-    }
+  // 由历史记录构建链路瀑布报告的 links 数组（每条记录 = 一条链路，含 segments + summary）
+  _buildHistoryProLinks(recordsWithResults) {
+    const historyRecords = this.data.historyRecords;
+    return recordsWithResults.map((record, fallbackIndex) => {
+      const historyPos = historyRecords.findIndex(r => r.id === record.id);
+      const seqLabel = historyPos >= 0 ? historyPos + 1 : fallbackIndex + 1;
+      const sat = record.satelliteParams || {};
+      const lp = record.linkParams || {};
+      const results = record.calculationResults || {};
+      const orbitType = record.orbitType || sat.orbitType || 'GEO';
+      const ngsoClass = record.ngsoOrbitClass || sat.ngsoOrbitClass || 'LEO';
+      const orbitLabel = orbitType === 'NGSO' ? `NGSO · ${ngsoClass}` : 'GEO';
+      const satName = record.satelliteName || sat.satelliteName || '未命名';
+      const band = record.frequencyBand || sat.frequencyBand || '';
 
-    const selectedRecords = selectedHistoryIds.map(id => historyRecords.find(r => r.id === id)).filter(Boolean);
-    const recordsWithResults = selectedRecords.filter(r => r.calculationResults);
-    if (recordsWithResults.length === 0) {
-      wx.showModal({
-        title: '无法导出',
-        content: '选中的历史记录没有计算结果数据（旧版记录不支持导出，请重新计算后再试）',
-        showCancel: false
+      const segments = buildWaterfallSegments({
+        results,
+        lang: 'zh',
+        txLocation: record.txLocation || lp.earthStationLocation || '',
+        rxLocation: record.rxLocation || lp.rxEarthStationLocation || '',
+        orbitType,
+        satelliteGT: lp.G_Ts
       });
-      return;
-    }
+      const summary = buildLinkSummary(results, { satelliteName: satName, orbitLabel, frequencyBand: band });
 
-    wx.showLoading({ title: '生成PDF中...', mask: true });
+      const subtitleParts = [satName];
+      if (band) subtitleParts.push(band + ' 频段');
+      subtitleParts.push(orbitLabel);
+      if (record.time) subtitleParts.push(record.time);
 
-    try {
-      const configs = this._buildHistoryExportConfigs(recordsWithResults);
-
-      const lastPDFFileID = wx.getStorageSync('lastHistoryPDFFileID') || null;
-
-      const res = await wx.cloud.callFunction({
-        name: 'generateReport',
-        data: {
-          configs: configs,
-          format: 'pdf',
-          lang: 'zh',
-          compareMode: false,
-          oldFileID: lastPDFFileID
-        }
-      });
-
-      if (!res.result || !res.result.success) {
-        throw new Error(res.result?.error || '云函数返回错误');
-      }
-
-      wx.setStorageSync('lastHistoryPDFFileID', res.result.fileID);
-
-      const downloadRes = await wx.cloud.downloadFile({
-        fileID: res.result.fileID
-      });
-
-      if (!downloadRes.tempFilePath) {
-        throw new Error('文件下载失败');
-      }
-
-      wx.hideLoading();
-
-      wx.openDocument({
-        filePath: downloadRes.tempFilePath,
-        showMenu: true,
-        fileType: 'pdf',
-        success: () => {
-          wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 });
-        },
-        fail: (err) => {
-          console.error('打开文档失败:', err);
-          wx.showModal({
-            title: '导出成功',
-            content: `PDF文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
-            showCancel: false
-          });
-        }
-      });
-    } catch (error) {
-      console.error('导出历史PDF失败:', error);
-      wx.hideLoading();
-      wx.showModal({
-        title: '导出失败',
-        content: error.message || '无法导出PDF，请稍后重试',
-        showCancel: false
-      });
-    }
+      return {
+        name: `[${seqLabel}] ${satName}`,
+        subtitle: subtitleParts.join('　·　'),
+        orbitType,
+        segments,
+        summary
+      };
+    });
   },
 
   // 重置所有历史记录项的滑动位置
@@ -4025,12 +3948,24 @@ Page({
       ? this.data.ngsoOrbitClassOptions.findIndex(o => o.key === recordNgsoClass)
       : 0;
 
+    // 恢复计算模式与功放功率（正向记录需还原瓦数输入，旧记录无此字段默认反向）
+    const recordLp = record.linkParams || {};
+    const recordCalcMode = record.calcMode || recordLp.calcMode || 'reverse';
+    const recordPaPower = (record.inputPaPower !== undefined && record.inputPaPower !== '')
+      ? record.inputPaPower
+      : ((recordLp.inputPaPower !== undefined && recordLp.inputPaPower !== '') ? recordLp.inputPaPower : '');
+
     // 恢复参数
     this.setData({
       satelliteParams: restoredSatelliteParams,
       linkParams: record.linkParams,
       marginValue: record.marginValue,
       noiseRatioMode: record.noiseRatioMode,
+      calcMode: recordCalcMode,
+      inputPaPower: recordPaPower,
+      rateCalcMode: recordLp.rateCalcMode || 'infoRate',
+      'realtimeParams.symbolRate': (recordLp.symbolRate !== undefined && recordLp.symbolRate !== '' && recordLp.symbolRate !== '--') ? recordLp.symbolRate : '--',
+      'realtimeParams.carrierBandwidth': (recordLp.carrierBandwidth !== undefined && recordLp.carrierBandwidth !== '' && recordLp.carrierBandwidth !== '--') ? recordLp.carrierBandwidth : '--',
       orbitType: recordOrbitType,
       ngsoOrbitClass: recordNgsoClass || this.data.ngsoOrbitClass,
       ngsoOrbitClassIndex: ngsoIdx >= 0 ? ngsoIdx : 0,
@@ -4042,7 +3977,11 @@ Page({
     // 同步写入对应 slot，确保切换轨道类型时能正确恢复
     const _hSlot = recordOrbitType === 'GEO' ? 'geoSatelliteParams' : 'ngsoSatelliteParams';
     app.globalData[_hSlot] = Object.assign({}, restoredSatelliteParams);
-    app.globalData.linkParams[this.data.currentLinkNum] = record.linkParams;
+    // 旧记录 linkParams 内可能缺少 calcMode/inputPaPower，补齐后写入，避免 onShow 从全局恢复时丢失模式
+    app.globalData.linkParams[this.data.currentLinkNum] = Object.assign({}, record.linkParams, {
+      calcMode: recordCalcMode,
+      inputPaPower: recordPaPower
+    });
     app.globalData.orbitType = recordOrbitType;
     
     // 更新实时参数

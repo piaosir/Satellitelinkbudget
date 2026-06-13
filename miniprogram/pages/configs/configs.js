@@ -3,6 +3,7 @@
 
 const app = getApp();
 const { formatDateTime } = require('../../utils/formatter');
+const { buildWaterfallSegments, buildLinkSummary } = require('../../utils/waterfallBuilder');
 
 // 翻译文本（用于导出报告 - 云函数版本已内置翻译，此处仅保留UI显示用）
 const exportTranslations = {
@@ -152,6 +153,7 @@ Page({
     showExportPanel: false, // 是否显示导出面板
     showSharePanel: false, // 是否显示分享面板
     exportLang: 'zh', // 导出语言
+    exportStyle: 'standard', // 报告版式：'standard' 普通版（参数对比）/ 'pro' 专业版（链路预算瀑布）
     // 批量分享二维码相关
     showBatchQRPanel: false, // 是否显示批量分享面板
     batchQRLoading: false, // 批量分享加载中
@@ -1900,12 +1902,14 @@ Page({
     const satRows = isNGSO ? [
       ['卫星名称', v(sat.satelliteName), '轨道类型', `${ngsoClass} / NGSO`],
       ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
+      ['参考G/T', v(sat.sfdGtRef || 0) + 'dB/K'],
       ['转发器带宽', v(sat.transponderBandwidth) + 'MHz', islLabel, v(islDisplayVal) + islUnit],
       ['转发器IBO', v(sat.BOi) + 'dB', '转发器OBO', v(sat.BOo) + 'dB'],
       ['ISL跳数', v(sat.islHops)],
     ] : [
       ['卫星名称', v(sat.satelliteName), '轨道位置', v(sat.orbitPosition) + '°E'],
       ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
+      ['参考G/T', v(sat.sfdGtRef || 0) + 'dB/K'],
       ['转发器带宽', v(sat.transponderBandwidth) + 'MHz', '邻星离轴角', v(sat.deltaTheta) + '°'],
       ['转发器IBO', v(sat.BOi) + 'dB', '转发器OBO', v(sat.BOo) + 'dB'],
     ];
@@ -2614,6 +2618,12 @@ Page({
     this.setData({ exportLang: lang });
   },
 
+  // 选择报告版式（普通版 / 专业版）
+  selectExportStyle(e) {
+    const style = e.currentTarget.dataset.style;
+    this.setData({ exportStyle: style });
+  },
+
   // 导出Excel
   async exportExcel() {
     const { selectedConfigs, exportLang } = this.data;
@@ -2621,6 +2631,7 @@ Page({
       wx.showToast({ title: '请先选择配置', icon: 'none' });
       return;
     }
+    if (this.data.exportStyle === 'pro') { this._exportConfigsPro('excel'); return; }
 
     wx.showLoading({ title: '生成Excel参数文档...', mask: true });
 
@@ -2710,6 +2721,7 @@ Page({
       wx.showToast({ title: '请先选择配置', icon: 'none' });
       return;
     }
+    if (this.data.exportStyle === 'pro') { this._exportConfigsPro('pdf'); return; }
 
     wx.showLoading({ title: '生成PDF中...', mask: true });
 
@@ -2799,6 +2811,7 @@ Page({
       wx.showToast({ title: '请先选择配置', icon: 'none' });
       return;
     }
+    if (this.data.exportStyle === 'pro') { this._exportConfigsPro('word'); return; }
 
     wx.showLoading({ title: '生成Word中...', mask: true });
 
@@ -2916,6 +2929,113 @@ Page({
     }
     
     return configsData;
+  },
+
+  // 专业版：链路预算瀑布报告（走 exportLinkBudget）。每个配置×每条链路 = 一条瀑布链路。
+  async _exportConfigsPro(format) {
+    const { selectedConfigs, exportLang } = this.data;
+    const fileType = format === 'word' ? 'docx' : (format === 'excel' ? 'xlsx' : 'pdf');
+    const storageKey = { word: 'lastProWordFileID', excel: 'lastProExcelFileID', pdf: 'lastProPdfFileID' }[format];
+    const loadingTitle = { word: '生成 Word…', excel: '生成 Excel…', pdf: '生成 PDF…' }[format];
+
+    wx.showLoading({ title: loadingTitle, mask: true });
+    try {
+      const configsToExport = await this.getConfigsData(selectedConfigs);
+      if (configsToExport.length === 0) {
+        wx.hideLoading();
+        wx.showToast({ title: '没有可导出的数据', icon: 'none' });
+        return;
+      }
+
+      const links = this._buildConfigsProLinks(configsToExport, exportLang)
+        .filter(l => l.segments && l.segments.length);
+      if (links.length === 0) {
+        wx.hideLoading();
+        wx.showModal({
+          title: '无法导出',
+          content: '选中的配置没有有效的计算结果（旧配置可能未保存结果，请重新计算保存后再试）',
+          showCancel: false
+        });
+        return;
+      }
+
+      const oldFileID = wx.getStorageSync(storageKey) || null;
+      const res = await wx.cloud.callFunction({
+        name: 'exportLinkBudget',
+        data: { links, format, lang: exportLang, oldFileID }
+      });
+
+      if (!res.result || !res.result.success) {
+        throw new Error(res.result?.error || '云函数返回错误');
+      }
+      wx.setStorageSync(storageKey, res.result.fileID);
+
+      const downloadRes = await wx.cloud.downloadFile({ fileID: res.result.fileID });
+      if (!downloadRes.tempFilePath) throw new Error('文件下载失败');
+
+      wx.hideLoading();
+      this.setData({ showExportPanel: false });
+      this._lastExportedFile = downloadRes.tempFilePath;
+      this._lastExportedFileName = res.result.fileName;
+
+      wx.openDocument({
+        filePath: downloadRes.tempFilePath,
+        showMenu: true,
+        fileType,
+        success: () => { wx.showToast({ title: '点击右上角可转发', icon: 'none', duration: 3000 }); },
+        fail: (err) => {
+          console.error('打开文档失败:', err);
+          wx.showModal({
+            title: '导出成功',
+            content: `文件已生成\n\n文件名: ${res.result.fileName}\n\n请点击右上角菜单转发或保存`,
+            showCancel: false
+          });
+        }
+      });
+    } catch (error) {
+      console.error('导出配置(专业版)失败:', error);
+      wx.hideLoading();
+      wx.showModal({ title: '导出失败', content: error.message || '无法导出，请稍后重试', showCancel: false });
+    }
+  },
+
+  // 由配置数据构建链路瀑布报告的 links 数组（配置 × 每条链路展开为一条瀑布链路）
+  _buildConfigsProLinks(configsData, lang) {
+    const isZh = lang !== 'en';
+    const links = [];
+    configsData.forEach((config) => {
+      const sat = config.satelliteParams || {};
+      const calc = config.calculationResults || {};
+      const lps = config.linkParams || {};
+      const orbitType = sat.orbitType || 'GEO';
+      const ngsoClass = sat.ngsoOrbitClass || 'LEO';
+      const orbitLabel = orbitType === 'NGSO' ? `NGSO · ${ngsoClass}` : 'GEO';
+      const satName = sat.satelliteName || config.configName || (isZh ? '未命名' : 'Unnamed');
+      const band = sat.frequencyBand || '';
+      const linkNums = Object.keys(calc);
+      const multiLink = linkNums.length > 1;
+
+      linkNums.forEach((linkNum) => {
+        const results = calc[linkNum] || {};
+        const lp = lps[linkNum] || {};
+        const segments = buildWaterfallSegments({
+          results,
+          lang,
+          txLocation: lp.earthStationLocation || '',
+          rxLocation: lp.rxEarthStationLocation || '',
+          orbitType,
+          satelliteGT: lp.G_Ts
+        });
+        const summary = buildLinkSummary(results, { satelliteName: satName, orbitLabel, frequencyBand: band });
+        const baseName = config.configName || satName;
+        const name = multiLink ? `${baseName}-L${linkNum}` : baseName;
+        const subtitleParts = [satName];
+        if (band) subtitleParts.push(band + (isZh ? ' 频段' : ' Band'));
+        subtitleParts.push(orbitLabel);
+        links.push({ name, subtitle: subtitleParts.join('　·　'), orbitType, segments, summary });
+      });
+    });
+    return links;
   },
 
   // ============ 批量分享二维码功能 ============

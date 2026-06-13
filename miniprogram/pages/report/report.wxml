@@ -49,7 +49,7 @@
           <view class="param-entry"><text class="p-label">{{t.allocBandwidth}}</text><text class="p-value">{{results.allocBandwidthResult}}<text class="p-unit"> kHz</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.uplinkFreq}}</text><text class="p-value">{{results.uplinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.downlinkFreq}}</text><text class="p-value">{{results.downlinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
-          <view class="param-entry"><text class="p-label">{{noiseRatioLabel}} {{t.threshold}}</text><text class="p-value">{{results.ebnoResult}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">{{noiseRatioLabel}} {{t.threshold}}</text><text class="p-value">{{noiseRatioLabel === 'Es/N₀' ? results.esnoResult : results.ebnoResult}}<text class="p-unit"> dB</text></text></view>
         </view>
       </view>
 
@@ -85,7 +85,7 @@
           <view class="param-entry"><text class="p-label">{{t.totalCN}}</text><text class="p-value">{{results.carrierTotalCN}}<text class="p-unit"> dB</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.thresholdCN}}</text><text class="p-value">{{results.thresholdCN}}<text class="p-unit"> dB</text></text></view>
           <view class="param-entry highlight"><text class="p-label">{{t.linkMargin}}</text><text class="p-value">{{results.linkmargin}}<text class="p-unit"> dB</text></text></view>
-          <view class="param-entry"><text class="p-label">Es/N₀</text><text class="p-value">{{results.esnoResult}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">{{t.esnoThreshold}}</text><text class="p-value">{{results.esnoResult}}<text class="p-unit"> dB</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.availability}}</text><text class="p-value">{{results.systemAvailabilityResult}}<text class="p-unit">%</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.ber}}</text><text class="p-value">{{results.berResult}}</text></view>
           <view class="param-entry"><text class="p-label">{{t.bwUsage}}</text><text class="p-value">{{results.bandwidthUsageRatio}}<text class="p-unit">%</text></text></view>

@@ -611,6 +611,14 @@ page {
   font-weight: 500;
 }
 
+.export-style-hint {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #999;
+  line-height: 1.4;
+}
+
 .export-format-options {
   display: flex;
   flex-direction: column;

@@ -2338,13 +2338,13 @@
         <view class="result-item {{markedParams.indexOf('ebnoResult') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 
               data-param="ebnoResult">
-          <text class="result-label">Eb/N₀</text>
+          <text class="result-label">Eb/N₀门限</text>
           <text class="result-value">{{results.ebnoResult}} dB</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('esnoResult') > -1 ? 'result-item-marked' : ''}}" 
-              bindtap="toggleHighlight" 
+        <view class="result-item {{markedParams.indexOf('esnoResult') > -1 ? 'result-item-marked' : ''}}"
+              bindtap="toggleHighlight"
               data-param="esnoResult">
-          <text class="result-label">Es/N₀</text>
+          <text class="result-label">Es/N₀门限</text>
           <text class="result-value">{{results.esnoResult}} dB</text>
         </view>
         <view class="result-item {{markedParams.indexOf('fecResult') > -1 ? 'result-item-marked' : ''}}" 

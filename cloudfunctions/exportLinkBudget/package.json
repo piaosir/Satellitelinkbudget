@@ -1,12 +1,13 @@
 {
   "name": "export-link-budget",
   "version": "1.0.0",
-  "description": "导出链路预算表（Word/Excel，三线表风格）",
+  "description": "导出链路预算表专业版（Word/Excel/PDF，三线表风格）",
   "main": "index.js",
   "dependencies": {
-    "wx-server-sdk": "~2.6.3",
+    "docx": "^8.5.0",
     "exceljs": "^4.4.0",
-    "docx": "^8.5.0"
+    "pdfkit": "^0.14.0",
+    "wx-server-sdk": "~2.6.3"
   },
   "author": "",
   "license": "MIT"
