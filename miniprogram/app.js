@@ -36,12 +36,13 @@ App({
       // 验证云开发是否初始化成功
       console.log('云开发初始化成功');
 
-      // 启动即后台静默刷新 Starlink TLE 到云存储（一天只更一次，谁启动算谁的）。
-      // 这样用户进入“星座地图”时云存储大概率已是当天数据，无需现场等待下载。
+      // 启动即后台静默刷新各星座 TLE 到云存储（每设备每天一次，只下 ~1KB manifest 判断；
+      // 过期组由该用户本机直连 CelesTrak 拉取回传，惠及后续用户）。这样进“星座地图”时云存储
+      // 大概率已是当天数据，无需现场等待下载。
       try {
-        require('./utils/tleStore').ensureStarlinkFresh();
+        require('./utils/tleStore').ensureTLEFresh();
       } catch (e) {
-        console.warn('Starlink 后台刷新启动失败：', e);
+        console.warn('TLE 后台刷新启动失败：', e);
       }
     }
 

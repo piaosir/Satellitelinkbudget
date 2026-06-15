@@ -17,9 +17,8 @@ const BUCKET = '636c-cloud1-8gjv5ekx41d6fb76-1385987144';
 const MAX_RENDER = 3000;      // 单分组渲染点数上限（数据全保留，仅渲染抽稀以保流畅）
 const MAX_RENDER_ALL = 3500; // “全部卫星”模式渲染上限：先放满非 Starlink，再用 Starlink 垫到该数
 
-// Starlink 太大(~1.77MB)，云函数 60s 内拉不动 -> 前端众包（见 utils/tleStore）：
-// 启动时已后台刷新云存储；进入本页时若云存储无当天数据，再本机直连兜底拉取。
-const STARLINK_MAX_AGE_MS = 24 * 3600 * 1000;
+// 各组 TLE 全部前端众包（见 utils/tleStore）：启动时已按需后台刷新云存储；
+// 进入本页时优先用当天本地缓存，缺失才下载云存储，云端也缺失才本机直连 CelesTrak 兜底拉取。
 const REFRESH_MS = 1000;      // 卫星位置实时刷新间隔（1Hz，由“刷新”开关独立控制，与旋转互不影响）
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
@@ -84,12 +83,13 @@ Page({
   _selOrbit: null, _selTrack: null, _selFootprint: null,
   _selPos: null,      // 选中卫星当前渲染坐标（保证抽稀/搜索命中也能高亮）
   _refreshTimer: null,// 位置实时刷新定时器
-  _index: null,       // 全局搜索索引 [{name, noradId, group}]（跨分组）
+  _index: null,       // 全局搜索索引 [{name, noradId, group}]（跨分组，懒加载）
+  _indexLoading: false,
   _pendingNorad: null,// 跨分组选中：切组加载后待定位的 NORAD
 
   onLoad() {
     this._loadGroup(this.data.groupIndex);
-    this._loadIndex();
+    // 跨分组搜索索引改懒加载：用户真去搜索时才下（见 onSearchInput -> _ensureIndex）
   },
   onReady() {
     this._initCanvas();
@@ -142,6 +142,8 @@ Page({
     this.setData({ keyword: raw });
     const kw = raw.trim().toLowerCase();
     if (!kw) { this.setData({ searchResults: [] }); return; }
+
+    this._ensureIndex(); // 首次搜索才加载跨分组索引（就绪后会自动重跑本次搜索）
 
     const curKey = GROUPS[this.data.groupIndex].key;
     // 优先用全局索引跨分组搜索；索引未就绪时退化为当前组
@@ -221,6 +223,26 @@ Page({
     return `cloud://${ENV_ID}.${BUCKET}/celestrak/${name}`;
   },
 
+  // ---- 本地按需缓存：每组每天最多下载一次，当天再看直接读本机（零 CDN）----
+  _todayStr() {
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  },
+  _cachePath(key) { return `${wx.env.USER_DATA_PATH}/tle_${key}.json`; },
+  // 当天有效则返回缓存对象，否则 null（读失败/过期都按未命中处理）
+  _readCache(key) {
+    try {
+      if (wx.getStorageSync(`tle_date_${key}`) !== this._todayStr()) return null;
+      return JSON.parse(wx.getFileSystemManager().readFileSync(this._cachePath(key), 'utf8'));
+    } catch (e) { return null; }
+  },
+  _writeCache(key, data) {
+    try {
+      wx.getFileSystemManager().writeFileSync(this._cachePath(key), JSON.stringify(data), 'utf8');
+      wx.setStorageSync(`tle_date_${key}`, this._todayStr());
+    } catch (e) { /* 缓存写失败不影响展示 */ }
+  },
+
   // 下载云存储 JSON 并解析（Promise）
   _downloadJSON(fileID) {
     return new Promise((resolve, reject) => {
@@ -267,9 +289,14 @@ Page({
     });
   },
 
-  // 加载全局搜索索引（跨分组）。Starlink 走前端众包，云端索引可能还没并入，
-  // 故同时读众包的 _names_starlink.json 补齐，保证 Starlink 也能跨组搜到。
-  _loadIndex() {
+  // 懒加载全局搜索索引（跨分组）：仅用户首次搜索时触发，且当天本地缓存（零重复 CDN）。
+  // Starlink 走前端众包，云端索引可能还没并入，故同时读众包的 _names_starlink.json 补齐。
+  _ensureIndex() {
+    if (this._index || this._indexLoading) return; // 已就绪/加载中
+    const cached = this._readCache('_index');      // 当天本地缓存命中 -> 零 CDN
+    if (cached && cached.sats) { this._index = cached.sats; return; }
+
+    this._indexLoading = true;
     Promise.all([
       this._downloadJSON(this._fileID('_index.json')).catch(() => null),
       this._downloadJSON(this._fileID('_names_starlink.json')).catch(() => null)
@@ -282,7 +309,12 @@ Page({
         }
       }
       this._index = index;
-    });
+      this._writeCache('_index', { sats: index });
+      this._indexLoading = false;
+      // 索引就绪后，若用户当前仍有关键字，重跑一次以升级为跨分组结果
+      const kw = (this.data.keyword || '').trim();
+      if (kw) this.onSearchInput({ detail: { value: this.data.keyword } });
+    }).catch(() => { this._indexLoading = false; });
   },
 
   _loadGroup(idx) {
@@ -291,32 +323,42 @@ Page({
     this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null; this._selPos = null;
 
     if (g.key === 'all') { this._loadAll(); return; }
-    if (g.key === 'starlink') { this._loadStarlink(g); return; }
+
+    // 当天本地缓存命中 -> 直接用，零 CDN（分块数据走旧路径不缓存）
+    const cached = this._readCache(g.key);
+    if (cached && cached.sats && !cached.chunked) { this._ingest(cached); return; }
 
     this._downloadJSON(this._fileID(`${g.key}.json`))
       .then((data) => {
         if (data && data.chunked) return this._loadChunks(g, data);
+        // 云端缺失/为空（如定时器从未生成）-> 现场众包：本机直连 CelesTrak 拉取并回传
+        if (!data || !data.sats || !data.sats.length) return this._fetchGroupLive(g, data);
+        this._writeCache(g.key, data);
         this._ingest(data);
       })
-      .catch(() => this._fail(`暂无 ${g.label} 数据（云端尚未生成）`));
+      .catch(() => this._fetchGroupLive(g, null)); // 下载失败 -> 现场众包兜底
   },
 
-  // “全部卫星”：并行下载各组云存储数据，合并后统一入库（每颗带所属分组）
+  // “全部卫星”：各组优先用当天本地缓存（零 CDN），未命中才下载；合并后统一入库（每颗带所属分组）
   _loadAll() {
     const keys = GROUPS.filter((g) => g.key !== 'all').map((g) => g.key);
     let done = 0;
     this.setData({ loading: true, statusText: `加载全部卫星 0/${keys.length} …` });
-    const tasks = keys.map((key) =>
-      this._downloadJSON(this._fileID(`${key}.json`))
+    const bump = () => { done++; this.setData({ statusText: `加载全部卫星 ${done}/${keys.length} …` }); };
+    const tag = (sats, key) => { for (let i = 0; i < sats.length; i++) sats[i]._group = key; return sats; };
+    const tasks = keys.map((key) => {
+      // 当天本地缓存命中 -> 直接用，零 CDN（与单组视图共享同一份缓存）
+      const cached = this._readCache(key);
+      if (cached && cached.sats && !cached.chunked) { bump(); return Promise.resolve(tag(cached.sats, key)); }
+      return this._downloadJSON(this._fileID(`${key}.json`))
         .then((data) => {
-          done++;
-          this.setData({ statusText: `加载全部卫星 ${done}/${keys.length} …` });
-          if (!data || !data.sats) return [];
-          for (let i = 0; i < data.sats.length; i++) data.sats[i]._group = key;
-          return data.sats;
+          bump();
+          if (!data || !data.sats) return []; // 分块/缺失：本视图按空处理（单组视图仍可加载）
+          if (!data.chunked) this._writeCache(key, data); // 写缓存（标记 _group 前，保持缓存干净）
+          return tag(data.sats, key);
         })
-        .catch(() => { done++; return []; })
-    );
+        .catch(() => { bump(); return []; });
+    });
     Promise.all(tasks).then((arrs) => {
       const sats = [];
       for (let i = 0; i < arrs.length; i++) {
@@ -327,35 +369,23 @@ Page({
     });
   },
 
-  // Starlink 众包加载：云存储有“当天”数据就直接用；否则本机直连 CelesTrak 拉取+回传云存储
-  _loadStarlink(g) {
-    this._downloadJSON(this._fileID('starlink.json'))
-      .then((data) => {
-        const age = (data && data.fetchedAt) ? (Date.now() - new Date(data.fetchedAt).getTime()) : Infinity;
-        if (data && data.sats && age < STARLINK_MAX_AGE_MS) {
-          this._ingest(data); // 当天数据，直接用（快路径）
-        } else {
-          this._fetchStarlinkLive(g, data); // 过期/缺失：直连拉取，data 作兜底
-        }
-      })
-      .catch(() => this._fetchStarlinkLive(g, null));
-  },
-
-  // 兜底：本机直连 CelesTrak 拉 Starlink（启动时后台刷新若未完成/失败时），立即展示并回传云存储
-  _fetchStarlinkLive(g, fallback) {
-    this.setData({ loading: true, statusText: '从 CelesTrak 获取 Starlink（首次较慢，请稍候）…' });
-    tleStore.fetchStarlinkLive()
+  // 兜底：本机直连 CelesTrak 拉取某组（云端缺失/下载失败时），立即展示并回传云存储惠及后续用户
+  _fetchGroupLive(g, fallback) {
+    this.setData({ loading: true, statusText: `从 CelesTrak 获取 ${g.label}（首次较慢，请稍候）…` });
+    tleStore.fetchGroupLive(g.key)
       .then((payload) => {
-        this._ingest(payload);                  // 立即展示
-        tleStore.uploadStarlinkPayload(payload); // 后台回传云存储，惠及后续用户
+        payload.label = g.label;
+        this._writeCache(g.key, payload);          // 当天本地缓存，后续重看零 CDN
+        this._ingest(payload);                     // 立即展示
+        tleStore.uploadGroupPayload(g.key, payload); // 后台回传云存储
       })
       .catch(() => {
         if (fallback && fallback.sats) {
           this.setData({ statusText: '' });
-          this._ingest(fallback);                // 拉取失败但有旧数据 -> 先用旧的
+          this._ingest(fallback);                  // 拉取失败但有旧数据 -> 先用旧的
           wx.showToast({ title: '已用历史数据（实时获取失败）', icon: 'none' });
         } else {
-          this._fail('Starlink 获取失败，请检查网络/域名白名单');
+          this._fail(`${g.label} 获取失败，请检查网络/域名白名单`);
         }
       });
   },

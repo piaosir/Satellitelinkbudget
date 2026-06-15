@@ -1,14 +1,14 @@
 // cloudfunctions/fetchTLE/index.js
 // 从 CelesTrak 下载各星座 TLE，解析为结构化 JSON 写入云存储 celestrak/<group>.json。
 //
-// 触发方式（避免一次跑完所有组导致 60s 超时；starlink 太慢，单独触发器跑）：
-//   - 定时触发器 dailyMain     ：刷新除 starlink 外的全部分组（见 config.json）。
-//   - 定时触发器 dailyStarlink ：只刷新 starlink。
-//   - 手动 wx.cloud.callFunction({ name:'fetchTLE', data:{ group:'starlink' } })：刷新单组。
-//   - 手动 data:{} 或不带参      ：刷新除 starlink 外的全部分组（主集合）。
+// 【仅手动调用】TLE 日常刷新已改为前端众包（见 miniprogram/utils/tleStore.js）。本函数不再挂任何
+// 定时触发器（原 dailyMain 每天 3 点空跑会下载 _names_*.json 产生 CDN 下行流量，已删除）。
+// 保留它仅供需要时手动播种/兜底：
+//   - wx.cloud.callFunction({ name:'fetchTLE', data:{ group:'starlink' } })：刷新单组。
+//   - data:{} 或不带参：刷新除 starlink 外的全部分组（主集合）。
 //
-// 跨分组搜索索引 _index.json：每次运行都从已保存的各组名单文件 _names_<group>.json 重建，
-//   因此即使某次只刷新部分组、或某组失败，索引仍包含所有“曾成功保存过”的组（含 starlink）。
+// 跨分组搜索索引 _index.json + manifest.json：每次运行都从已保存的各组名单文件 _names_<group>.json
+//   重建，因此即使某次只刷新部分组、或某组失败，索引仍包含所有“曾成功保存过”的组（含 starlink）。
 //
 // 注意：云存储存的是 TLE 文本（轨道根数），不是坐标。SGP4 推演在前端打开页面时做一次，
 //       这样看到的才是“此刻”真实位置（LEO 每秒移动约 7.5km，云端预存坐标会严重过期）。
@@ -171,26 +171,27 @@ async function downloadJSON(path) {
   }
 }
 
-// 从所有已保存的 _names_<group>.json 重建跨分组索引 _index.json
+// 从所有已保存的 _names_<group>.json 重建跨分组索引 _index.json，并同步刷新 manifest.json
+// （manifest 供前端众包 ensureTLEFresh 判断各组新鲜度，~1KB）。
 async function rebuildIndex() {
   const keys = Object.keys(GROUPS);
-  const lists = await Promise.all(keys.map(async (k) => {
-    const d = await downloadJSON(`celestrak/_names_${k}.json`);
-    if (!d || !d.names) return [];
-    return d.names.map((n) => ({ name: n.name, noradId: n.noradId, group: k }));
-  }));
-  const index = [].concat.apply([], lists);
+  const datas = await Promise.all(keys.map((k) => downloadJSON(`celestrak/_names_${k}.json`)));
+  const index = [];
+  const groups = {};
+  keys.forEach((k, i) => {
+    const d = datas[i];
+    if (!d || !d.names) return;
+    for (let j = 0; j < d.names.length; j++) index.push({ name: d.names[j].name, noradId: d.names[j].noradId, group: k });
+    groups[k] = { fetchedAt: d.fetchedAt, count: d.names.length };
+  });
   await uploadJSON('celestrak/_index.json', { builtAt: new Date().toISOString(), count: index.length, sats: index });
+  await uploadJSON('celestrak/manifest.json', { updatedAt: new Date().toISOString(), groups });
   return index.length;
 }
 
-// 决定本次运行刷新哪些分组：
-//   event.group 指定单组；定时触发器 dailyStarlink 只跑 starlink；
-//   其余（dailyMain 定时 / 手动 {}）跑主集合（除 starlink 外全部）。
+// 决定本次运行刷新哪些分组：event.group 指定单组；否则跑主集合（除 starlink 外全部）。
 function pickKeys(event) {
   if (event && event.group) return [event.group];
-  const trigger = event && (event.TriggerName || event.triggerName);
-  if (trigger === 'dailyStarlink') return ['starlink'];
   return MAIN_KEYS;
 }
 
@@ -207,8 +208,8 @@ exports.main = async (event) => {
     }
   }));
 
-  // 重建跨分组索引。starlink 单独运行时跳过（省时间、确保 starlink 这次调用压进 60s）；
-  // 索引由跑主集合的 {} / dailyMain 重建，会读取 starlink 上次保存的 _names_starlink.json。
+  // 重建跨分组索引 + manifest。starlink 单独运行时跳过（省时间、确保 starlink 压进 60s）；
+  // 索引由跑主集合的 {} 重建，会读取 starlink 上次保存的 _names_starlink.json。
   const starlinkOnly = keys.length === 1 && keys[0] === 'starlink';
   let indexCount = -1;
   if (!starlinkOnly) {
