@@ -6,6 +6,7 @@
       <view class="tg {{show1 ? 'tg-on' : ''}}" data-key="show1" bindtap="onToggle"><view class="tg-dot dot-sat1"></view>卫星1</view>
       <view class="tg {{show2 ? 'tg-on' : ''}}" data-key="show2" bindtap="onToggle"><view class="tg-dot dot-sat2"></view>卫星2</view>
       <view class="tg {{showStation ? 'tg-on' : ''}}" data-key="showStation" bindtap="onToggle"><view class="tg-dot dot-station"></view>地球站</view>
+      <view class="tg tg-rotate {{autoRotate ? 'tg-on' : ''}}" bindtap="toggleRotate">{{autoRotate ? '自转中' : '自转停'}}</view>
     </view>
     <view class="sat-row">
       <!-- 卫星1 -->
@@ -41,7 +42,8 @@
   <view class="globe-wrap">
     <canvas type="2d" id="globeCanvas" class="globe-canvas"
       bindtouchstart="onTouchStart" catchtouchmove="onTouchMove"
-      bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"></canvas>
+      bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"
+      catchwheel="onWheel"></canvas>
     <view class="globe-legend">
       <view class="lg-item"><view class="lg-dot dot-sat1"></view>卫星1</view>
       <view class="lg-item"><view class="lg-dot dot-sat2"></view>卫星2</view>

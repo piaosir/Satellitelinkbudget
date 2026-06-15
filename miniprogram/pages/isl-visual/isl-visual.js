@@ -35,6 +35,7 @@ Page({
     blocked: false,
     // 显示开关
     show1: true, show2: true, showStation: true,
+    autoRotate: true,    // 自转开关（UI 镜像 _autoRotate）
     // 地球站（辅助计算斜距）
     esLat: '39.93', esLon: '116.4',
     latHemi: '°N', lonHemi: '°E', esAddr: '--',
@@ -54,6 +55,7 @@ Page({
   _lastY: 0,
   _autoRotate: true,
   _rafId: 0,
+  _zoom: 1, _pinching: false, _pinchStartDist: 0, _pinchStartZoom: 1,
 
   onLoad() {
     // 默认使用固定典型轨道（不读取卫星/链路计算参数），直接按 data 默认值计算
@@ -213,6 +215,21 @@ Page({
     wx.vibrateShort({ type: 'light' });
   },
 
+  // 自转开关（按钮触发，与拖动/缩放暂停自转互不冲突）
+  toggleRotate() {
+    this._autoRotate = !this._autoRotate;
+    this.setData({ autoRotate: this._autoRotate });
+    wx.vibrateShort({ type: 'light' });
+  },
+
+  // 用户主动操作后关闭自转，并同步按钮状态
+  _stopAutoRotate() {
+    if (this._autoRotate) {
+      this._autoRotate = false;
+      this.setData({ autoRotate: false });
+    }
+  },
+
   // 点击经纬度后缀切换半球（正负号），以支持南纬 / 西经
   toggleHemi(e) {
     const key = e.currentTarget.dataset.key;
@@ -245,7 +262,7 @@ Page({
 
   _loop() {
     if (!this._canvas) return;
-    if (this._autoRotate && !this._dragging) this._yaw += 0.0035;
+    if (this._autoRotate && !this._dragging && !this._pinching) this._yaw += 0.0012;
     this._draw();
     this._rafId = this._canvas.requestAnimationFrame(() => this._loop());
   },
@@ -310,7 +327,7 @@ Page({
 
     const half = Math.min(w, h) / 2 * 0.92;
     const maxOrbit = Math.max(R1, R2, RE * 1.05);
-    const scale = half / maxOrbit;
+    const scale = half / maxOrbit * this._zoom;   // 自适应基准 × 用户缩放（双指/滚轮）
     const Rpx = RE * scale;
 
     // 大气薄辉光
@@ -517,14 +534,36 @@ Page({
 
   // ===================== 触摸旋转 =====================
 
+  _touchDist(touches) {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+  },
+
   onTouchStart(e) {
+    if (e.touches.length >= 2) {
+      // 双指：进入缩放（暂停自转，不改变自转开关本身）
+      this._pinching = true;
+      this._dragging = false;
+      this._stopAutoRotate();
+      this._pinchStartDist = this._touchDist(e.touches);
+      this._pinchStartZoom = this._zoom;
+      return;
+    }
     const t = e.touches[0];
     this._dragging = true;
-    this._autoRotate = false;
+    this._stopAutoRotate();
     this._lastX = t.clientX;
     this._lastY = t.clientY;
   },
   onTouchMove(e) {
+    if (this._pinching && e.touches.length >= 2) {
+      const d = this._touchDist(e.touches);
+      if (this._pinchStartDist > 0) {
+        this._zoom = clamp(this._pinchStartZoom * (d / this._pinchStartDist), 0.3, 50);
+      }
+      return;
+    }
     if (!this._dragging) return;
     const t = e.touches[0];
     this._yaw += (t.clientX - this._lastX) * 0.01;
@@ -532,7 +571,24 @@ Page({
     this._lastX = t.clientX;
     this._lastY = t.clientY;
   },
-  onTouchEnd() {
+  onTouchEnd(e) {
+    // 缩放手势结束（可能仍残留一根手指）
+    if (this._pinching) {
+      this._dragging = false;
+      if (!e.touches || e.touches.length === 0) this._pinching = false;
+      return;
+    }
     this._dragging = false;
+  },
+
+  // 滚轮缩放（仅 PC 微信会派发 wheel；移动端触屏不产生此事件，对移动端无影响）
+  onWheel(e) {
+    const d = e.detail || {};
+    const dy = (d.deltaY != null ? d.deltaY : d.delta) || 0;
+    if (!dy) return;
+    // 向上滚放大、向下滚缩小；指数手感顺滑，单次步进做边界以防触控板大 delta 跳变
+    const factor = clamp(Math.exp(-dy * 0.0015), 0.5, 2);
+    // 复用 pinch 相同的缩放上下限，保证两个入口一致
+    this._zoom = clamp(this._zoom * factor, 0.3, 50);
   }
 });

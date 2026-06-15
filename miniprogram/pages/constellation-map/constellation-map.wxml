@@ -42,7 +42,8 @@
   <view class="globe-wrap">
     <canvas type="2d" id="globeCanvas" class="globe-canvas"
       bindtouchstart="onTouchStart" catchtouchmove="onTouchMove"
-      bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"></canvas>
+      bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"
+      catchwheel="onWheel"></canvas>
     <view class="globe-hint">轻触星点查看 · 拖动旋转 · 双指缩放</view>
   </view>
 

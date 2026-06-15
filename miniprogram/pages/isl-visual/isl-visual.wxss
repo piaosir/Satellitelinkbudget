@@ -36,6 +36,10 @@
   border-color: #3a4456;
   opacity: 1;
 }
+.tg-rotate {
+  margin-left: auto;   /* 推到行尾，与显示开关分隔 */
+  margin-right: 0;
+}
 .tg-dot {
   width: 12rpx;
   height: 12rpx;

@@ -847,6 +847,17 @@ Page({
     }
   },
 
+  // 滚轮缩放（仅 PC 微信会派发 wheel；移动端触屏不产生此事件，对移动端无影响）
+  onWheel(e) {
+    const d = e.detail || {};
+    const dy = (d.deltaY != null ? d.deltaY : d.delta) || 0;
+    if (!dy) return;
+    // 向上滚放大、向下滚缩小；指数手感顺滑，单次步进做边界以防触控板大 delta 跳变
+    const factor = clamp(Math.exp(-dy * 0.0015), 0.5, 2);
+    // 复用 pinch 相同的缩放上下限，保证两个入口一致
+    this._zoom = clamp(this._zoom * factor, 0.3, 50);
+  },
+
   _hitTest(x, y) {
     const screen = this._screen;
     let best = -1, bestD = 14 * 14; // 命中半径 14px
