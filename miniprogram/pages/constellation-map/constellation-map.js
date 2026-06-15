@@ -6,8 +6,7 @@
 // 卫星 ECI 先经 eciToEcf(gmstNow) 转到地固系，再 ecef[x,y,z] -> render[x, z, -y]，与海岸线天然对齐。
 
 const sat = require('./satellite.js');
-const COASTLINE = require('./coastline.js');        // 全精度海岸线 ~28.7k（静止/自转用）
-const COASTLINE_LO = require('./coastline-lo.js');   // 低精度海岸线 ~10.5k（拖动/缩放用，= ISL 1:50m）
+const COASTLINE = require('./coastline-lo.js');      // 海岸线 ~10.5k（全程统一，= ISL 1:50m；高精度与之肉眼无差，已弃用）
 const tleStore = require('../../utils/tleStore.js');
 
 const RE = 6378.137;          // 地球赤道半径 km
@@ -78,7 +77,7 @@ Page({
   _meta: [],          // [{name, noradId}]
   _render: [],        // 渲染用：[{idx, pos:[x,y,z]}]（已抽稀）
   _screen: [],        // 每帧投影后的屏幕坐标缓存，用于点击命中
-  _coastXYZ: null, _coastXYZLo: null,
+  _coastXYZ: null,
   _selIdx: -1,        // 选中卫星在 _recs 中的下标
   _selOrbit: null, _selTrack: null, _selFootprint: null,
   _selPos: null,      // 选中卫星当前渲染坐标（保证抽稀/搜索命中也能高亮）
@@ -584,9 +583,11 @@ Page({
         const canvas = res[0].node;
         const ctx = canvas.getContext('2d');
         const info = wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync();
-        // DPR 封顶 2：iPhone 多为 DPR3，光栅化像素是 DPR2 的 2.25 倍，拖动时海岸线重绘会掉帧；
-        // 这个小地球用 2x 与 3x 肉眼几乎无差，却能显著降低 iOS 每帧光栅开销。
-        const dpr = Math.min(info.pixelRatio || 2, 2);
+        // DPR 用满（含 iPhone 的 3x），清晰度优先。为抵消 DPR3 的逐帧光栅开销：
+        // ① 渐变背景盘（辉光+地球）只依赖缩放，缓存到离屏，缩放时才重绘；
+        // ② 海岸线两遍批量描边（正面/背面各一次 stroke），二者把 DPR3 的额外成本基本抵消。
+        const dpr = info.pixelRatio || 2;
+        this._dpr = dpr;
         canvas.width = res[0].width * dpr;
         canvas.height = res[0].height * dpr;
         ctx.scale(dpr, dpr);
@@ -646,6 +647,56 @@ Page({
     ctx.setLineDash([]);
   },
 
+  // ===================== 背景盘缓存（辉光+地球） =====================
+  // 内容只随 Rpx / 画布尺寸变；自转、星点移动时直接贴图复用，避免逐帧重填两个大渐变盘（DPR3 下尤贵）。
+  _drawBackground(cx, cy, Rpx, w, h) {
+    const ctx = this._ctx;
+    if (this._bgFailed) { this._paintBackground(ctx, cx, cy, Rpx); return; }
+    const key = Math.round(Rpx) + 'x' + w + 'x' + h;
+    try {
+      if (this._bgKey !== key || !this._bgCanvas) this._renderBackground(cx, cy, Rpx, w, h, key);
+      ctx.drawImage(this._bgCanvas, 0, 0, w, h);
+    } catch (e) {
+      this._bgFailed = true;       // 离屏不可用 → 永久回退到内联绘制，画面一致
+      this._paintBackground(ctx, cx, cy, Rpx);
+    }
+  },
+
+  _renderBackground(cx, cy, Rpx, w, h, key) {
+    const dpr = this._dpr || 2;
+    const pw = Math.ceil(w * dpr), ph = Math.ceil(h * dpr);
+    if (!this._bgCanvas) {
+      this._bgCanvas = wx.createOffscreenCanvas({ type: '2d', width: pw, height: ph });
+      this._bgCtx = this._bgCanvas.getContext('2d');
+    } else if (this._bgCanvas.width !== pw || this._bgCanvas.height !== ph) {
+      this._bgCanvas.width = pw; this._bgCanvas.height = ph;
+    }
+    const bctx = this._bgCtx;
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.clearRect(0, 0, pw, ph);
+    bctx.scale(dpr, dpr);
+    this._paintBackground(bctx, cx, cy, Rpx);
+    this._bgKey = key;
+  },
+
+  // 与原内联绘制逐像素一致（c 可为主 ctx 或离屏 ctx）
+  _paintBackground(c, cx, cy, Rpx) {
+    const glow = c.createRadialGradient(cx, cy, Rpx * 0.99, cx, cy, Rpx * 1.09);
+    glow.addColorStop(0, 'rgba(90,130,165,0.12)');
+    glow.addColorStop(1, 'rgba(90,130,165,0)');
+    c.fillStyle = glow;
+    c.beginPath(); c.arc(cx, cy, Rpx * 1.09, 0, Math.PI * 2); c.fill();
+    const earth = c.createRadialGradient(cx - Rpx * 0.3, cy - Rpx * 0.34, Rpx * 0.1, cx, cy, Rpx * 1.05);
+    earth.addColorStop(0, '#3a5269');
+    earth.addColorStop(0.5, '#263a4d');
+    earth.addColorStop(0.82, '#172734');
+    earth.addColorStop(1, '#0c1722');
+    c.fillStyle = earth;
+    c.beginPath(); c.arc(cx, cy, Rpx, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.arc(cx, cy, Rpx, 0, Math.PI * 2);
+    c.lineWidth = 1; c.strokeStyle = 'rgba(110,145,180,0.22)'; c.stroke();
+  },
+
   _draw() {
     const ctx = this._ctx;
     if (!ctx) return;
@@ -667,23 +718,8 @@ Page({
     const scale = (half / maxR) * this._zoom;   // 自适应基准 × 用户双指缩放
     const Rpx = RE * scale;
 
-    // 大气辉光
-    const glow = ctx.createRadialGradient(cx, cy, Rpx * 0.99, cx, cy, Rpx * 1.09);
-    glow.addColorStop(0, 'rgba(90,130,165,0.12)');
-    glow.addColorStop(1, 'rgba(90,130,165,0)');
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(cx, cy, Rpx * 1.09, 0, Math.PI * 2); ctx.fill();
-
-    // 地球
-    const earth = ctx.createRadialGradient(cx - Rpx * 0.3, cy - Rpx * 0.34, Rpx * 0.1, cx, cy, Rpx * 1.05);
-    earth.addColorStop(0, '#3a5269');
-    earth.addColorStop(0.5, '#263a4d');
-    earth.addColorStop(0.82, '#172734');
-    earth.addColorStop(1, '#0c1722');
-    ctx.fillStyle = earth;
-    ctx.beginPath(); ctx.arc(cx, cy, Rpx, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(cx, cy, Rpx, 0, Math.PI * 2);
-    ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(110,145,180,0.22)'; ctx.stroke();
+    // 大气辉光 + 地球：仅依赖缩放(Rpx)，与自转/星点移动无关 → 缓存到离屏，缩放时才重绘
+    this._drawBackground(cx, cy, Rpx, w, h);
 
     this._drawGraticule(cx, cy, scale, Rpx);
     this._drawCoastline(cx, cy, scale, Rpx);
@@ -778,16 +814,62 @@ Page({
   },
 
   _drawCoastline(cx, cy, scale, Rpx) {
-    if (!this._coastXYZ) this._coastXYZ = this._buildCoastXYZ(COASTLINE);        // 全精度 ~28.7k
-    if (!this._coastXYZLo) this._coastXYZLo = this._buildCoastXYZ(COASTLINE_LO); // 低精度 ~10.5k(ISL 1:50m)
-    // 仅拖动/缩放时降到低精度；静止与自转都用全精度
-    const interacting = this._dragging || this._pinching;
-    const polys = interacting ? this._coastXYZLo : this._coastXYZ;
-    for (let p = 0; p < polys.length; p++) {
-      this._drawPath(polys[p], cx, cy, scale, Rpx, {
-        color: 'rgba(150,185,215,0.5)', hiddenColor: 'rgba(150,185,215,0.07)', width: 0.7
-      });
+    if (!this._coastXYZ) this._coastXYZ = this._buildCoastXYZ(COASTLINE); // 统一低精度 ~10.5k(= ISL 1:50m)
+    const polys = this._coastXYZ;
+    const ctx = this._ctx;
+    const nPoly = polys.length;
+
+    // 单次投影到复用缓存：每点存 [x, y, hidden]，避免逐 poly new Array（减少 GC）
+    let scr = this._coastScr;
+    if (!scr) scr = this._coastScr = [];
+    for (let p = 0; p < nPoly; p++) {
+      const poly = polys[p];
+      let row = scr[p];
+      if (!row) row = scr[p] = [];
+      const n = poly.length;
+      for (let i = 0, k = 0; i < n; i++, k += 3) {
+        const s = this._project(poly[i][0], poly[i][1], poly[i][2], cx, cy, scale);
+        row[k] = s.x; row[k + 1] = s.y; row[k + 2] = this._occluded(s, cx, cy, Rpx) ? 1 : 0;
+      }
+      row.len = n;
     }
+
+    ctx.lineWidth = 0.7;
+
+    // 第一遍：正面段（两端皆可见）实线，一次 stroke
+    ctx.beginPath();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(150,185,215,0.5)';
+    for (let p = 0; p < nPoly; p++) {
+      const row = scr[p], n = row.len;
+      let pen = false;
+      for (let i = 1; i < n; i++) {
+        const k = i * 3, j = k - 3;
+        if (!row[j + 2] && !row[k + 2]) {
+          if (!pen) { ctx.moveTo(row[j], row[j + 1]); pen = true; }
+          ctx.lineTo(row[k], row[k + 1]);
+        } else pen = false;
+      }
+    }
+    ctx.stroke();
+
+    // 第二遍：背面段（任一端被遮）虚淡，一次 stroke
+    ctx.beginPath();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = 'rgba(150,185,215,0.07)';
+    for (let p = 0; p < nPoly; p++) {
+      const row = scr[p], n = row.len;
+      let pen = false;
+      for (let i = 1; i < n; i++) {
+        const k = i * 3, j = k - 3;
+        if (row[j + 2] || row[k + 2]) {
+          if (!pen) { ctx.moveTo(row[j], row[j + 1]); pen = true; }
+          ctx.lineTo(row[k], row[k + 1]);
+        } else pen = false;
+      }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
   },
 
   // ===================== 触摸：旋转 + 点击命中 =====================
