@@ -24,6 +24,11 @@ const GROUP_LABEL = {
   stations: '空间站', planet: 'Planet', spire: 'Spire'
 };
 
+// 可选星座分组（先选分组、再在组内选具体卫星）；顺序按常用度排
+const GROUP_LIST = ['guowang', 'qianfan', 'starlink', 'oneweb', 'kuiper', 'beidou', 'gps', 'glonass',
+  'galileo', 'o3b', 'geo', 'iridium', 'globalstar', 'stations', 'planet', 'spire']
+  .map((k) => ({ key: k, label: GROUP_LABEL[k] || k }));
+
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const num = (v, def) => {
   const n = parseFloat(v);
@@ -32,13 +37,19 @@ const num = (v, def) => {
 
 Page({
   data: {
-    // 选星：搜索关键字 / 结果列表 / 已选星名（空=未选）
+    // 选星：先选分组 -> 组内搜索/选具体卫星
+    groupList: GROUP_LIST,
+    group1: '', group2: '',            // 已选分组 key（空=未选）
+    group1Label: '', group2Label: '',  // 已选分组中文名（卫星右侧 chip 显示）
+    groupOpen1: false, groupOpen2: false, // 分组选择浮层开关
     kw1: '', kw2: '',
     results1: [], results2: [],
     sat1Name: '', sat2Name: '',
+    sat1Norad: '', sat2Norad: '',  // 已选星 NORAD（地球站对星栏展示）
     live: false,         // 「实时」开关，开启时 1Hz 刷新计算
     calcTime: '--',      // 本次 SGP4 计算时刻 HH:MM:SS
     timeOffset: 0,       // 时间轴：相对锚点的偏移（分钟，0~1440 = 0~24h）
+    timePct: 0,          // 进度条填充/圆点位置（timeOffset/1440*100）
     timeLabel: '此刻',   // 时间轴当前对应的绝对时刻文本
     // 大气遮挡高度 (km)：视距切线需高于 RE+clearance（默认 100 km 大气层/卡门线）
     clearance: '100',
@@ -78,6 +89,7 @@ Page({
   _rafId: 0,
   _zoom: 1, _pinching: false, _pinchStartDist: 0, _pinchStartZoom: 1,
   _rec1: null, _rec2: null,       // 两颗星 satrec（null=未选）
+  _groupSats1: null, _groupSats2: null, // 已选分组的全量卫星（组内搜索用，避免重复加载）
   _orbit1: null, _orbit2: null,   // 轨道环 render-XYZ 缓存
   _P1: null, _P2: null, _station: null,
   _R1: 0, _R2: 0, _maxR: RE * 3,  // 当前两星地心半径 + 自适应缩放基准
@@ -85,15 +97,18 @@ Page({
   _calcMs: 0,                     // 最近一次计算的绝对时刻（ms，供轨道环采样起点）
   _baseTime: 0,                   // 时间轴锚点“此刻”（ms）；偏移在此基础上叠加
   _liveTimer: null,
+  _trackLeft: 0, _trackW: 0,      // 自定义进度条触区的视口左缘/宽度（onReady 量一次，拖动时换算位置）
 
   onLoad() {
     this._baseTime = Date.now();  // 时间轴以进入页面的此刻为锚点（非实时探索）
-    // 两颗星默认未选，先出一帧空结果（'--'）；用户搜索选星后再算
+    // 默认自动选两颗「中国星网」卫星（星下点贴近中国、连线跨在中国上空）；选不到再保持空结果
     this._recompute();
+    this._pickDefaults();
   },
 
   onReady() {
     this._initCanvas();
+    this._measureTrack();
   },
 
   onShow() {
@@ -127,7 +142,7 @@ Page({
       // 退出实时：以当前真实时刻为新锚点，时间轴回到“此刻”
       this._stopLive();
       this._baseTime = Date.now();
-      this.setData({ live: false, timeOffset: 0 });
+      this.setData({ live: false, timeOffset: 0, timePct: 0 });
       this._recompute();
       this._refreshOrbits(this._lastG);
     }
@@ -140,11 +155,21 @@ Page({
     if (this.data.live) return new Date();
     return new Date(this._baseTime + this.data.timeOffset * 60000);
   },
-  // 拖动时间轴（changing/​change 共用）：自动退出实时，按偏移重算并重建轨道环
-  // 节流到 ~16fps，避免快速拖动时 setData 过密；拖动结束的 change 事件间隔通常已超阈值，保证落点精确
-  onTimeChange(e) {
-    const v = e.detail.value;
-    const patch = { timeOffset: v };
+  // 量一次进度条触区的视口左缘/宽度（横向布局固定，页面仅纵向滚动，量一次即可复用）
+  _measureTrack(cb) {
+    wx.createSelectorQuery().in(this).select('.tb-track').boundingClientRect((r) => {
+      if (r && r.width > 0) { this._trackLeft = r.left; this._trackW = r.width; }
+      if (cb) cb();
+    }).exec();
+  },
+  // 触摸位置 -> 偏移：换算 0~1440min，自动退出实时，按偏移重算并重建轨道环
+  // 节流到 ~16fps，避免拖动时 setData 过密；touchend 会清节流确保落点精确
+  _applyTouch(clientX) {
+    if (!this._trackW) return;
+    let pct = (clientX - this._trackLeft) / this._trackW;
+    pct = clamp(pct, 0, 1);
+    const v = Math.round(pct * 1440);
+    const patch = { timeOffset: v, timePct: v / 1440 * 100 };
     if (this.data.live) { patch.live = false; this._stopLive(); }
     this.setData(patch);
     const now = Date.now();
@@ -153,31 +178,105 @@ Page({
     this._recompute();
     this._refreshOrbits(this._lastG);
   },
+  onTrackTouch(e) {
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    if (this._trackW) this._applyTouch(t.clientX);
+    else this._measureTrack(() => this._applyTouch(t.clientX)); // 首触若未量到则补量
+  },
+  onTrackEnd(e) {
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t || !this._trackW) return;
+    this._lastTimeCalc = 0; // 清节流，保证抬手落点精确
+    this._applyTouch(t.clientX);
+  },
   resetTime() {
+    if (this.data.live || !this.data.timeOffset) return; // 实时态/已在此刻：无需重置
     this._baseTime = Date.now();
-    this.setData({ timeOffset: 0 });
+    this.setData({ timeOffset: 0, timePct: 0 });
+    this._recompute();
+    this._refreshOrbits(this._lastG);
+    wx.vibrateShort({ type: 'light' });
+  },
+  // 精调步进：在拖动粗选后用 ±1m/±10m/±1h 精确落到目标分钟（限制在 0~24h 内）
+  stepTime(e) {
+    if (this.data.live) return; // 实时态不步进
+    const delta = parseInt(e.currentTarget.dataset.d, 10) || 0;
+    const v = clamp((this.data.timeOffset || 0) + delta, 0, 1440);
+    if (v === this.data.timeOffset) return; // 已到端点：不空转
+    this.setData({ timeOffset: v, timePct: v / 1440 * 100 });
     this._recompute();
     this._refreshOrbits(this._lastG);
     wx.vibrateShort({ type: 'light' });
   },
 
-  // ===================== 搜索 / 选星（同星座地图） =====================
-  _doSearch(raw, outKey) {
-    const kw = (raw || '').trim().toLowerCase();
-    if (!kw) { this.setData({ [outKey]: [] }); return; }
-    tleStore.ensureSearchIndex().then((index) => {
-      const out = [];
-      for (let i = 0; i < index.length && out.length < 40; i++) {
-        const s = index[i];
-        if (s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
-          out.push({ name: s.name, noradId: s.noradId, group: s.group, groupLabel: GROUP_LABEL[s.group] || s.group });
-        }
-      }
-      this.setData({ [outKey]: out });
-    }).catch(() => {});
+  // ===================== 选分组 / 组内选星 =====================
+  // 展开/收起分组浮层（同时关掉另一槽的分组浮层，避免两层叠在一起）
+  toggleGroup1() { this.setData({ groupOpen1: !this.data.groupOpen1, groupOpen2: false }); this._resumeDraw(); },
+  toggleGroup2() { this.setData({ groupOpen2: !this.data.groupOpen2, groupOpen1: false }); this._resumeDraw(); },
+
+  onPickGroup1(e) { const ds = e.currentTarget.dataset; this._selectGroup(1, ds.key, ds.label); },
+  onPickGroup2(e) { const ds = e.currentTarget.dataset; this._selectGroup(2, ds.key, ds.label); },
+
+  // 选定分组：记录分组、清空原有搜索/选星，加载该组全量卫星并直接列出（便于立刻挑具体卫星）
+  _selectGroup(slot, key, label) {
+    this.setData({
+      ['group' + slot]: key, ['group' + slot + 'Label']: label,
+      ['groupOpen' + slot]: false, ['kw' + slot]: '', ['results' + slot]: []
+    });
+    wx.vibrateShort({ type: 'light' });
+    // 全选=跨全部星座的搜索索引；其余=单组全量 TLE
+    const loader = (key === 'all')
+      ? tleStore.ensureSearchIndex().then((index) => ({ sats: index || [] }))
+      : tleStore.loadGroupSats(key);
+    loader.then(({ sats }) => {
+      // GEO：预算每颗定点经度并按经度排序（定点星经度基本不变，进组时算一次即可）
+      this['_groupSats' + slot] = (key === 'geo') ? this._withGeoLon(sats || []) : (sats || []);
+      this._filterGroup(slot, '');
+    }).catch(() => wx.showToast({ title: '分组加载失败', icon: 'none' }));
   },
-  onSearchInput1(e) { this.setData({ kw1: e.detail.value }); this._doSearch(e.detail.value, 'results1'); },
-  onSearchInput2(e) { this.setData({ kw2: e.detail.value }); this._doSearch(e.detail.value, 'results2'); },
+  // 给 GEO 卫星标注定点经度（SGP4 取此刻星下点经度）并按经度升序排
+  _withGeoLon(sats) {
+    const T = new Date(), g = sat.gstime(T);
+    const out = sats.map((s) => {
+      let lon = NaN;
+      try {
+        const rec = sat.twoline2satrec(s.line1, s.line2);
+        if (rec && !rec.error) {
+          const pv = sat.propagate(rec, T);
+          if (pv && pv.position) lon = sat.eciToGeodetic(pv.position, g).longitude / DEG;
+        }
+      } catch (e) { /* 解析失败的留空，排到末尾 */ }
+      const lonText = isFinite(lon) ? `${Math.abs(lon).toFixed(1)}°${lon >= 0 ? 'E' : 'W'}` : '';
+      return Object.assign({}, s, { lon, lonText });
+    });
+    // 从东经 100° 起、往东递增绕一圈排序（100°E 排最前，无经度的排末尾）
+    const key = (lon) => isFinite(lon) ? ((lon - 100 + 360) % 360) : 1e9;
+    out.sort((a, b) => key(a.lon) - key(b.lon));
+    return out;
+  },
+  // 组内按关键字过滤（空关键字=列出前若干颗）；全选态下每条用其真实所属星座
+  _filterGroup(slot, raw) {
+    const sats = this['_groupSats' + slot] || [];
+    const kw = (raw || '').trim().toLowerCase();
+    const grp = this.data['group' + slot], label = this.data['group' + slot + 'Label'];
+    const isAll = grp === 'all';
+    const out = [];
+    for (let i = 0; i < sats.length && out.length < 60; i++) {
+      const s = sats[i];
+      if (!kw || s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
+        const g = isAll ? (s.group || '') : grp;
+        out.push({ name: s.name, noradId: s.noradId, group: g, groupLabel: isAll ? (GROUP_LABEL[g] || g) : label, lonText: s.lonText || '' });
+      }
+    }
+    this.setData({ ['results' + slot]: out });
+    this._resumeDraw(); // 结果增减会改变地球显隐 -> 重启绘制循环（隐藏期间 RAF 可能已停）
+  },
+  onSearchInput1(e) { this.setData({ kw1: e.detail.value }); if (this.data.group1) this._filterGroup(1, e.detail.value); },
+  onSearchInput2(e) { this.setData({ kw2: e.detail.value }); if (this.data.group2) this._filterGroup(2, e.detail.value); },
+  // 点搜索框：已选分组 -> 直接重列该组全部卫星（不打字也能挑/换星）；未选分组 -> 展开分组选择来引导
+  onSearchFocus1() { if (this.data.group1) this._filterGroup(1, ''); else this.setData({ groupOpen1: true, groupOpen2: false }); },
+  onSearchFocus2() { if (this.data.group2) this._filterGroup(2, ''); else this.setData({ groupOpen2: true, groupOpen1: false }); },
 
   _pick(noradId, group, slot) {
     tleStore.loadGroupSats(group).then(({ sats }) => {
@@ -187,17 +286,79 @@ Page({
       let rec;
       try { rec = sat.twoline2satrec(s.line1, s.line2); } catch (e) { rec = null; }
       if (!rec || rec.error) { wx.showToast({ title: 'TLE 解析失败', icon: 'none' }); return; }
-      if (slot === 1) { this._rec1 = rec; this.setData({ sat1Name: s.name, kw1: s.name, results1: [] }); }
-      else { this._rec2 = rec; this.setData({ sat2Name: s.name, kw2: s.name, results2: [] }); }
+      if (slot === 1) { this._rec1 = rec; this.setData({ sat1Name: s.name, sat1Norad: s.noradId, kw1: s.name, results1: [] }); }
+      else { this._rec2 = rec; this.setData({ sat2Name: s.name, sat2Norad: s.noradId, kw2: s.name, results2: [] }); }
       this._recompute();
       this._refreshOrbits(this._lastG);
+      this._resumeDraw(); // 选定后列表收起、地球恢复 -> 重启绘制循环
       wx.vibrateShort({ type: 'light' });
     }).catch(() => wx.showToast({ title: '加载失败', icon: 'none' }));
   },
   onPickResult1(e) { const ds = e.currentTarget.dataset; this._pick(ds.norad, ds.group, 1); },
   onPickResult2(e) { const ds = e.currentTarget.dataset; this._pick(ds.norad, ds.group, 2); },
-  clearSearch1() { this._rec1 = null; this._orbit1 = null; this.setData({ kw1: '', results1: [], sat1Name: '' }); this._recompute(); },
-  clearSearch2() { this._rec2 = null; this._orbit2 = null; this.setData({ kw2: '', results2: [], sat2Name: '' }); this._recompute(); },
+  // 关闭卫星列表浮层（不选也能退出；已选卫星保持不变）
+  closeResults1() { this.setData({ results1: [] }); this._resumeDraw(); },
+  closeResults2() { this.setData({ results2: [] }); this._resumeDraw(); },
+  // 点空白遮罩：一并收起分组与卫星列表，地球恢复
+  closeAllPops() { this.setData({ groupOpen1: false, groupOpen2: false, results1: [], results2: [] }); this._resumeDraw(); },
+
+  // 进页面默认选两颗「中国星网(HULIANWANG)」卫星：取此刻星下点最贴近中国、且彼此较近的一对，
+  // 让初始 ISL 连线就跨在中国上空。数据走 tleStore（与搜索同源），任何环节失败则静默保持未选。
+  _pickDefaults() {
+    if (this._rec1 || this._rec2) return; // 用户已手动选过则不覆盖
+    const T = new Date();
+    const g = sat.gstime(T);
+    const CLAT = 35, CLON = 105;                                  // 中国大致中心
+    const inChina = (la, lo) => la >= 5 && la <= 60 && lo >= 65 && lo <= 145;
+    // 经度差按纬度余弦缩放，得到近似地表角距（°）
+    const dist = (a, b) => {
+      const dLat = a.lat - b.lat;
+      const dLon = (a.lon - b.lon) * Math.cos((a.lat + b.lat) / 2 * DEG);
+      return Math.hypot(dLat, dLon);
+    };
+    tleStore.loadGroupSats('guowang').then(({ sats }) => {
+      if (this._rec1 || this._rec2) return;
+      const cand = [];
+      (sats || []).forEach((s) => {
+        let rec; try { rec = sat.twoline2satrec(s.line1, s.line2); } catch (e) { return; }
+        if (!rec || rec.error) return;
+        let pv; try { pv = sat.propagate(rec, T); } catch (e) { return; }
+        if (!pv || !pv.position) return;
+        const gd = sat.eciToGeodetic(pv.position, g);
+        cand.push({ s, rec, lat: gd.latitude / DEG, lon: gd.longitude / DEG });
+      });
+      if (!cand.length) return;
+      const center = { lat: CLAT, lon: CLON };
+      const over = cand.filter((c) => inChina(c.lat, c.lon));
+      const pool = over.length ? over : cand;
+      pool.sort((a, b) => dist(a, center) - dist(b, center));
+      const first = pool[0];
+      // 第二颗：挑离第一颗最近者（连线短、确保跨在中国上空）；两颗以上在境内时优先在境内挑
+      const secPool = (over.length >= 2) ? over : cand;
+      let second = null, best = Infinity;
+      secPool.forEach((c) => {
+        if (String(c.s.noradId) === String(first.s.noradId)) return;
+        const dd = dist(c, first);
+        if (dd < best) { best = dd; second = c; }
+      });
+      if (!second) return;
+      this._rec1 = first.rec;
+      this._rec2 = second.rec;
+      this._groupSats1 = sats; this._groupSats2 = sats; // 默认组缓存，后续组内搜索零加载
+      const gwLabel = GROUP_LABEL.guowang;
+      this.setData({
+        group1: 'guowang', group1Label: gwLabel,
+        group2: 'guowang', group2Label: gwLabel,
+        sat1Name: first.s.name, sat1Norad: first.s.noradId, kw1: first.s.name,
+        sat2Name: second.s.name, sat2Norad: second.s.noradId, kw2: second.s.name
+      });
+      this._recompute();
+      this._refreshOrbits(this._lastG);
+    }).catch(() => {});
+  },
+  // 清除：保留已选分组，仅清掉关键字与已选卫星，并重新列出该组（便于改选同组其它星）
+  clearSearch1() { this._rec1 = null; this._orbit1 = null; this.setData({ kw1: '', sat1Name: '', sat1Norad: '' }); this._recompute(); if (this.data.group1) this._filterGroup(1, ''); else { this.setData({ results1: [] }); this._resumeDraw(); } },
+  clearSearch2() { this._rec2 = null; this._orbit2 = null; this.setData({ kw2: '', sat2Name: '', sat2Norad: '' }); this._recompute(); if (this.data.group2) this._filterGroup(2, ''); else { this.setData({ results2: [] }); this._resumeDraw(); } },
 
   _fmtTime(d) {
     const p = (n) => String(n).padStart(2, '0');
@@ -287,18 +448,18 @@ Page({
     this._R2 = st2 ? st2.R : 0;
     this._maxR = Math.max(this._R1, this._R2, RE * 1.05);
 
-    // 地球站（始终可算）
-    const latV = num(d.esLat, 0), lonV = num(d.esLon, 0);
+    // 地球站（始终可算）：输入框存正数“量值”，半球由 latHemi/lonHemi 决定符号（南纬/西经取负）
+    const latMag = Math.abs(num(d.esLat, 0));
+    const lonMag = Math.abs(num(d.esLon, 0));
+    const latV = (d.latHemi === '°S') ? -latMag : latMag;
+    const lonV = (d.lonHemi === '°W') ? -lonMag : lonMag;
     const station = this._stationPos(latV, lonV);
     this._station = station;
-    const latHemi = latV >= 0 ? '°N' : '°S';
-    const lonHemi = lonV >= 0 ? '°E' : '°W';
 
     const patch = {
       calcTime: this._fmtTime(T),
       timeLabel: this._fmtStamp(T),
-      latHemi, lonHemi,
-      esAddr: `${Math.abs(latV)}${latHemi} / ${Math.abs(lonV)}${lonHemi}`
+      esAddr: `${lonMag}${d.lonHemi} / ${latMag}${d.latHemi}`
     };
 
     // 各星对地球站的斜距 / 仰角 / 方位角
@@ -399,10 +560,14 @@ Page({
   },
 
   // 点击经纬度后缀切换半球（正负号），以支持南纬 / 西经
+  // 切换半球：只翻 °N/°S 或 °E/°W 标签，量值（输入框数字）保持正数不变，符号在 _recompute 里按半球取
   toggleHemi(e) {
     const key = e.currentTarget.dataset.key;
-    const v = parseFloat(this.data[key]);
-    this.setData({ [key]: String(isFinite(v) ? -v : 0) }, () => this._recompute());
+    if (key === 'esLat') {
+      this.setData({ latHemi: this.data.latHemi === '°N' ? '°S' : '°N' }, () => this._recompute());
+    } else {
+      this.setData({ lonHemi: this.data.lonHemi === '°E' ? '°W' : '°E' }, () => this._recompute());
+    }
     wx.vibrateShort({ type: 'light' });
   },
 
@@ -438,6 +603,12 @@ Page({
     if (this._autoRotate && !this._dragging && !this._pinching) this._yaw += 0.0006;
     this._draw();
     this._rafId = this._canvas.requestAnimationFrame(() => this._loop());
+  },
+  // 浮层关闭、地球从 hidden 恢复显示后，RAF 链可能已因隐藏中断 -> 重启一条（带去重，绝不双跑）
+  _resumeDraw() {
+    if (!this._canvas) return;
+    if (this._rafId) { this._canvas.cancelAnimationFrame(this._rafId); this._rafId = 0; }
+    this._loop();
   },
 
   // 旋转 + 正交投影
@@ -561,7 +732,9 @@ Page({
     }
 
     // 地球站斜距线（站与对应卫星都显示时才画）
-    const station = this._station || this._stationPos(num(d.esLat, 0), num(d.esLon, 0));
+    const station = this._station || this._stationPos(
+      (d.latHemi === '°S' ? -1 : 1) * Math.abs(num(d.esLat, 0)),
+      (d.lonHemi === '°W' ? -1 : 1) * Math.abs(num(d.esLon, 0)));
     if (showSt && show1 && P1) this._drawSlant(station, P1, cx, cy, scale, Rpx, d.vis1);
     if (showSt && show2 && P2) this._drawSlant(station, P2, cx, cy, scale, Rpx, d.vis2);
 

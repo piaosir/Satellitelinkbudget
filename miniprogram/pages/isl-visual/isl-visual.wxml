@@ -13,55 +13,82 @@
       <!-- 卫星1 -->
       <view class="sat-col">
         <view class="card-title"><view class="tag-dot dot-sat1"></view>卫星1
-          <text class="sel-name {{sat1Name ? '' : 'sel-empty'}}">{{sat1Name || '未选择'}}</text>
+          <text class="grp-chip {{group1 ? '' : 'grp-empty'}}" catchtap="toggleGroup1">{{group1Label || '选择分组'}} ▾</text>
+          <view wx:if="{{groupOpen1}}" class="grp-pop">
+            <view wx:for="{{groupList}}" wx:key="key" class="grp-item {{group1 === item.key ? 'grp-on' : ''}}"
+              data-key="{{item.key}}" data-label="{{item.label}}" catchtap="onPickGroup1">{{item.label}}</view>
+            <view class="grp-item {{group1 === 'all' ? 'grp-on' : 'grp-all'}}" data-key="all" data-label="全部卫星" catchtap="onPickGroup1">全选</view>
+          </view>
         </view>
         <view class="sch">
-          <input class="sch-in" value="{{kw1}}" placeholder="搜索星名 / NORAD" bindinput="onSearchInput1" confirm-type="search" />
+          <input class="sch-in" value="{{kw1}}" placeholder="{{group1 ? '可输入过滤，或在下方直接选' : '点此选分组后即可选星'}}"
+            bindfocus="onSearchFocus1" bindinput="onSearchInput1" confirm-type="search" />
           <text wx:if="{{kw1}}" class="sch-clr" bindtap="clearSearch1">✕</text>
         </view>
-        <scroll-view wx:if="{{results1.length}}" class="sch-res" scroll-y>
-          <view wx:for="{{results1}}" wx:key="noradId" class="sch-item" data-norad="{{item.noradId}}" data-group="{{item.group}}" bindtap="onPickResult1">
-            <text class="si-name">{{item.name}}</text>
-            <text class="si-meta">{{item.groupLabel}} · {{item.noradId}}</text>
+        <view wx:if="{{results1.length}}" class="sch-res">
+          <view class="sch-res-hd">
+            <text class="sch-res-ti">{{group1Label}} · {{results1.length}} 颗</text>
+            <text class="sch-res-x" catchtap="closeResults1">✕ 关闭</text>
           </view>
-        </scroll-view>
+          <scroll-view class="sch-res-list" scroll-y>
+            <view wx:for="{{results1}}" wx:key="noradId" class="sch-item" data-norad="{{item.noradId}}" data-group="{{item.group}}" bindtap="onPickResult1">
+              <text class="si-name">{{item.name}}</text>
+              <text class="si-meta">{{item.groupLabel}} · {{item.noradId}}{{item.lonText ? ' · 定点 ' + item.lonText : ''}}</text>
+            </view>
+          </scroll-view>
+        </view>
       </view>
       <!-- 卫星2 -->
       <view class="sat-col">
         <view class="card-title"><view class="tag-dot dot-sat2"></view>卫星2
-          <text class="sel-name {{sat2Name ? '' : 'sel-empty'}}">{{sat2Name || '未选择'}}</text>
+          <text class="grp-chip {{group2 ? '' : 'grp-empty'}}" catchtap="toggleGroup2">{{group2Label || '选择分组'}} ▾</text>
+          <view wx:if="{{groupOpen2}}" class="grp-pop">
+            <view wx:for="{{groupList}}" wx:key="key" class="grp-item {{group2 === item.key ? 'grp-on' : ''}}"
+              data-key="{{item.key}}" data-label="{{item.label}}" catchtap="onPickGroup2">{{item.label}}</view>
+            <view class="grp-item {{group2 === 'all' ? 'grp-on' : 'grp-all'}}" data-key="all" data-label="全部卫星" catchtap="onPickGroup2">全选</view>
+          </view>
         </view>
         <view class="sch">
-          <input class="sch-in" value="{{kw2}}" placeholder="搜索星名 / NORAD" bindinput="onSearchInput2" confirm-type="search" />
+          <input class="sch-in" value="{{kw2}}" placeholder="{{group2 ? '可输入过滤，或在下方直接选' : '点此选分组后即可选星'}}"
+            bindfocus="onSearchFocus2" bindinput="onSearchInput2" confirm-type="search" />
           <text wx:if="{{kw2}}" class="sch-clr" bindtap="clearSearch2">✕</text>
         </view>
-        <scroll-view wx:if="{{results2.length}}" class="sch-res" scroll-y>
-          <view wx:for="{{results2}}" wx:key="noradId" class="sch-item" data-norad="{{item.noradId}}" data-group="{{item.group}}" bindtap="onPickResult2">
-            <text class="si-name">{{item.name}}</text>
-            <text class="si-meta">{{item.groupLabel}} · {{item.noradId}}</text>
+        <view wx:if="{{results2.length}}" class="sch-res">
+          <view class="sch-res-hd">
+            <text class="sch-res-ti">{{group2Label}} · {{results2.length}} 颗</text>
+            <text class="sch-res-x" catchtap="closeResults2">✕ 关闭</text>
           </view>
-        </scroll-view>
+          <scroll-view class="sch-res-list" scroll-y>
+            <view wx:for="{{results2}}" wx:key="noradId" class="sch-item" data-norad="{{item.noradId}}" data-group="{{item.group}}" bindtap="onPickResult2">
+              <text class="si-name">{{item.name}}</text>
+              <text class="si-meta">{{item.groupLabel}} · {{item.noradId}}{{item.lonText ? ' · 定点 ' + item.lonText : ''}}</text>
+            </view>
+          </scroll-view>
+        </view>
       </view>
     </view>
 
     <view class="common-row">
-      <text class="cl cl-wide">地球站 纬度</text>
-      <input class="cf" type="digit" value="{{esLat}}" data-key="esLat" bindinput="onInput" />
-      <text class="cu cu-hemi" data-key="esLat" bindtap="toggleHemi">{{latHemi}}</text>
-      <text class="cl cl-mid">经度</text>
+      <text class="cl cl-wide">地球站 经度</text>
       <input class="cf" type="digit" value="{{esLon}}" data-key="esLon" bindinput="onInput" />
       <text class="cu cu-hemi" data-key="esLon" bindtap="toggleHemi">{{lonHemi}}</text>
+      <text class="cl cl-mid">纬度</text>
+      <input class="cf" type="digit" value="{{esLat}}" data-key="esLat" bindinput="onInput" />
+      <text class="cu cu-hemi" data-key="esLat" bindtap="toggleHemi">{{latHemi}}</text>
     </view>
-    <view class="hint-mini">点击 °N/°E 切换半球（南纬 / 西经记为负值）</view>
+    <!-- 点空白处关闭浮层：透明全屏遮罩，置于浮层之下、其余内容之上（与浮层同处操作区层叠上下文） -->
+    <view wx:if="{{groupOpen1 || groupOpen2 || results1.length || results2.length}}"
+      class="pop-mask" catchtap="closeAllPops"></view>
   </view>
 
-  <!-- 3D 地球 -->
+  <!-- 3D 地球（canvas 为原生层、会盖住普通浮层；选星浮层展开时隐藏地球，彻底避免遮挡） -->
   <view class="globe-wrap">
     <canvas type="2d" id="globeCanvas" class="globe-canvas"
+      hidden="{{results1.length || results2.length}}"
       bindtouchstart="onTouchStart" catchtouchmove="onTouchMove"
       bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"
       catchwheel="onWheel"></canvas>
-    <view class="globe-legend">
+    <view class="globe-legend" hidden="{{results1.length || results2.length}}">
       <view class="lg-item"><view class="lg-dot dot-sat1"></view>卫星1</view>
       <view class="lg-item"><view class="lg-dot dot-sat2"></view>卫星2</view>
       <view class="lg-item"><view class="lg-dot dot-station"></view>地球站</view>
@@ -69,14 +96,25 @@
     </view>
   </view>
 
-  <!-- 时间轴（非实时，可拖动查看未来 24h 轨道变化） -->
+  <!-- 时间轴（非实时，可拖动查看未来 24h 轨道变化）：粗调拖滑块、精调点步进 -->
   <view class="time-bar">
-    <text class="tb-label">时间轴</text>
-    <slider class="tb-slider" min="0" max="1440" step="1" value="{{timeOffset}}" disabled="{{live}}"
-      activeColor="#5a93a8" backgroundColor="#2a313c" block-color="#7bb4cc" block-size="14"
-      bindchanging="onTimeChange" bindchange="onTimeChange" />
-    <text class="tb-time">{{live ? '实时' : timeLabel}}</text>
-    <text wx:if="{{!live && timeOffset > 0}}" class="tb-reset" bindtap="resetTime">此刻</text>
+    <view class="tb-row">
+      <text class="tb-label">时间轴</text>
+      <view class="tb-track" bindtouchstart="onTrackTouch" catchtouchmove="onTrackTouch" bindtouchend="onTrackEnd">
+        <view class="tb-bar"><view class="tb-fill" style="width:{{timePct}}%"></view></view>
+        <view class="tb-knob" style="left:{{timePct}}%"></view>
+      </view>
+      <text class="tb-time">{{live ? '实时' : timeLabel}}</text>
+    </view>
+    <view class="tb-steps">
+      <text class="tb-step {{live ? 'tb-dis' : ''}}" data-d="-60" bindtap="stepTime">−1h</text>
+      <text class="tb-step {{live ? 'tb-dis' : ''}}" data-d="-10" bindtap="stepTime">−10m</text>
+      <text class="tb-step {{live ? 'tb-dis' : ''}}" data-d="-1" bindtap="stepTime">−1m</text>
+      <text class="tb-now {{(!live && timeOffset > 0) ? '' : 'tb-dis'}}" bindtap="resetTime">此刻</text>
+      <text class="tb-step {{live ? 'tb-dis' : ''}}" data-d="1" bindtap="stepTime">+1m</text>
+      <text class="tb-step {{live ? 'tb-dis' : ''}}" data-d="10" bindtap="stepTime">+10m</text>
+      <text class="tb-step {{live ? 'tb-dis' : ''}}" data-d="60" bindtap="stepTime">+1h</text>
+    </view>
   </view>
 
   <!-- 展示信息区 -->
@@ -96,21 +134,26 @@
         <view class="es-c">时延 ms</view>
       </view>
       <view class="es-tr">
-        <view class="es-c c-name"><view class="tag-dot dot-sat1"></view>卫星1</view>
+        <view class="es-c c-name">
+          <view class="cn-top"><view class="tag-dot dot-sat1"></view>卫星1</view>
+          <text class="c-norad" wx:if="{{sat1Norad}}">NORAD {{sat1Norad}}</text>
+        </view>
         <view class="es-c">{{slant1}}</view>
         <view class="es-c {{vis1 ? '' : 'es-warn'}}">{{elev1}}</view>
         <view class="es-c">{{az1}}</view>
         <view class="es-c">{{esDelay1}}</view>
       </view>
       <view class="es-tr">
-        <view class="es-c c-name"><view class="tag-dot dot-sat2"></view>卫星2</view>
+        <view class="es-c c-name">
+          <view class="cn-top"><view class="tag-dot dot-sat2"></view>卫星2</view>
+          <text class="c-norad" wx:if="{{sat2Norad}}">NORAD {{sat2Norad}}</text>
+        </view>
         <view class="es-c">{{slant2}}</view>
         <view class="es-c {{vis2 ? '' : 'es-warn'}}">{{elev2}}</view>
         <view class="es-c">{{az2}}</view>
         <view class="es-c">{{esDelay2}}</view>
       </view>
     </view>
-    <view class="es-note" wx:if="{{!vis1 || !vis2}}">仰角为负 = 卫星在该站地平线下，不可见</view>
 
     <!-- 星间链路几何 -->
     <view class="sec-title">
@@ -125,7 +168,7 @@
       <view class="kv"><text class="k">当前地心夹角</text><text class="v">{{thetaCur}}°</text></view>
       <view class="kv"><text class="k">最大可视夹角</text><text class="v">{{thetaMaxDeg}}°</text></view>
       <view class="kv"><text class="k">两星轨道高度差</text><text class="v">{{deltaH}} km</text></view>
-      <view class="kv"><text class="k">传播时延 单/双</text><text class="v">{{delayMs}} / {{rttMs}} ms</text></view>
+      <view class="kv"><text class="k">ISL时延 单/双</text><text class="v">{{delayMs}} / {{rttMs}} ms</text></view>
     </view>
   </view>
 </view>
