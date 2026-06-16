@@ -36,9 +36,9 @@ App({
       // 验证云开发是否初始化成功
       console.log('云开发初始化成功');
 
-      // 启动即后台静默刷新各星座 TLE 到云存储（每设备每天一次，只下 ~1KB manifest 判断；
-      // 过期组由该用户本机直连 CelesTrak 拉取回传，惠及后续用户）。这样进“星座地图”时云存储
-      // 大概率已是当天数据，无需现场等待下载。
+      // 启动即后台静默刷新 TLE：每设备「每过本地 0 点」直连 CelesTrak 拉全部分组各一次，
+      // 写本地缓存（进“星座地图”直接读本机、零 CDN）并带闸门回传云存储（云端恒为当天最新、
+      // 仅作兜底）。详见 utils/tleStore.js。
       try {
         require('./utils/tleStore').ensureTLEFresh();
       } catch (e) {

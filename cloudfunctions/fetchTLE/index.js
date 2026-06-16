@@ -27,17 +27,20 @@ const fileID = (path) => `cloud://${ENV_ID}.${BUCKET}/${path}`;
 const GROUPS = {
   starlink: { query: 'GROUP=starlink', label: 'Starlink' },
   oneweb:   { query: 'GROUP=oneweb',   label: 'OneWeb' },
+  kuiper:   { query: 'GROUP=kuiper',   label: 'Kuiper' },              // 亚马逊 Amazon Leo/Kuiper（LEO 宽带）
   gps:      { query: 'GROUP=gps-ops',  label: 'GPS' },
   beidou:   { query: 'GROUP=beidou',   label: '北斗 BeiDou' },
   galileo:  { query: 'GROUP=galileo',  label: 'Galileo' },
-  qianfan:  { query: 'GROUP=qianfan',  label: '千帆 Qianfan' },
-  guowang:  { query: 'NAME=HULIANWANG', label: '国网 Guowang' }, // 国网/互联网低轨真实星名为 HULIANWANG（173 颗）；GUOWANG 仅 4 个测试星
+  qianfan:  { query: 'GROUP=qianfan',  label: '千帆星座 Qianfan' },
+  guowang:  { query: 'NAME=HULIANWANG', label: '中国星网 Guowang' }, // 中国星网/互联网低轨真实星名为 HULIANWANG；GUOWANG 仅 4 个测试星
   geo:      { query: 'GROUP=geo',      label: 'GEO 地球静止' },
   glonass:    { query: 'GROUP=glo-ops',      label: 'GLONASS' },      // 俄 GNSS（MEO，星名 COSMOS）
   o3b:        { query: 'NAME=O3B',           label: 'O3b' },          // SES O3b/mPOWER（MEO 通信）；无 GROUP，按名称查
   iridium:    { query: 'GROUP=iridium-NEXT', label: '铱星 Iridium' }, // 铱星 NEXT（LEO 通信）
   globalstar: { query: 'GROUP=globalstar',   label: 'Globalstar' },   // Globalstar（LEO 通信）
-  stations:   { query: 'GROUP=stations',     label: '空间站' }        // ISS/天宫 等空间站
+  stations:   { query: 'GROUP=stations',     label: '空间站' },       // ISS/天宫 等空间站
+  planet:     { query: 'GROUP=planet',       label: 'Planet' },       // Planet Labs Flock/SkySat（对地遥感）
+  spire:      { query: 'GROUP=spire',        label: 'Spire' }         // Spire Lemur（气象/AIS/ADS-B 遥感）
 };
 
 const CELESTRAK_HOST = 'celestrak.org';

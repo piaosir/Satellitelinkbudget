@@ -13,8 +13,8 @@ const RE = 6378.137;          // 地球赤道半径 km
 const DEG = Math.PI / 180;
 const ENV_ID = 'cloud1-8gjv5ekx41d6fb76';
 const BUCKET = '636c-cloud1-8gjv5ekx41d6fb76-1385987144';
-const MAX_RENDER = 3000;      // 单分组渲染点数上限（数据全保留，仅渲染抽稀以保流畅）
-const MAX_RENDER_ALL = 3500; // “全部卫星”模式渲染上限：先放满非 Starlink，再用 Starlink 垫到该数
+const MAX_RENDER = 5000;      // 单分组渲染点数上限（数据全保留，仅渲染抽稀以保流畅；实际仅 Starlink 超此值）
+const MAX_RENDER_ALL = 6000; // “全部卫星”模式渲染上限：先放满非 Starlink，再用 Starlink 垫到该数
 
 // 各组 TLE 全部前端众包（见 utils/tleStore）：启动时已按需后台刷新云存储；
 // 进入本页时优先用当天本地缓存，缺失才下载云存储，云端也缺失才本机直连 CelesTrak 兜底拉取。
@@ -33,13 +33,16 @@ const GROUPS = [
   { key: 'geo', label: 'GEO' },
   { key: 'starlink', label: 'Starlink' },
   { key: 'oneweb', label: 'OneWeb' },
-  { key: 'qianfan', label: '千帆' },
-  { key: 'guowang', label: '国网' },
+  { key: 'kuiper', label: 'Kuiper' },
+  { key: 'qianfan', label: '千帆星座' },
+  { key: 'guowang', label: '中国星网' },
   { key: 'iridium', label: '铱星' },
   { key: 'globalstar', label: 'Globalstar' },
-  { key: 'stations', label: '空间站' }
+  { key: 'stations', label: '空间站' },
+  { key: 'planet', label: 'Planet' },
+  { key: 'spire', label: 'Spire' }
 ];
-// 默认选中“国网/星网”（中国星网 China SatNet）
+// 默认选中“中国星网”（China SatNet）
 const DEFAULT_GROUP_INDEX = Math.max(0, GROUPS.findIndex((g) => g.key === 'guowang'));
 
 // 分组键 -> 显示名
@@ -52,7 +55,7 @@ const ecefToRender = (p) => [p.x, p.z, -p.y];
 Page({
   data: {
     groups: GROUPS,
-    groupIndex: DEFAULT_GROUP_INDEX, // 默认“国网/星网”
+    groupIndex: DEFAULT_GROUP_INDEX, // 默认“中国星网”
     loading: false,
     statusText: '',
     satCount: 0,             // 该组卫星总数
@@ -223,22 +226,30 @@ Page({
   },
 
   // ---- 本地按需缓存：每组每天最多下载一次，当天再看直接读本机（零 CDN）----
-  _todayStr() {
-    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+  _dateStr(d) {
+    const p = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
   },
+  _todayStr() { return this._dateStr(new Date()); },
+  // 数据自身下载日期(fetchedAt)是否=今天：缓存/云副本「是否当天」的唯一判据
+  _isToday(iso) { return !!iso && this._dateStr(new Date(iso)) === this._todayStr(); },
   _cachePath(key) { return `${wx.env.USER_DATA_PATH}/tle_${key}.json`; },
   // 当天有效则返回缓存对象，否则 null（读失败/过期都按未命中处理）
   _readCache(key) {
     try {
       if (wx.getStorageSync(`tle_date_${key}`) !== this._todayStr()) return null;
-      return JSON.parse(wx.getFileSystemManager().readFileSync(this._cachePath(key), 'utf8'));
+      const data = JSON.parse(wx.getFileSystemManager().readFileSync(this._cachePath(key), 'utf8'));
+      // 双保险：文件自身 fetchedAt 不是今天则按未命中（堵住旧逻辑遗留的“标记今天/文件昨天”）
+      if (data && data.fetchedAt && !this._isToday(data.fetchedAt)) return null;
+      return data;
     } catch (e) { return null; }
   },
   _writeCache(key, data) {
     try {
       wx.getFileSystemManager().writeFileSync(this._cachePath(key), JSON.stringify(data), 'utf8');
-      wx.setStorageSync(`tle_date_${key}`, this._todayStr());
+      // 标记存“数据自身下载日期(fetchedAt)”而非“今天碰过”——旧副本不会被误判为当天
+      const stamp = (data && data.fetchedAt) ? this._dateStr(new Date(data.fetchedAt)) : this._todayStr();
+      wx.setStorageSync(`tle_date_${key}`, stamp);
     } catch (e) { /* 缓存写失败不影响展示 */ }
   },
 
@@ -330,12 +341,14 @@ Page({
     this._downloadJSON(this._fileID(`${g.key}.json`))
       .then((data) => {
         if (data && data.chunked) return this._loadChunks(g, data);
-        // 云端缺失/为空（如定时器从未生成）-> 现场众包：本机直连 CelesTrak 拉取并回传
-        if (!data || !data.sats || !data.sats.length) return this._fetchGroupLive(g, data);
+        // 云端缺失/为空/或不是当天 -> 现场直连 CelesTrak 拉“今天”的并回传（拿不到再退回这份旧副本）
+        if (!data || !data.sats || !data.sats.length || !this._isToday(data.fetchedAt)) {
+          return this._fetchGroupLive(g, data);
+        }
         this._writeCache(g.key, data);
         this._ingest(data);
       })
-      .catch(() => this._fetchGroupLive(g, null)); // 下载失败 -> 现场众包兜底
+      .catch(() => this._fetchGroupLive(g, null)); // 下载失败 -> 现场直连兜底
   },
 
   // “全部卫星”：各组优先用当天本地缓存（零 CDN），未命中才下载；合并后统一入库（每颗带所属分组）
