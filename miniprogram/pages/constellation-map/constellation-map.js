@@ -475,10 +475,16 @@ Page({
     }
     this._render = render;
 
-    // 若已选中某星，刷新它的轨道/足迹
-    if (this._selIdx >= 0) this._buildSelectedGeometry(this._selIdx, now, gmst);
+    // 若已选中某星，刷新它的轨道/足迹与信息卡（与实时刷新保持一致）
+    let selCard = null;
+    if (this._selIdx >= 0) {
+      this._buildSelectedGeometry(this._selIdx, now, gmst);
+      selCard = this._selCardData(this._selIdx, now, gmst);
+    }
 
-    this.setData({ loading: false, statusText: '', calcTime: this._fmt(now) });
+    const patch = { loading: false, statusText: '', calcTime: this._fmt(now) };
+    if (selCard) patch.selected = selCard;
+    this.setData(patch);
 
     // 跨分组搜索切组后：定位待选卫星
     if (this._pendingNorad) {
