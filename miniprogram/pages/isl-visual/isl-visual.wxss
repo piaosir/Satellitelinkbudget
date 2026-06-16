@@ -1,13 +1,16 @@
 .page {
   min-height: 100vh;
   background: #0d1117;
-  padding-bottom: 30rpx;
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
 }
 
 /* ===== 操作区（置顶） ===== */
 .ctrl-zone {
   padding: 10rpx 14rpx 0;
+  position: relative;
+  z-index: 10;       /* 让搜索结果浮层叠在地球之上 */
 }
 .toggle-row {
   display: flex;
@@ -77,6 +80,72 @@
 .dot-sat2 { background: #c2a25e; }
 .dot-station { background: #6fb88f; }
 
+/* ===== 选星：已选名 + 搜索框 + 结果下拉 ===== */
+.sel-name {
+  margin-left: auto;
+  max-width: 60%;
+  font-size: 20rpx;
+  color: #8ab4cc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sel-empty { color: #5c6675; }
+.sch {
+  display: flex;
+  align-items: center;
+  margin-top: 4rpx;
+  position: relative;   /* 搜索结果浮层的定位锚点 */
+}
+.sch-in {
+  flex: 1;
+  min-width: 0;
+  background: #0e1219;
+  border: 1rpx solid #283039;
+  border-radius: 4rpx;
+  padding: 7rpx 9rpx;
+  font-size: 21rpx;
+  color: #e6e9ef;
+}
+.sch-clr {
+  font-size: 22rpx;
+  color: #6b7484;
+  padding: 4rpx 8rpx;
+  margin-left: 6rpx;
+}
+.sch-res {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin-top: 4rpx;
+  z-index: 20;
+  max-height: 300rpx;
+  overflow-y: auto;
+  border: 1rpx solid #2f3845;
+  border-radius: 4rpx;
+  background: #11161e;
+  box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.45);
+}
+.sch-item {
+  display: flex;
+  flex-direction: column;
+  padding: 6rpx 9rpx;
+  border-bottom: 1rpx solid #1b212a;
+}
+.si-name {
+  font-size: 21rpx;
+  color: #d7dde6;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.si-meta {
+  font-size: 18rpx;
+  color: #6b7484;
+  margin-top: 1rpx;
+}
+
 .cin {
   display: flex;
   align-items: center;
@@ -140,17 +209,60 @@
   border: 1rpx solid #232a34;
   border-radius: 6rpx;
 }
-/* ===== 3D 地球 ===== */
+/* ===== 3D 地球（flex 撑满中间剩余空间，消除底部留白） ===== */
 .globe-wrap {
   position: relative;
   width: 100%;
-  height: 720rpx;
+  flex: 1;
+  min-height: 700rpx;
   margin-top: 10rpx;
   background: #090c11;
   border-top: 1rpx solid #1b212a;
   border-bottom: 1rpx solid #1b212a;
 }
+
+/* ===== 时间轴 ===== */
+.time-bar {
+  display: flex;
+  align-items: center;
+  margin: 8rpx 14rpx 0;
+  padding: 6rpx 14rpx;
+  background: #14181f;
+  border: 1rpx solid #232a34;
+  border-radius: 6rpx;
+}
+.tb-label {
+  font-size: 20rpx;
+  color: #8b94a3;
+  flex-shrink: 0;
+}
+.tb-slider {
+  flex: 1;
+  min-width: 0;
+  margin: 0 14rpx 0 12rpx;
+}
+.tb-time {
+  font-size: 19rpx;
+  color: #8ab4cc;
+  flex-shrink: 0;
+  text-align: right;
+  font-family: 'DIN Alternate', 'Roboto Mono', Consolas, monospace;
+}
+.tb-reset {
+  font-size: 19rpx;
+  color: #9aacbe;
+  flex-shrink: 0;
+  margin-left: 10rpx;
+  padding: 4rpx 12rpx;
+  border: 1rpx solid #2a313c;
+  border-radius: 4rpx;
+}
 .globe-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100%;
   height: 100%;
 }
@@ -233,6 +345,18 @@
   color: #d07673;
   background: rgba(194, 91, 88, 0.1);
   border-color: rgba(194, 91, 88, 0.3);
+}
+.sec-sub {
+  margin-left: 10rpx;
+  font-size: 19rpx;
+  color: #6b7484;
+  font-weight: 400;
+}
+.calc-time {
+  margin-left: auto;
+  font-size: 19rpx;
+  color: #6b7484;
+  font-family: 'DIN Alternate', 'Roboto Mono', Consolas, monospace;
 }
 
 /* 键值密集网格 */

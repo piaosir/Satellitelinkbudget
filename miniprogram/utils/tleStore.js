@@ -258,10 +258,68 @@ function ensureTLEFresh() {
   }).catch(() => { _refreshing = false; });
 }
 
+// ---- 供星间链路页复用：跨分组搜索索引 + 按 NORAD 取某星 TLE ----
+// （星座地图把同等逻辑写在页面内联；这里抽出共享，不改动地图，避免回归）
+
+let _indexCache = null; // 本会话内索引缓存
+
+// 跨分组搜索索引 [{name, noradId, group}]：本地 '_index' 缓存命中即返回，否则下云端 _index.json
+// 并补 Starlink 名单（众包可能尚未并入云端索引），写回本地缓存。
+function ensureSearchIndex() {
+  if (_indexCache) return Promise.resolve(_indexCache);
+  const cached = readLocalCache('_index');
+  if (cached && cached.sats) { _indexCache = cached.sats; return Promise.resolve(_indexCache); }
+  return Promise.all([
+    downloadJSON('celestrak/_index.json').catch(() => null),
+    downloadJSON('celestrak/_names_starlink.json').catch(() => null)
+  ]).then(([idx, star]) => {
+    const index = (idx && idx.sats) ? idx.sats.slice() : [];
+    const hasStarlink = index.some((s) => s.group === 'starlink');
+    if (!hasStarlink && star && star.names) {
+      for (let i = 0; i < star.names.length; i++) {
+        index.push({ name: star.names[i].name, noradId: star.names[i].noradId, group: 'starlink' });
+      }
+    }
+    _indexCache = index;
+    writeLocalCache('_index', { sats: index });
+    return index;
+  });
+}
+
+// 取某分组全量 sats（[{name,noradId,line1,line2}]）：当天本地缓存 -> 云端(<key>.json，支持分块) -> 直连兜底
+function loadGroupSats(key) {
+  const cached = readLocalCache(key);
+  if (cached && cached.sats && cached.sats.length && !cached.chunked) {
+    return Promise.resolve({ sats: cached.sats, fetchedAt: cached.fetchedAt });
+  }
+  const live = () => fetchGroupLive(key).then((p) => ({ sats: p.sats, fetchedAt: p.fetchedAt }));
+  return downloadJSON(`celestrak/${key}.json`).then((data) => {
+    if (data && data.chunked) {
+      const n = data.partCount || 0;
+      if (n <= 0) return { sats: [], fetchedAt: data.fetchedAt };
+      const tasks = [];
+      for (let p = 0; p < n; p++) tasks.push(downloadJSON(`celestrak/${key}_part${p}.json`).catch(() => null));
+      return Promise.all(tasks).then((parts) => {
+        const sats = [];
+        for (let i = 0; i < parts.length; i++) {
+          const arr = (parts[i] && parts[i].sats) || [];
+          for (let j = 0; j < arr.length; j++) sats.push(arr[j]);
+        }
+        return sats.length ? { sats, fetchedAt: data.fetchedAt } : live();
+      });
+    }
+    if (data && data.sats && data.sats.length) return { sats: data.sats, fetchedAt: data.fetchedAt };
+    return live();
+  }).catch(live);
+}
+
 module.exports = {
   parseTLE,
   ensureTLEFresh,
   fetchGroupLive,
   uploadGroupPayload,
-  GROUP_QUERY
+  GROUP_QUERY,
+  readLocalCache,
+  ensureSearchIndex,
+  loadGroupSats
 };

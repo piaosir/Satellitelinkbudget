@@ -6,24 +6,41 @@
       <view class="tg {{show1 ? 'tg-on' : ''}}" data-key="show1" bindtap="onToggle"><view class="tg-dot dot-sat1"></view>卫星1</view>
       <view class="tg {{show2 ? 'tg-on' : ''}}" data-key="show2" bindtap="onToggle"><view class="tg-dot dot-sat2"></view>卫星2</view>
       <view class="tg {{showStation ? 'tg-on' : ''}}" data-key="showStation" bindtap="onToggle"><view class="tg-dot dot-station"></view>地球站</view>
+      <view class="tg tg-rotate {{live ? 'tg-on' : ''}}" bindtap="toggleLive">{{live ? '实时中' : '实时关'}}</view>
       <view class="tg tg-rotate {{autoRotate ? 'tg-on' : ''}}" bindtap="toggleRotate">{{autoRotate ? '自转中' : '自转停'}}</view>
     </view>
     <view class="sat-row">
       <!-- 卫星1 -->
       <view class="sat-col">
-        <view class="card-title"><view class="tag-dot dot-sat1"></view>卫星1</view>
-        <view class="cin"><text class="cl">高度</text><input class="cf" type="digit" value="{{h1}}" data-key="h1" bindinput="onInput" /><text class="cu">km</text></view>
-        <view class="cin"><text class="cl">倾角</text><input class="cf" type="digit" value="{{i1}}" data-key="i1" bindinput="onInput" /><text class="cu">°</text></view>
-        <view class="cin"><text class="cl">赤经Ω</text><input class="cf" type="digit" value="{{raan1}}" data-key="raan1" bindinput="onInput" /><text class="cu">°</text></view>
-        <view class="cslider"><text class="cl">幅角</text><slider class="csl" min="0" max="360" step="1" value="{{u1}}" activeColor="#5a93a8" backgroundColor="#2a313c" block-color="#7bb4cc" block-size="14" data-key="u1" bindchange="onSliderChange" bindchanging="onSliderChange" /><text class="cu">{{u1}}°</text></view>
+        <view class="card-title"><view class="tag-dot dot-sat1"></view>卫星1
+          <text class="sel-name {{sat1Name ? '' : 'sel-empty'}}">{{sat1Name || '未选择'}}</text>
+        </view>
+        <view class="sch">
+          <input class="sch-in" value="{{kw1}}" placeholder="搜索星名 / NORAD" bindinput="onSearchInput1" confirm-type="search" />
+          <text wx:if="{{kw1}}" class="sch-clr" bindtap="clearSearch1">✕</text>
+        </view>
+        <scroll-view wx:if="{{results1.length}}" class="sch-res" scroll-y>
+          <view wx:for="{{results1}}" wx:key="noradId" class="sch-item" data-norad="{{item.noradId}}" data-group="{{item.group}}" bindtap="onPickResult1">
+            <text class="si-name">{{item.name}}</text>
+            <text class="si-meta">{{item.groupLabel}} · {{item.noradId}}</text>
+          </view>
+        </scroll-view>
       </view>
       <!-- 卫星2 -->
       <view class="sat-col">
-        <view class="card-title"><view class="tag-dot dot-sat2"></view>卫星2</view>
-        <view class="cin"><text class="cl">高度</text><input class="cf" type="digit" value="{{h2}}" data-key="h2" bindinput="onInput" /><text class="cu">km</text></view>
-        <view class="cin"><text class="cl">倾角</text><input class="cf" type="digit" value="{{i2}}" data-key="i2" bindinput="onInput" /><text class="cu">°</text></view>
-        <view class="cin"><text class="cl">赤经Ω</text><input class="cf" type="digit" value="{{raan2}}" data-key="raan2" bindinput="onInput" /><text class="cu">°</text></view>
-        <view class="cslider"><text class="cl">幅角</text><slider class="csl" min="0" max="360" step="1" value="{{u2}}" activeColor="#5a93a8" backgroundColor="#2a313c" block-color="#7bb4cc" block-size="14" data-key="u2" bindchange="onSliderChange" bindchanging="onSliderChange" /><text class="cu">{{u2}}°</text></view>
+        <view class="card-title"><view class="tag-dot dot-sat2"></view>卫星2
+          <text class="sel-name {{sat2Name ? '' : 'sel-empty'}}">{{sat2Name || '未选择'}}</text>
+        </view>
+        <view class="sch">
+          <input class="sch-in" value="{{kw2}}" placeholder="搜索星名 / NORAD" bindinput="onSearchInput2" confirm-type="search" />
+          <text wx:if="{{kw2}}" class="sch-clr" bindtap="clearSearch2">✕</text>
+        </view>
+        <scroll-view wx:if="{{results2.length}}" class="sch-res" scroll-y>
+          <view wx:for="{{results2}}" wx:key="noradId" class="sch-item" data-norad="{{item.noradId}}" data-group="{{item.group}}" bindtap="onPickResult2">
+            <text class="si-name">{{item.name}}</text>
+            <text class="si-meta">{{item.groupLabel}} · {{item.noradId}}</text>
+          </view>
+        </scroll-view>
       </view>
     </view>
 
@@ -52,27 +69,24 @@
     </view>
   </view>
 
+  <!-- 时间轴（非实时，可拖动查看未来 24h 轨道变化） -->
+  <view class="time-bar">
+    <text class="tb-label">时间轴</text>
+    <slider class="tb-slider" min="0" max="1440" step="1" value="{{timeOffset}}" disabled="{{live}}"
+      activeColor="#5a93a8" backgroundColor="#2a313c" block-color="#7bb4cc" block-size="14"
+      bindchanging="onTimeChange" bindchange="onTimeChange" />
+    <text class="tb-time">{{live ? '实时' : timeLabel}}</text>
+    <text wx:if="{{!live && timeOffset > 0}}" class="tb-reset" bindtap="resetTime">此刻</text>
+  </view>
+
   <!-- 展示信息区 -->
   <view class="result-card {{blocked ? 'card-blocked' : ''}}">
-    <!-- 星间链路 -->
+    <!-- 地球站对星（上移至顶部） -->
     <view class="sec-title">
-      星间链路 ISL 几何
-      <text class="sec-badge {{blocked ? 'b-bad' : 'b-ok'}}">{{statusText}}</text>
+      地球站对星
+      <text class="sec-sub">站址 {{esAddr}}</text>
+      <text class="calc-time">{{live ? '实时' : '计算'}} {{calcTime}}</text>
     </view>
-    <view class="kv-grid">
-      <view class="kv"><text class="k">ISL 斜距（当前）</text><text class="v">{{dCur}} km</text></view>
-      <view class="kv"><text class="k">几何视距上限</text><text class="v">{{dMax}} km</text></view>
-      <view class="kv"><text class="k">视距裕量</text><text class="v {{blocked ? 'v-bad' : 'v-ok'}}">{{losMargin}} km</text></view>
-      <view class="kv"><text class="k">视线切线高度</text><text class="v">{{tangentText}}</text></view>
-      <view class="kv"><text class="k">当前地心夹角</text><text class="v">{{thetaCur}}°</text></view>
-      <view class="kv"><text class="k">最大可视夹角</text><text class="v">{{thetaMaxDeg}}°</text></view>
-      <view class="kv"><text class="k">两星轨道高度差</text><text class="v">{{deltaH}} km</text></view>
-      <view class="kv"><text class="k">单向传播时延</text><text class="v">{{delayMs}} ms</text></view>
-      <view class="kv"><text class="k">往返传播时延</text><text class="v">{{rttMs}} ms</text></view>
-    </view>
-
-    <!-- 地球站斜距 -->
-    <view class="sec-title">地球站对星（站址 {{esAddr}}）</view>
     <view class="es-tbl">
       <view class="es-tr es-thead">
         <view class="es-c c-name">目标</view>
@@ -97,5 +111,21 @@
       </view>
     </view>
     <view class="es-note" wx:if="{{!vis1 || !vis2}}">仰角为负 = 卫星在该站地平线下，不可见</view>
+
+    <!-- 星间链路几何 -->
+    <view class="sec-title">
+      星间链路 ISL 几何
+      <text class="sec-badge {{blocked ? 'b-bad' : 'b-ok'}}">{{statusText}}</text>
+    </view>
+    <view class="kv-grid">
+      <view class="kv"><text class="k">ISL 斜距（当前）</text><text class="v">{{dCur}} km</text></view>
+      <view class="kv"><text class="k">几何视距上限</text><text class="v">{{dMax}} km</text></view>
+      <view class="kv"><text class="k">视距裕量</text><text class="v {{blocked ? 'v-bad' : 'v-ok'}}">{{losMargin}} km</text></view>
+      <view class="kv"><text class="k">视线切线高度</text><text class="v">{{tangentText}}</text></view>
+      <view class="kv"><text class="k">当前地心夹角</text><text class="v">{{thetaCur}}°</text></view>
+      <view class="kv"><text class="k">最大可视夹角</text><text class="v">{{thetaMaxDeg}}°</text></view>
+      <view class="kv"><text class="k">两星轨道高度差</text><text class="v">{{deltaH}} km</text></view>
+      <view class="kv"><text class="k">传播时延 单/双</text><text class="v">{{delayMs}} / {{rttMs}} ms</text></view>
+    </view>
   </view>
 </view>

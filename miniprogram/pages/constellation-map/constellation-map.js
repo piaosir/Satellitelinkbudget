@@ -618,7 +618,7 @@ Page({
 
   _loop() {
     if (!this._canvas) return;
-    if (this._autoRotate && !this._dragging && !this._pinching) this._yaw += 0.0012;
+    if (this._autoRotate && !this._dragging && !this._pinching) this._yaw += 0.0006;
     this._draw();
     this._rafId = this._canvas.requestAnimationFrame(() => this._loop());
   },
@@ -985,19 +985,32 @@ Page({
     const pv = sat.propagate(rec, now);
     if (!pv || !pv.position) return null;
     const gd = sat.eciToGeodetic(pv.position, gmst);
-    const v = pv.velocity;
-    const speed = v ? Math.hypot(v.x, v.y, v.z) : 0;
+    const v = pv.velocity, r = pv.position;
+    // 惯性绝对速度：TEME（准惯性系）下的速度模
+    const speedAbs = v ? Math.hypot(v.x, v.y, v.z) : 0;
+    // 对地相对速度：扣除地球自转牵连速度 ω×r（ω 沿 +Z），模长在绕 Z 旋转下不变
+    const WE = 7.2921159e-5; // 地球自转角速度 rad/s
+    const speedRel = (v && r)
+      ? Math.hypot(v.x + WE * r.y, v.y - WE * r.x, v.z)
+      : 0;
+    const RE = 6378.137; // SGP4 地球半径 km；altp/alta 以地球半径为单位
     const isGeo = (m.group || GROUPS[this.data.groupIndex].key) === 'geo';
     return {
       name: m.name,
       noradId: m.noradId,
       slot: isGeo ? this._fmtSlot(sat.degreesLong(gd.longitude)) : '',
       alt: gd.height.toFixed(0),
-      speed: speed.toFixed(2),
+      speedAbs: speedAbs.toFixed(2),
+      speedRel: speedRel.toFixed(2),
       lat: sat.degreesLat(gd.latitude).toFixed(2),
       lon: sat.degreesLong(gd.longitude).toFixed(2),
       incl: (rec.inclo / DEG).toFixed(1),
-      period: ((2 * Math.PI) / rec.no).toFixed(0)
+      period: ((2 * Math.PI) / rec.no).toFixed(0),
+      ecc: rec.ecco.toFixed(4),
+      raan: (((rec.nodeo / DEG) % 360 + 360) % 360).toFixed(1),
+      argp: (((rec.argpo / DEG) % 360 + 360) % 360).toFixed(1),
+      perigee: (rec.altp * RE).toFixed(0),
+      apogee: (rec.alta * RE).toFixed(0)
     };
   },
 

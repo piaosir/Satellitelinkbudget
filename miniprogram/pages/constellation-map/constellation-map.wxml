@@ -59,10 +59,15 @@
     <view class="card-grid">
       <view class="kv"><text class="k">NORAD</text><text class="v">{{selected.noradId}}</text></view>
       <view class="kv"><text class="k">高度</text><text class="v">{{selected.alt}} km</text></view>
-      <view class="kv"><text class="k">对地速度</text><text class="v">{{selected.speed}} km/s</text></view>
-      <view class="kv"><text class="k">轨道周期</text><text class="v">{{selected.period}} min</text></view>
       <view class="kv"><text class="k">倾角</text><text class="v">{{selected.incl}}°</text></view>
-      <view class="kv"><text class="k">星下点</text><text class="v">{{selected.lat}}, {{selected.lon}}</text></view>
+      <view class="kv"><text class="k">偏心率</text><text class="v">{{selected.ecc}}</text></view>
+      <view class="kv"><text class="k">惯性绝对速度</text><text class="v">{{selected.speedAbs}} km/s</text></view>
+      <view class="kv"><text class="k">对地相对速度</text><text class="v">{{selected.speedRel}} km/s</text></view>
+      <view class="kv"><text class="k">轨道周期</text><text class="v">{{selected.period}} min</text></view>
+      <view class="kv"><text class="k">近/远地点</text><text class="v">{{selected.perigee}}/{{selected.apogee}} km</text></view>
+      <view class="kv"><text class="k">升交点赤经 Ω</text><text class="v">{{selected.raan}}°</text></view>
+      <view class="kv"><text class="k">近地点幅角 ω</text><text class="v">{{selected.argp}}°</text></view>
+      <view class="kv kv-wide"><text class="k">星下点</text><text class="v">{{selected.lat}}, {{selected.lon}}</text></view>
     </view>
     <view class="card-legend">
       <text class="lg"><text class="lg-dot dot-orbit"></text>轨道</text>
