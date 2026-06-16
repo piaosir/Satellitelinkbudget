@@ -168,7 +168,7 @@
       <view class="kv"><text class="k">当前地心夹角</text><text class="v">{{thetaCur}}°</text></view>
       <view class="kv"><text class="k">最大可视夹角</text><text class="v">{{thetaMaxDeg}}°</text></view>
       <view class="kv"><text class="k">两星轨道高度差</text><text class="v">{{deltaH}} km</text></view>
-      <view class="kv"><text class="k">ISL时延 单/双</text><text class="v">{{delayMs}} / {{rttMs}} ms</text></view>
+      <view class="kv"><text class="k">ISL时延</text><text class="v">{{delayMs}} ms</text></view>
     </view>
   </view>
 </view>

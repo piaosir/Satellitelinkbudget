@@ -83,6 +83,7 @@ Page({
   _yaw: 0.6,
   _pitch: -0.42,
   _dragging: false,
+  _moved: 0,            // 单指本次累计位移（区分轻触/拖动：<8 视为轻触，不打断自转）
   _lastX: 0,
   _lastY: 0,
   _autoRotate: true,
@@ -600,7 +601,8 @@ Page({
 
   _loop() {
     if (!this._canvas) return;
-    if (this._autoRotate && !this._dragging && !this._pinching) this._yaw += 0.0006;
+    // 缩放(双指/滚轮)不打断自转：仅单指拖动(手动接管视角)时暂停自转
+    if (this._autoRotate && !this._dragging) this._yaw += 0.0006;
     this._draw();
     this._rafId = this._canvas.requestAnimationFrame(() => this._loop());
   },
@@ -878,17 +880,17 @@ Page({
 
   onTouchStart(e) {
     if (e.touches.length >= 2) {
-      // 双指：进入缩放（暂停自转，不改变自转开关本身）
+      // 双指：仅缩放，不打断自转——手势期间由 _loop 的 !_pinching 暂停，松手即恢复（与星座地图一致，不关自转开关）
       this._pinching = true;
       this._dragging = false;
-      this._stopAutoRotate();
       this._pinchStartDist = this._touchDist(e.touches);
       this._pinchStartZoom = this._zoom;
       return;
     }
+    // 单指：碰下去先不停自转，等松手时按位移判定（轻触不打断、拖动才接管视角）——与星座地图一致
     const t = e.touches[0];
     this._dragging = true;
-    this._stopAutoRotate();
+    this._moved = 0;
     this._lastX = t.clientX;
     this._lastY = t.clientY;
   },
@@ -902,8 +904,10 @@ Page({
     }
     if (!this._dragging) return;
     const t = e.touches[0];
-    this._yaw += (t.clientX - this._lastX) * 0.01;
-    this._pitch = clamp(this._pitch + (t.clientY - this._lastY) * 0.01, -1.45, 1.45);
+    const dx = t.clientX - this._lastX, dy = t.clientY - this._lastY;
+    this._moved += Math.abs(dx) + Math.abs(dy);
+    this._yaw += dx * 0.01;
+    this._pitch = clamp(this._pitch + dy * 0.01, -1.45, 1.45);
     this._lastX = t.clientX;
     this._lastY = t.clientY;
   },
@@ -915,6 +919,8 @@ Page({
       return;
     }
     this._dragging = false;
+    // 仅当本次确为拖动旋转（位移≥8）才停自转；轻触不打断（与星座地图一致）
+    if (this._moved >= 8) this._stopAutoRotate();
   },
 
   // 滚轮缩放（仅 PC 微信会派发 wheel；移动端触屏不产生此事件，对移动端无影响）
