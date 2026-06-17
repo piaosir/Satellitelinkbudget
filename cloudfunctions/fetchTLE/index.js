@@ -1,16 +1,19 @@
 // cloudfunctions/fetchTLE/index.js
-// 从 CelesTrak 下载各星座 TLE，解析为结构化 JSON 写入云存储 celestrak/<group>.json。
+// 从 CelesTrak 下载各星座 OMM/CSV（FORMAT=csv），原始 CSV 文本整体写入云存储 celestrak/omm/<group>.json。
 //
-// 【仅手动调用】TLE 日常刷新已改为前端众包（见 miniprogram/utils/tleStore.js）。本函数不再挂任何
-// 定时触发器（原 dailyMain 每天 3 点空跑会下载 _names_*.json 产生 CDN 下行流量，已删除）。
-// 保留它仅供需要时手动播种/兜底：
+// 【v3.8 起改用 OMM/CSV，取代经典 TLE】CelesTrak 公告：5 位 NORAD 编号约 2026-07-12 耗尽，之后新星
+//   用 9 位编号，TLE 5 字符列宽塞不下。故改 FORMAT=csv，noradId 取完整 NORAD_CAT_ID。为不影响商店在用
+//   旧版本（共用同一云存储），新格式放独立命名空间 celestrak/omm/*；旧 celestrak/* 不再由本函数维护。
+//
+// 【仅手动调用】日常刷新已改为前端众包（见 miniprogram/utils/tleStore.js）。本函数不挂定时触发器，
+// 仅供需要时手动播种/兜底：
 //   - wx.cloud.callFunction({ name:'fetchTLE', data:{ group:'starlink' } })：刷新单组。
 //   - data:{} 或不带参：刷新除 starlink 外的全部分组（主集合）。
 //
-// 跨分组搜索索引 _index.json + manifest.json：每次运行都从已保存的各组名单文件 _names_<group>.json
-//   重建，因此即使某次只刷新部分组、或某组失败，索引仍包含所有“曾成功保存过”的组（含 starlink）。
+// 跨分组搜索索引 celestrak/omm/_index.json + manifest.json：每次运行都从已保存的各组名单文件
+//   _names_<group>.json 重建，故即使某次只刷新部分组/某组失败，索引仍含所有“曾成功保存过”的组（含 starlink）。
 //
-// 注意：云存储存的是 TLE 文本（轨道根数），不是坐标。SGP4 推演在前端打开页面时做一次，
+// 注意：云存储存的是轨道根数（OMM CSV 文本），不是坐标。SGP4 推演在前端打开页面时做一次，
 //       这样看到的才是“此刻”真实位置（LEO 每秒移动约 7.5km，云端预存坐标会严重过期）。
 
 const cloud = require('wx-server-sdk');
@@ -45,6 +48,10 @@ const GROUPS = {
 
 const CELESTRAK_HOST = 'celestrak.org';
 const MAIN_KEYS = Object.keys(GROUPS).filter((k) => k !== 'starlink'); // 主集合：除 starlink 外全部
+
+// 部分大 LEO 组在 CelesTrak 有「运营商补充星历」端点(sup-gp.php)，限流与主端点(gp.php)互相独立。
+// 主端点 403「未更新」/失败时转打此端点，让手动播种即使在服务器 IP 已被限流时仍能成功。值=FILE 参数。
+const SUP_FILE = { starlink: 'starlink', oneweb: 'oneweb', kuiper: 'kuiper', planet: 'planet', iridium: 'iridium', gps: 'gps' };
 
 function httpsGetText(url) {
   return new Promise((resolve, reject) => {
@@ -96,26 +103,47 @@ async function httpsGetTextRetry(url) {
   }
 }
 
-// 把 TLE 文本解析为 [{ name, noradId, line1, line2 }]
-function parseTLE(text) {
-  const lines = text.split(/\r?\n/).map((l) => l.replace(/\s+$/, '')).filter((l) => l.length > 0);
-  const sats = [];
-  let pendingName = '';
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.startsWith('1 ') && i + 1 < lines.length && lines[i + 1].startsWith('2 ')) {
-      const line1 = line;
-      const line2 = lines[i + 1];
-      const noradId = line1.substring(2, 7).trim();
-      const name = pendingName || `NORAD ${noradId}`;
-      sats.push({ name: name.trim(), noradId, line1, line2 });
-      pendingName = '';
-      i += 1; // 跳过已消费的 line2
-    } else if (!line.startsWith('1 ') && !line.startsWith('2 ')) {
-      pendingName = line; // 名称行
-    }
+// 解析一行 CSV（RFC4180：双引号包裹、内部 "" 转义为一个引号）-> 字段数组
+function splitCsvLine(line) {
+  const out = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQ) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; } else inQ = false;
+      } else cur += c;
+    } else if (c === '"') { inQ = true; }
+    else if (c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
   }
-  return sats;
+  out.push(cur);
+  return out;
+}
+
+// CelesTrak OMM CSV(FORMAT=csv) -> 精简名单 [{ name, noradId }]（仅供计数与索引重建用；
+// 完整根数以原始 csv 文本整体存入云存储信封，前端解析）。按表头列名定位，编号取完整 NORAD_CAT_ID。
+function parseOMMNames(text) {
+  const lines = text.split(/\r?\n/);
+  let h = 0;
+  while (h < lines.length && !lines[h].trim()) h++;
+  if (h >= lines.length) return [];
+  const header = splitCsvLine(lines[h]).map((s) => s.trim().toUpperCase());
+  const col = {};
+  for (let i = 0; i < header.length; i++) col[header[i]] = i;
+  const iName = 'OBJECT_NAME' in col ? col.OBJECT_NAME : -1;
+  const iId = 'NORAD_CAT_ID' in col ? col.NORAD_CAT_ID : -1;
+  if (iId < 0) return []; // 关键列缺失（非 OMM CSV / 错误提示文本）
+  const g = (f, i) => (i >= 0 && i < f.length ? f[i].trim() : '');
+  const names = [];
+  for (let r = h + 1; r < lines.length; r++) {
+    if (!lines[r].trim()) continue;
+    const f = splitCsvLine(lines[r]);
+    const noradId = g(f, iId);
+    if (!noradId) continue;
+    names.push({ name: g(f, iName) || `NORAD ${noradId}`, noradId });
+  }
+  return names;
 }
 
 function uploadJSON(cloudPath, obj) {
@@ -128,40 +156,58 @@ function uploadJSON(cloudPath, obj) {
 async function refreshGroup(key) {
   const g = GROUPS[key];
   if (!g) throw new Error(`未知分组：${key}`);
-  const url = `https://${CELESTRAK_HOST}/NORAD/elements/gp.php?${g.query}&FORMAT=tle`;
+  const primary = `https://${CELESTRAK_HOST}/NORAD/elements/gp.php?${g.query}&FORMAT=csv`;
+  const sup = SUP_FILE[key]
+    ? `https://${CELESTRAK_HOST}/NORAD/elements/supplemental/sup-gp.php?FILE=${SUP_FILE[key]}&FORMAT=csv`
+    : null;
   const t0 = Date.now();
-  let text;
+  let text, source = primary;
   try {
-    text = await httpsGetTextRetry(url);
+    text = await httpsGetTextRetry(primary);
   } catch (e) {
-    if (e.message === 'NOT_MODIFIED') {
-      console.log(`[fetchTLE] ${key} 未更新，沿用现有云存储数据`);
-      return { group: key, notModified: true };
+    // 主端点 403「未更新」/失败 -> 有补充源就转打独立限流的补充星历端点（破服务器 IP 被限流时的播种死锁）
+    if (sup) {
+      console.log(`[fetchTLE] ${key} 主端点 ${e.message}，改打补充星历 sup-gp.php`);
+      try {
+        text = await httpsGetTextRetry(sup);
+        source = sup;
+      } catch (e2) {
+        if (e.message === 'NOT_MODIFIED' || e2.message === 'NOT_MODIFIED') {
+          console.log(`[fetchTLE] ${key} 主端点未更新且补充端点不可用，沿用现有云存储数据`);
+          return { group: key, notModified: true };
+        }
+        throw e2;
+      }
+    } else {
+      if (e.message === 'NOT_MODIFIED') {
+        console.log(`[fetchTLE] ${key} 未更新，沿用现有云存储数据`);
+        return { group: key, notModified: true };
+      }
+      throw e;
     }
-    throw e;
   }
-  console.log(`[fetchTLE] ${key} 下载完成：${(text.length / 1024).toFixed(0)}KB / ${Date.now() - t0}ms`);
+  console.log(`[fetchTLE] ${key} 下载完成：${(text.length / 1024).toFixed(0)}KB / ${Date.now() - t0}ms（${source === sup ? '补充星历' : '主端点'}）`);
 
-  // CelesTrak 查询失败会返回纯文本提示（如 "Invalid query" / "No GP data found"）
-  if (!/^1 /m.test(text)) {
-    throw new Error(`无有效 TLE（返回："${text.slice(0, 80).replace(/\s+/g, ' ')}"）`);
+  // CelesTrak 查询失败会返回纯文本提示（如 "Invalid query" / "No GP data found"）；
+  // 有效 OMM CSV 第一行表头必含 NORAD_CAT_ID。
+  if (!/NORAD_CAT_ID/i.test(text)) {
+    throw new Error(`无有效 OMM CSV（返回："${text.slice(0, 80).replace(/\s+/g, ' ')}"）`);
   }
 
-  const sats = parseTLE(text);
-  if (sats.length === 0) throw new Error('解析后卫星数为 0');
+  const names = parseOMMNames(text);
+  if (names.length === 0) throw new Error('解析后卫星数为 0');
 
   const fetchedAt = new Date().toISOString();
-  const names = sats.map((s) => ({ name: s.name, noradId: s.noradId }));
 
-  // 单文件内联存储（含 starlink）。gzip 下载后体积小、Tencent 内网上传快、前端走国内 CDN 下载快，
-  // 不再切块，避免一次调用做十几次云存储 IO 叠加超时。
-  await uploadJSON(`celestrak/${key}.json`, {
-    group: key, label: g.label, source: url, fetchedAt, count: sats.length, sats
+  // 单文件信封存储：完整根数以原始 CSV 文本整体存入（CDN 下行最省），前端解析。含 starlink；
+  // 不切块，避免一次调用做十几次云存储 IO 叠加超时。放 OMM 独立命名空间 celestrak/omm/*。
+  await uploadJSON(`celestrak/omm/${key}.json`, {
+    group: key, label: g.label, source, fetchedAt, count: names.length, csv: text
   });
   // 精简名单文件（仅名称+编号，供跨分组索引重建用）
-  await uploadJSON(`celestrak/_names_${key}.json`, { group: key, label: g.label, fetchedAt, names });
+  await uploadJSON(`celestrak/omm/_names_${key}.json`, { group: key, label: g.label, fetchedAt, names });
 
-  return { group: key, count: sats.length };
+  return { group: key, count: names.length };
 }
 
 // 下载并解析云存储 JSON（云函数侧）；不存在返回 null
@@ -178,7 +224,7 @@ async function downloadJSON(path) {
 // （manifest 供前端众包 ensureTLEFresh 判断各组新鲜度，~1KB）。
 async function rebuildIndex() {
   const keys = Object.keys(GROUPS);
-  const datas = await Promise.all(keys.map((k) => downloadJSON(`celestrak/_names_${k}.json`)));
+  const datas = await Promise.all(keys.map((k) => downloadJSON(`celestrak/omm/_names_${k}.json`)));
   const index = [];
   const groups = {};
   keys.forEach((k, i) => {
@@ -187,8 +233,8 @@ async function rebuildIndex() {
     for (let j = 0; j < d.names.length; j++) index.push({ name: d.names[j].name, noradId: d.names[j].noradId, group: k });
     groups[k] = { fetchedAt: d.fetchedAt, count: d.names.length };
   });
-  await uploadJSON('celestrak/_index.json', { builtAt: new Date().toISOString(), count: index.length, sats: index });
-  await uploadJSON('celestrak/manifest.json', { updatedAt: new Date().toISOString(), groups });
+  await uploadJSON('celestrak/omm/_index.json', { builtAt: new Date().toISOString(), count: index.length, sats: index });
+  await uploadJSON('celestrak/omm/manifest.json', { updatedAt: new Date().toISOString(), groups });
   return index.length;
 }
 

@@ -20,7 +20,7 @@
         <text wx:if="{{loading}}" class="meta-load">{{statusText}}</text>
         <block wx:else>
           <text class="meta-item">在轨 {{satCount}}</text>
-          <text class="meta-item">TLE：{{dataTime}}</text>
+          <text class="meta-item">OMM：{{dataTime}}</text>
         </block>
       </view>
     </view>

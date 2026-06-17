@@ -1,7 +1,7 @@
 /*
  * satellite.js v7.0.1 (MIT License) — https://github.com/shashwatak/satellite-js
  * Vendored CommonJS bundle for WeChat Mini Program (esbuild, pure-JS SGP4/SDP4, no wasm).
- * Exports: twoline2satrec, propagate, gstime, eciToGeodetic, degreesLat, degreesLong, eciToEcf, ecfToLookAngles.
+ * Exports: twoline2satrec, omm2satrec, propagate, gstime, eciToGeodetic, degreesLat, degreesLong, eciToEcf, ecfToLookAngles.
  */
 "use strict";
 var __defProp = Object.defineProperty;
@@ -32,7 +32,8 @@ __export(wxentry_exports, {
   eciToGeodetic: () => eciToGeodetic,
   gstime: () => gstime,
   propagate: () => propagate,
-  twoline2satrec: () => twoline2satrec
+  twoline2satrec: () => twoline2satrec,
+  omm2satrec: () => omm2satrec
 });
 module.exports = __toCommonJS(wxentry_exports);
 
@@ -1699,6 +1700,58 @@ function twoline2satrec(longstr1, longstr2) {
     satnum,
     epochyr,
     epochdays,
+    ndot,
+    nddot,
+    bstar,
+    inclo,
+    nodeo,
+    ecco,
+    argpo,
+    mo,
+    no,
+    jdsatepoch
+  };
+  sgp4init(satrec, {
+    opsmode,
+    satn: satrec.satnum,
+    epoch: satrec.jdsatepoch - 24332815e-1,
+    xbstar: satrec.bstar,
+    xecco: satrec.ecco,
+    xargpo: satrec.argpo,
+    xinclo: satrec.inclo,
+    xmo: satrec.mo,
+    xno: satrec.no,
+    xnodeo: satrec.nodeo
+  });
+  return satrec;
+}
+
+// 从 OMM 记录（CelesTrak GP/CSV 解析所得）构造 satrec —— 与 twoline2satrec 同一套常量/单位，
+// 仅元素来源不同：satnum/编号取完整 NORAD_CAT_ID（不再受 TLE 5 位列宽限制，根治 9 位编号溢出），
+// 历元由 EPOCH（ISO UTC 串）算 jdsatepoch。epochyr/epochdays 仅作 satrec 形态补全（推演只读 jdsatepoch）。
+function omm2satrec(rec) {
+  const opsmode = "i";
+  const satnum = String(rec.noradId);
+  const d = new Date(/Z$/i.test(rec.epoch) ? rec.epoch : `${rec.epoch}Z`);
+  const year = d.getUTCFullYear();
+  const jdsatepoch = jday(
+    year, d.getUTCMonth() + 1, d.getUTCDate(),
+    d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds() + d.getUTCMilliseconds() / 1e3
+  );
+  const no = Number(rec.meanMotion) / xpdotp;
+  const ecco = Number(rec.ecc);
+  const inclo = Number(rec.incl) * deg2rad;
+  const nodeo = Number(rec.raan) * deg2rad;
+  const argpo = Number(rec.argp) * deg2rad;
+  const mo = Number(rec.ma) * deg2rad;
+  const bstar = Number(rec.bstar);
+  const ndot = Number(rec.mdot) / (xpdotp * 1440);
+  const nddot = Number(rec.mddot) / (xpdotp * 1440 * 1440);
+  const satrec = {
+    error: 0,
+    satnum,
+    epochyr: year % 100,
+    epochdays: (Date.UTC(year, d.getUTCMonth(), d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), d.getUTCMilliseconds()) - Date.UTC(year, 0, 1)) / 864e5 + 1,
     ndot,
     nddot,
     bstar,

@@ -13,8 +13,8 @@ const RE = 6378.137;          // 地球赤道半径 km
 const DEG = Math.PI / 180;
 const ENV_ID = 'cloud1-8gjv5ekx41d6fb76';
 const BUCKET = '636c-cloud1-8gjv5ekx41d6fb76-1385987144';
-const MAX_RENDER = 5000;      // 单分组渲染点数上限（数据全保留，仅渲染抽稀以保流畅；实际仅 Starlink 超此值）
-const MAX_RENDER_ALL = 6000; // “全部卫星”模式渲染上限：先放满非 Starlink，再用 Starlink 垫到该数
+const MAX_RENDER = 3500;      // 单分组渲染点数上限（数据全保留，仅渲染抽稀以保流畅；实际仅 Starlink 超此值）
+const MAX_RENDER_ALL = 4500; // “全部卫星”模式渲染上限：先放满非 Starlink，再用 Starlink 垫到该数
 
 // 各组 TLE 全部前端众包（见 utils/tleStore）：启动时已按需后台刷新云存储；
 // 进入本页时优先用当天本地缓存，缺失才下载云存储，云端也缺失才本机直连 CelesTrak 兜底拉取。
@@ -61,7 +61,7 @@ Page({
     satCount: 0,             // 该组卫星总数
     shownCount: 0,           // 实际渲染点数
     decimated: false,        // 是否抽稀
-    dataTime: '',            // TLE 历元/数据时间（fetchedAt）
+    dataTime: '',            // OMM 数据时间（fetchedAt）
     calcTime: '',            // 本次 SGP4 计算时刻
     selected: null,          // 选中卫星信息卡
     autoRotate: true,
@@ -222,7 +222,17 @@ Page({
   },
 
   _fileID(name) {
-    return `cloud://${ENV_ID}.${BUCKET}/celestrak/${name}`;
+    return `cloud://${ENV_ID}.${BUCKET}/celestrak/omm/${name}`;
+  },
+
+  // 云端 OMM 信封 {csv} -> 就地补出解析后的 sats（并删去 csv，避免本地缓存冗余）。
+  // 老的 {sats} 直存格式也兼容（直接原样返回）。
+  _omm(data) {
+    if (data && data.csv && !data.sats) {
+      data.sats = tleStore.parseOMMCsv(data.csv);
+      delete data.csv;
+    }
+    return data;
   },
 
   // ---- 本地按需缓存：每组每天最多下载一次，当天再看直接读本机（零 CDN）----
@@ -233,11 +243,11 @@ Page({
   _todayStr() { return this._dateStr(new Date()); },
   // 数据自身下载日期(fetchedAt)是否=今天：缓存/云副本「是否当天」的唯一判据
   _isToday(iso) { return !!iso && this._dateStr(new Date(iso)) === this._todayStr(); },
-  _cachePath(key) { return `${wx.env.USER_DATA_PATH}/tle_${key}.json`; },
+  _cachePath(key) { return `${wx.env.USER_DATA_PATH}/tle_omm_${key}.json`; },
   // 当天有效则返回缓存对象，否则 null（读失败/过期都按未命中处理）
   _readCache(key) {
     try {
-      if (wx.getStorageSync(`tle_date_${key}`) !== this._todayStr()) return null;
+      if (wx.getStorageSync(`tle_omm_date_${key}`) !== this._todayStr()) return null;
       const data = JSON.parse(wx.getFileSystemManager().readFileSync(this._cachePath(key), 'utf8'));
       // 双保险：文件自身 fetchedAt 不是今天则按未命中（堵住旧逻辑遗留的“标记今天/文件昨天”）
       if (data && data.fetchedAt && !this._isToday(data.fetchedAt)) return null;
@@ -246,10 +256,13 @@ Page({
   },
   _writeCache(key, data) {
     try {
-      wx.getFileSystemManager().writeFileSync(this._cachePath(key), JSON.stringify(data), 'utf8');
+      // 本地缓存只存解析后的精简记录，去掉体积较大的原始 csv 文本
+      let toWrite = data;
+      if (data && data.csv) { toWrite = Object.assign({}, data); delete toWrite.csv; }
+      wx.getFileSystemManager().writeFileSync(this._cachePath(key), JSON.stringify(toWrite), 'utf8');
       // 标记存“数据自身下载日期(fetchedAt)”而非“今天碰过”——旧副本不会被误判为当天
       const stamp = (data && data.fetchedAt) ? this._dateStr(new Date(data.fetchedAt)) : this._todayStr();
-      wx.setStorageSync(`tle_date_${key}`, stamp);
+      wx.setStorageSync(`tle_omm_date_${key}`, stamp);
     } catch (e) { /* 缓存写失败不影响展示 */ }
   },
 
@@ -341,6 +354,7 @@ Page({
     this._downloadJSON(this._fileID(`${g.key}.json`))
       .then((data) => {
         if (data && data.chunked) return this._loadChunks(g, data);
+        data = this._omm(data); // OMM 信封 -> 解析出 sats
         // 云端缺失/为空/或不是当天 -> 现场直连 CelesTrak 拉“今天”的并回传（拿不到再退回这份旧副本）
         if (!data || !data.sats || !data.sats.length || !this._isToday(data.fetchedAt)) {
           return this._fetchGroupLive(g, data);
@@ -365,8 +379,10 @@ Page({
       return this._downloadJSON(this._fileID(`${key}.json`))
         .then((data) => {
           bump();
-          if (!data || !data.sats) return []; // 分块/缺失：本视图按空处理（单组视图仍可加载）
-          if (!data.chunked) this._writeCache(key, data); // 写缓存（标记 _group 前，保持缓存干净）
+          if (data && data.chunked) return []; // 分块（旧路径）：本视图按空处理（单组视图仍可加载）
+          data = this._omm(data); // OMM 信封 -> 解析出 sats
+          if (!data || !data.sats) return []; // 缺失：本视图按空处理
+          this._writeCache(key, data); // 写缓存（标记 _group 前，保持缓存干净）
           return tag(data.sats, key);
         })
         .catch(() => { bump(); return []; });
@@ -384,7 +400,7 @@ Page({
   // 兜底：本机直连 CelesTrak 拉取某组（云端缺失/下载失败时），立即展示并回传云存储惠及后续用户
   _fetchGroupLive(g, fallback) {
     this.setData({ loading: true, statusText: `从 CelesTrak 获取 ${g.label}（首次较慢，请稍候）…` });
-    tleStore.fetchGroupLive(g.key)
+    tleStore.fetchGroupLiveOrSup(g.key)
       .then((payload) => {
         payload.label = g.label;
         this._writeCache(g.key, payload);          // 当天本地缓存，后续重看零 CDN
@@ -435,12 +451,12 @@ Page({
     for (let i = 0; i < sats.length; i++) {
       const s = sats[i];
       try {
-        const rec = sat.twoline2satrec(s.line1, s.line2);
+        const rec = sat.omm2satrec(s);
         if (rec && !rec.error) {
           recs.push(rec);
           meta.push({ name: s.name, noradId: s.noradId, group: s._group || (data && data.group) || '' });
         }
-      } catch (e) { /* 跳过坏 TLE */ }
+      } catch (e) { /* 跳过坏根数 */ }
     }
     this._recs = recs;
     this._meta = meta;

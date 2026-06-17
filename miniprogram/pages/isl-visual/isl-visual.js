@@ -242,7 +242,7 @@ Page({
     const out = sats.map((s) => {
       let lon = NaN;
       try {
-        const rec = sat.twoline2satrec(s.line1, s.line2);
+        const rec = sat.omm2satrec(s);
         if (rec && !rec.error) {
           const pv = sat.propagate(rec, T);
           if (pv && pv.position) lon = sat.eciToGeodetic(pv.position, g).longitude / DEG;
@@ -283,10 +283,10 @@ Page({
     tleStore.loadGroupSats(group).then(({ sats }) => {
       const id = String(noradId);
       const s = (sats || []).find((x) => String(x.noradId) === id);
-      if (!s) { wx.showToast({ title: '未找到该星 TLE', icon: 'none' }); return; }
+      if (!s) { wx.showToast({ title: '未找到该星根数', icon: 'none' }); return; }
       let rec;
-      try { rec = sat.twoline2satrec(s.line1, s.line2); } catch (e) { rec = null; }
-      if (!rec || rec.error) { wx.showToast({ title: 'TLE 解析失败', icon: 'none' }); return; }
+      try { rec = sat.omm2satrec(s); } catch (e) { rec = null; }
+      if (!rec || rec.error) { wx.showToast({ title: '根数解析失败', icon: 'none' }); return; }
       if (slot === 1) { this._rec1 = rec; this.setData({ sat1Name: s.name, sat1Norad: s.noradId, kw1: s.name, results1: [] }); }
       else { this._rec2 = rec; this.setData({ sat2Name: s.name, sat2Norad: s.noradId, kw2: s.name, results2: [] }); }
       this._recompute();
@@ -321,7 +321,7 @@ Page({
       if (this._rec1 || this._rec2) return;
       const cand = [];
       (sats || []).forEach((s) => {
-        let rec; try { rec = sat.twoline2satrec(s.line1, s.line2); } catch (e) { return; }
+        let rec; try { rec = sat.omm2satrec(s); } catch (e) { return; }
         if (!rec || rec.error) return;
         let pv; try { pv = sat.propagate(rec, T); } catch (e) { return; }
         if (!pv || !pv.position) return;
