@@ -364,7 +364,10 @@ function calculateLinkBudget(satParams, linkParams) {
  */
 function performCalculations(satParams, inputs) {
   const results = {};
-  
+  // 取数助手：仅当为空('' / null / undefined)时回退默认；输入了什么(含 0、含非法字符)就如实 parseFloat，
+  // 不再用 `parseFloat(x) || 默认` 的二次兜底（那会把用户输入的 0 当成默认值，导致输入与计算结果对不上）
+  const pickNum = (v, def) => (v !== '' && v !== null && v !== undefined) ? parseFloat(v) : def;
+
   // ============ 基础参数提取 ============
   const satelliteName = satParams.satelliteName || satParams.name || "未命名卫星";
   const frequencyBand = satParams.frequencyBand;
@@ -373,17 +376,17 @@ function performCalculations(satParams, inputs) {
   // 保存原始极化显示值（LHCP/RHCP/V/H），并转换为计算用的值（C/V/H）
   const uplinkPolarizationDisplay = inputs.uplinkPolarization || satParams.uplinkPolarization || 'V';
   const uplinkPolarization = (uplinkPolarizationDisplay === 'LHCP' || uplinkPolarizationDisplay === 'RHCP') ? 'C' : uplinkPolarizationDisplay;
-  const transponderBandwidth = parseFloat(satParams.transponderBandwidth) || 36; // MHz
+  const transponderBandwidth = pickNum(satParams.transponderBandwidth, 36); // MHz
   const _orbitPosRaw = satParams.orbitPosition !== undefined && satParams.orbitPosition !== '' && satParams.orbitPosition !== null
     ? satParams.orbitPosition : (satParams.position !== undefined && satParams.position !== '' && satParams.position !== null ? satParams.position : null);
   const orbitPosition = _orbitPosRaw !== null ? parseFloat(_orbitPosRaw) : 110.5;
-  const EIRPs = parseFloat(inputs.rxEIRP) || 46; // dBW - 卫星下行EIRP
-  const G_Ts = parseFloat(inputs.G_Ts) || 2; // dB/K - 卫星G/T
+  const EIRPs = pickNum(inputs.rxEIRP, 46); // dBW - 卫星下行EIRP
+  const G_Ts = pickNum(inputs.G_Ts, 2); // dB/K - 卫星G/T
   const SFDref = (satParams.sfdRef !== '' && satParams.sfdRef !== null && satParams.sfdRef !== undefined)
     ? parseFloat(satParams.sfdRef) : -82; // dBW/m² - SFD参考值
   
   // ============ 通信参数 ============
-  const infoRate = parseFloat(inputs.infoRate) || 2048; // kbps - 信息速率
+  const infoRate = pickNum(inputs.infoRate, 2048); // kbps - 信息速率
   const modulation = inputs.modulation || "QPSK";
   // FEC码率：支持分数和小数格式，保留原始输入用于显示
   const fecOriginal = String(inputs.fec || '0.75').trim();
@@ -391,7 +394,7 @@ function performCalculations(satParams, inputs) {
   // RS编码码率：支持分数和小数格式，保留原始输入用于显示
   const rsCodeOriginal = String(inputs.rsCode || '188/204').trim();
   const rsCode = parseRsCodeForCalculation(rsCodeOriginal, 188/204); // RS码效率（数值）
-  const bandwidthFactor = parseFloat(inputs.bandwidthFactor) || 1.4; // 带宽系数
+  const bandwidthFactor = pickNum(inputs.bandwidthFactor, 1.2); // 带宽系数(默认与应用预填/实时预览统一为 1.2)
   const berExponent = ((inputs.ber !== '' && inputs.ber !== null && inputs.ber !== undefined)
     ? parseFloat(inputs.ber) : 7) * -1; // 误码率指数
   
@@ -403,15 +406,15 @@ function performCalculations(satParams, inputs) {
   // 修复：正确处理 margin = 0 的情况
   const margin = (inputs.margin !== '' && inputs.margin !== null && inputs.margin !== undefined)
     ? parseFloat(inputs.margin) : 3; // dB - 链路余量
-  const m = parseFloat(inputs.m) || 1.0; // 扩频增益
+  const m = pickNum(inputs.m, 1.0); // 扩频增益
   
   // ============ 上行站参数 ============
   const earthLon = (inputs.longitude !== '' && inputs.longitude !== null && inputs.longitude !== undefined)
     ? parseFloat(inputs.longitude) : 116.4074;
   const earthLat = (inputs.latitude !== '' && inputs.latitude !== null && inputs.latitude !== undefined)
     ? parseFloat(inputs.latitude) : 39.9042;
-  const antennaDiameter = parseFloat(inputs.antennaDiameter) || 7.3; // meters
-  const antennaEfficiency = (parseFloat(inputs.antennaEfficiency) || 65) / 100;
+  const antennaDiameter = pickNum(inputs.antennaDiameter, 7.3); // meters
+  const antennaEfficiency = pickNum(inputs.antennaEfficiency, 65) / 100;
   const feederLoss = inputs.feederLoss !== undefined && inputs.feederLoss !== '' && inputs.feederLoss !== null
     ? parseFloat(inputs.feederLoss) 
     : 0.2; // dB (支持输入0)
@@ -426,8 +429,8 @@ function performCalculations(satParams, inputs) {
     ? parseFloat(inputs.rxLongitude) : 116.4074;
   const rxLatitude = (inputs.rxLatitude !== '' && inputs.rxLatitude !== null && inputs.rxLatitude !== undefined)
     ? parseFloat(inputs.rxLatitude) : 39.9042;
-  const rxAntennaDiameter = parseFloat(inputs.rxAntennaDiameter) || 1.2; // meters
-  const rxAntennaEfficiency = (parseFloat(inputs.rxAntennaEfficiency) || 65) / 100;
+  const rxAntennaDiameter = pickNum(inputs.rxAntennaDiameter, 1.2); // meters
+  const rxAntennaEfficiency = pickNum(inputs.rxAntennaEfficiency, 65) / 100;
   const rxFeederLoss = inputs.rxFeederLoss !== undefined && inputs.rxFeederLoss !== '' && inputs.rxFeederLoss !== null
     ? parseFloat(inputs.rxFeederLoss) 
     : 0.2; // dB (支持输入0)
@@ -1643,7 +1646,7 @@ function performCalculations(satParams, inputs) {
   results.azimuthResult = azimuth.toFixed(2);
   // 圆极化时极化角显示为'-'
   results.uplinkPolarizationAngleResult = (uplinkPolarizationDisplay === 'LHCP' || uplinkPolarizationDisplay === 'RHCP') ? '-' : uplinkPolarizationAngle.toFixed(2);
-  results.earthAntennaEfficiencyResult = inputs.antennaEfficiency || "65";
+  results.earthAntennaEfficiencyResult = (antennaEfficiency * 100).toFixed(0); // 回显实际参与计算的效率(对齐下行 rxAntennaEfficiencyResult)
   results.wavelengthResult = wavelength.toFixed(4);
   results.beamWidthResult = beamWidth.toFixed(2);
   results.txAntennaGainResult = txAntennaGain.toFixed(2);

@@ -32,6 +32,12 @@ function parseFractionOrDecimal(input, defaultValue) {
   return isNaN(value) ? defaultValue : value;
 }
 
+// 取数助手：仅当为空('' / null / undefined)时回退默认；输入了什么(含 0)就如实 parseFloat，
+// 与计算器(linkCalculator/NGSO)口径一致，保证实时预览与最终结果不会因 0 被吞而对不上
+function pickNum(v, def) {
+  return (v !== '' && v !== null && v !== undefined) ? parseFloat(v) : def;
+}
+
 // 调制因子（用于符号率反推信息速率）
 const MODULATION_FACTORS = {
   'BPSK': 1,
@@ -839,8 +845,8 @@ Page({
         update['linkParams.rxMinElevation'] = String(el);
         update['linkParams.orbitAltitude'] = String(leoOpt.altitude);
         update['linkParams.rxOrbitAltitude'] = String(leoOpt.altitude);
-        update['linkParams.slantRange'] = range.toFixed(1);
-        update['linkParams.rxSlantRange'] = range.toFixed(1);
+        update['linkParams.slantRange'] = String(parseFloat(range.toFixed(4)));
+        update['linkParams.rxSlantRange'] = String(parseFloat(range.toFixed(4)));
         update['linkParams.distanceMode'] = 'altitude';
         update['linkParams.rxDistanceMode'] = 'altitude';
       }
@@ -911,14 +917,14 @@ Page({
       const h = parseFloat(lp[altField]);
       if (!isNaN(h) && isFinite(h) && h > 0) {
         const d = slantRangeFromAltitude(h, el);
-        update[`linkParams.${rangeField}`] = d.toFixed(1);
+        update[`linkParams.${rangeField}`] = String(parseFloat(d.toFixed(4)));
       }
     } else {
       // slantRange -> altitude：用已有斜距 + 当前仰角反算轨道高度
       const d = parseFloat(lp[rangeField]);
       if (!isNaN(d) && isFinite(d) && d > 0) {
         const h = altitudeFromSlantRange(d, el);
-        update[`linkParams.${altField}`] = h.toFixed(1);
+        update[`linkParams.${altField}`] = String(parseFloat(h.toFixed(4)));
       }
     }
 
@@ -952,8 +958,8 @@ Page({
       'satelliteParams.ngsoOrbitClass': opt.key,
       'linkParams.orbitAltitude': String(txH),
       'linkParams.rxOrbitAltitude': String(rxH),
-      'linkParams.slantRange': txRange.toFixed(1),
-      'linkParams.rxSlantRange': rxRange.toFixed(1)
+      'linkParams.slantRange': String(parseFloat(txRange.toFixed(4))),
+      'linkParams.rxSlantRange': String(parseFloat(rxRange.toFixed(4)))
     });
     if (app.globalData.satelliteParams) {
       app.globalData.satelliteParams.ngsoOrbitClass = opt.key;
@@ -970,7 +976,7 @@ Page({
     // 同时将实际 SNR(dB) 写入 cIsl 供计算器使用
     if (field === 'cIslDisplay') {
       const displayVal = parseFloat(value);
-      const bwMHz = parseFloat(this.data.satelliteParams.transponderBandwidth) || 36;
+      const bwMHz = pickNum(this.data.satelliteParams.transponderBandwidth, 36);
       const bwHz = bwMHz * 1e6;
       let cIslSnr;
       if (!isNaN(displayVal)) {
@@ -1175,11 +1181,11 @@ Page({
     }
     
     // 获取当前参数
-    const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.2;
+    const bandwidthFactor = pickNum(this.data.linkParams.bandwidthFactor, 1.2);
     const modulation = this.data.linkParams.modulation || 'QPSK';
     const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
     const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
-    const m = parseFloat(this.data.linkParams.m) || 1; // 扩频增益
+    const m = pickNum(this.data.linkParams.m, 1); // 扩频增益
     
     // 获取调制因子
     const modulationFactor = MODULATION_FACTORS[modulation] || 2;
@@ -1191,7 +1197,7 @@ Page({
     const infoRate = symbolRate * modulationFactor / m * rsCode * fec;
     
     // 更新信息速率（保留3位小数，去除末尾多余的零）
-    const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+    const infoRateFormatted = parseFloat(infoRate.toFixed(4)).toString();
     
     // 设置为载波带宽优先模式
     this.setData({
@@ -1227,7 +1233,7 @@ Page({
     const modulation = this.data.linkParams.modulation || 'QPSK';
     const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
     const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
-    const m = parseFloat(this.data.linkParams.m) || 1; // 扩频增益
+    const m = pickNum(this.data.linkParams.m, 1); // 扩频增益
     
     // 获取调制因子
     const modulationFactor = MODULATION_FACTORS[modulation] || 2;
@@ -1241,7 +1247,7 @@ Page({
     const infoRate = symbolRate * modulationFactor / m * rsCode * fec;
     
     // 更新信息速率（保留3位小数，去除末尾多余的零）
-    const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+    const infoRateFormatted = parseFloat(infoRate.toFixed(4)).toString();
     
     // 设置为符号率优先模式，后续修改调制/FEC等时保持符号率不变
     this.setData({
@@ -1484,8 +1490,8 @@ Page({
         const modulation = this.data.linkParams.modulation || 'QPSK';
         const modulationFactor = MODULATION_FACTORS[modulation] || 2;
         const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
-        const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.20;
-        const m = parseFloat(this.data.linkParams.m) || 1;
+        const bandwidthFactor = pickNum(this.data.linkParams.bandwidthFactor, 1.2);
+        const m = pickNum(this.data.linkParams.m, 1);
         const denominator = modulationFactor * fec;
 
         if (denominator > 0 && isFinite(denominator)) {
@@ -1528,8 +1534,8 @@ Page({
       const modulationFactor = MODULATION_FACTORS[modulation] || 2;
       const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
       const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
-      const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.20;
-      const m = parseFloat(this.data.linkParams.m) || 1;
+      const bandwidthFactor = pickNum(this.data.linkParams.bandwidthFactor, 1.2);
+      const m = pickNum(this.data.linkParams.m, 1);
       const se = modulationFactor * fec * rsCode / (bandwidthFactor * m);
       this.setData({
         rsCodeMode: newMode,
@@ -1572,7 +1578,7 @@ Page({
       // 获取FEC码率、帧效率、扩频增益（支持分数格式）
       const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
       const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
-      const m = parseFloat(this.data.linkParams.m) || 1.0;
+      const m = pickNum(this.data.linkParams.m, 1.0);
       
       // 计算组合效率 k = (fec * rsCode * modulationFactor) / m
       // 这与 linkCalculator.js 中的计算保持一致
@@ -1591,7 +1597,7 @@ Page({
       
       this.setData({
         noiseRatioMode: newMode,
-        'linkParams.ebno': convertedValue.toFixed(2)
+        'linkParams.ebno': String(parseFloat(convertedValue.toFixed(4)))
       });
     } else {
       this.setData({
@@ -1618,7 +1624,7 @@ Page({
   // 同步 ISL 显示值：根据 islInputMode 和 cIsl(SNR) 计算 cIslDisplay
   syncCIslDisplay() {
     const cIslSnr = parseFloat(this.data.satelliteParams.cIsl);
-    const bwMHz = parseFloat(this.data.satelliteParams.transponderBandwidth) || 36;
+    const bwMHz = pickNum(this.data.satelliteParams.transponderBandwidth, 36);
     const bwHz = bwMHz * 1e6;
     let display;
     if (!isNaN(cIslSnr)) {
@@ -3038,13 +3044,13 @@ Page({
           const modulation = this.data.linkParams.modulation || 'QPSK';
           const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
           const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
-          const m = parseFloat(this.data.linkParams.m) || 1;
-          const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.2;
+          const m = pickNum(this.data.linkParams.m, 1);
+          const bandwidthFactor = pickNum(this.data.linkParams.bandwidthFactor, 1.2);
           const modulationFactor = MODULATION_FACTORS[modulation] || 2;
           
           // 反推信息速率: infoRate = symbolRate * modulationFactor / m * rsCode * fec
           const infoRate = currentSymbolRate * modulationFactor / m * rsCode * fec;
-          const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+          const infoRateFormatted = parseFloat(infoRate.toFixed(4)).toString();
           
           // 直接基于符号率计算载波带宽
           const carrierBandwidth = Math.round(bandwidthFactor * currentSymbolRate * 1000) / 1000;
@@ -3065,8 +3071,8 @@ Page({
           const modulation = this.data.linkParams.modulation || 'QPSK';
           const fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
           const rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
-          const m = parseFloat(this.data.linkParams.m) || 1;
-          const bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.2;
+          const m = pickNum(this.data.linkParams.m, 1);
+          const bandwidthFactor = pickNum(this.data.linkParams.bandwidthFactor, 1.2);
           const modulationFactor = MODULATION_FACTORS[modulation] || 2;
           
           // 根据滚降系数计算符号率: symbolRate = carrierBandwidth / bandwidthFactor
@@ -3074,7 +3080,7 @@ Page({
           
           // 反推信息速率: infoRate = symbolRate * modulationFactor / m * rsCode * fec
           const infoRate = symbolRate * modulationFactor / m * rsCode * fec;
-          const infoRateFormatted = parseFloat(infoRate.toFixed(3)).toString();
+          const infoRateFormatted = parseFloat(infoRate.toFixed(4)).toString();
           
           // 更新符号率和信息速率
           this.setData({
@@ -3100,8 +3106,8 @@ Page({
         const _modulationFactor = MODULATION_FACTORS[_modulation] || 2;
         const _fec = parseFractionOrDecimal(this.data.linkParams.fec, 0.75);
         const _rsCode = parseFractionOrDecimal(this.data.linkParams.rsCode, 188/204);
-        const _bandwidthFactor = parseFloat(this.data.linkParams.bandwidthFactor) || 1.20;
-        const _m = parseFloat(this.data.linkParams.m) || 1;
+        const _bandwidthFactor = pickNum(this.data.linkParams.bandwidthFactor, 1.2);
+        const _m = pickNum(this.data.linkParams.m, 1);
         const _se = _modulationFactor * _fec * _rsCode / (_bandwidthFactor * _m);
         const spectralEfficiencyUpdate = skipSpectralEfficiency ? {} : {
           'realtimeParams.spectralEfficiency': isNaN(_se) ? '' : _se.toFixed(4)
