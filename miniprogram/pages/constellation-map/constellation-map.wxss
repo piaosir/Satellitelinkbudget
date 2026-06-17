@@ -227,6 +227,54 @@
   color: #dfe6ee;
   white-space: nowrap;
 }
+/* 顶部波束角设置条（选中卫星后出现）：与搜索框/按钮同一视觉体系 */
+.beam-bar {
+  display: flex;
+  align-items: center;
+  margin-top: 12rpx;
+}
+.beam-bar-l {
+  font-size: 26rpx;
+  color: #8aa0b8;
+  flex-shrink: 0;
+  margin-right: 16rpx;
+}
+.beam-bar-in {
+  width: 160rpx;
+  flex-shrink: 0;
+  height: 60rpx;
+  line-height: 60rpx;
+  box-sizing: border-box;
+  padding: 0 16rpx;
+  background: rgba(90, 130, 165, 0.12);
+  border: 1rpx solid rgba(110, 145, 180, 0.3);
+  border-radius: 10rpx;
+  font-size: 26rpx;
+  color: #e6edf5;
+}
+.beam-bar-in::placeholder {
+  color: #66788c;
+}
+.beam-bar-u {
+  font-size: 24rpx;
+  color: #8aa0b8;
+  flex-shrink: 0;
+  margin-left: 10rpx;
+}
+/* 锁定按钮：纯 SVG 锁图标，无边框无底框，图标即按钮 */
+.beam-lock {
+  flex-shrink: 0;
+  margin-left: 16rpx;
+  width: 40rpx;
+  height: 40rpx;
+}
+.beam-bar-tip {
+  font-size: 22rpx;
+  color: #66788c;
+  flex: 1;
+  text-align: right;
+  margin-left: 14rpx;
+}
 .card-legend {
   display: flex;
   gap: 26rpx;

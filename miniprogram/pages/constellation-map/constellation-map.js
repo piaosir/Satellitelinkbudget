@@ -67,7 +67,13 @@ Page({
     autoRotate: true,
     liveRefresh: false,      // 实时刷新卫星位置开关（与旋转独立，1Hz）
     keyword: '',             // 搜索关键字
-    searchResults: []        // 搜索结果 [{idx, name, noradId, slot}]
+    searchResults: [],       // 搜索结果 [{idx, name, noradId, slot}]
+    beam: '',                // 选中星全波束角(°)用户自定义文本：空=自动取 ε=0 上限，非空=自定义
+    beamAuto: '',            // 自动(ε=0)波束角文本，作输入框 placeholder 常显
+    beamLock: false,         // 锁定波束角：开启后切换卫星不重置，固定值平等作用于每颗星（各自仍按 ε=0 上限夹断）
+    // 锁图标(SVG，base64 data-URI；微信 image 对原始 svg data-uri 兼容差，须 base64)：锁定=闭合高亮青蓝、未锁=开口灰
+    lockIcon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyNCAyNCcgZmlsbD0nbm9uZScgc3Ryb2tlPScjOWZkMGVmJyBzdHJva2Utd2lkdGg9JzInIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWxpbmVqb2luPSdyb3VuZCc+PHJlY3QgeD0nNScgeT0nMTEnIHdpZHRoPScxNCcgaGVpZ2h0PSc5JyByeD0nMicvPjxwYXRoIGQ9J004IDExVjdhNCA0IDAgMCAxIDggMHY0Jy8+PC9zdmc+",
+    unlockIcon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyNCAyNCcgZmlsbD0nbm9uZScgc3Ryb2tlPScjOGFhMGI4JyBzdHJva2Utd2lkdGg9JzInIHN0cm9rZS1saW5lY2FwPSdyb3VuZCcgc3Ryb2tlLWxpbmVqb2luPSdyb3VuZCc+PHJlY3QgeD0nNScgeT0nMTEnIHdpZHRoPScxNCcgaGVpZ2h0PSc5JyByeD0nMicvPjxwYXRoIGQ9J004IDExVjdhNCA0IDAgMCAxIDctMi42Jy8+PC9zdmc+"
   },
 
   // 渲染 / 数据状态
@@ -88,8 +94,20 @@ Page({
   _index: null,       // 全局搜索索引 [{name, noradId, group}]（跨分组，懒加载）
   _indexLoading: false,
   _pendingNorad: null,// 跨分组选中：切组加载后待定位的 NORAD
+  _pendingNoFace: false,// 恢复缓存选星时为 true：只选中不转向、不停自转（保持进页面默认旋转）
 
   onLoad() {
+    // 恢复上次的分组 + 选中卫星（永久缓存，切出再开保持不变）
+    let saved = null;
+    try { saved = wx.getStorageSync('constellation/selection'); } catch (e) { saved = null; }
+    if (saved && typeof saved === 'object') {
+      if (Number.isInteger(saved.groupIndex) && saved.groupIndex >= 0 && saved.groupIndex < GROUPS.length) {
+        this.setData({ groupIndex: saved.groupIndex });
+      }
+      // 选中星交给现有 _pendingNorad 机制：_computePositions 加载完按 NORAD 定位；
+      // 若该星在最新数据中不存在则自然落空（仅恢复分组、无选中），符合失效回退默认。
+      if (saved.selNorad) { this._pendingNorad = String(saved.selNorad); this._pendingNoFace = true; }
+    }
     this._loadGroup(this.data.groupIndex);
     // 跨分组搜索索引改懒加载：用户真去搜索时才下（见 onSearchInput -> _ensureIndex）
   },
@@ -121,7 +139,17 @@ Page({
   onGroupChange(e) {
     const idx = Number(e.detail.value);
     this.setData({ groupIndex: idx, keyword: '', searchResults: [] });
-    this._loadGroup(idx);
+    this._loadGroup(idx); // 内部已清空选中（_selIdx=-1）
+    this._saveSelection();
+  },
+
+  // ===================== 选择缓存（永久持久化，切出再开保持不变） =====================
+  _saveSelection() {
+    const m = this._meta;
+    const selNorad = (this._selIdx >= 0 && m && m[this._selIdx]) ? String(m[this._selIdx].noradId) : '';
+    try {
+      wx.setStorageSync('constellation/selection', { groupIndex: this.data.groupIndex, selNorad });
+    } catch (e) { /* 存储失败不影响功能 */ }
   },
 
   // ===================== 搜索 =====================
@@ -342,7 +370,7 @@ Page({
 
   _loadGroup(idx) {
     const g = GROUPS[idx];
-    this.setData({ loading: true, statusText: `加载 ${g.label} …`, selected: null });
+    this.setData(Object.assign({ loading: true, statusText: `加载 ${g.label} …`, selected: null }, this._beamResetPatch()));
     this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null; this._selPos = null;
 
     if (g.key === 'all') { this._loadAll(); return; }
@@ -518,8 +546,10 @@ Page({
     // 跨分组搜索切组后：定位待选卫星
     if (this._pendingNorad) {
       const idx = this._idxByNorad(this._pendingNorad);
+      const noFace = this._pendingNoFace;
       this._pendingNorad = null;
-      if (idx >= 0) { this._selectSat(idx); this._faceSat(); }
+      this._pendingNoFace = false;
+      if (idx >= 0) { this._selectSat(idx); if (!noFace) this._faceSat(); } // 恢复态只选中、不转向、不停自转
     }
   },
 
@@ -560,23 +590,68 @@ Page({
       track.push([RE * cl * Math.cos(lon), RE * Math.sin(lat), -RE * cl * Math.sin(lon)]);
     }
 
-    // 覆盖足迹圈：当前星下点处地平(ε=0)可视范围，地心半角 λ = acos(RE/(RE+h))
-    const pvNow = sat.propagate(rec, now);
-    let footprint = null;
-    if (pvNow && pvNow.position) {
-      this._selPos = ecefToRender(sat.eciToEcf(pvNow.position, gmstNow)); // 当前位置，供高亮/定位
-      const gd = sat.eciToGeodetic(pvNow.position, gmstNow);
-      const h = gd.height;
-      const lambda = Math.acos(clamp(RE / (RE + h), -1, 1));
-      // 星下点单位矢量（渲染系）
-      const cl = Math.cos(gd.latitude);
-      const u = [cl * Math.cos(gd.longitude), Math.sin(gd.latitude), -cl * Math.sin(gd.longitude)];
-      footprint = this._circleOnSphere(u, lambda, 72);
-    }
+    // 覆盖足迹圈：按用户波束角重算（设置 this._selPos / this._selFootprint）
+    this._buildFootprint(rec, now, gmstNow);
 
     this._selOrbit = orbit;
     this._selTrack = track;
-    this._selFootprint = footprint;
+  },
+
+  // 覆盖足迹圈：按选中星「全波束角 B」算地面足迹（空=自动取 ε=0 上限，可手填更小值）。
+  // 几何(地心 O、卫星 S、地面边缘 P)：半角 η=B/2 为星上天底角，地心半角
+  //   λ = arcsin( (RE+h)/RE · sinη ) − η，夹断到 ≤ 上限 B_max=2·arcsin(RE/(RE+h))（ε=0 掠地平）。
+  // 同步把 ε=0 上限写到 beamAuto(作 placeholder 常显)；用户值超上限时回写夹断值到 beam。
+  _buildFootprint(rec, now, gmstNow) {
+    const pvNow = sat.propagate(rec, now);
+    if (!pvNow || !pvNow.position) { this._selFootprint = null; return; }
+    this._selPos = ecefToRender(sat.eciToEcf(pvNow.position, gmstNow)); // 当前位置，供高亮/定位
+    const gd = sat.eciToGeodetic(pvNow.position, gmstNow);
+    const h = gd.height;
+    if (!(h > 0)) { this._selFootprint = null; return; }
+    const r = RE + h;
+    const etaMax = Math.asin(clamp(RE / r, -1, 1));   // 星上天底角上限 (rad)
+    const bMaxDeg = 2 * etaMax / DEG;                  // ε=0 全波束角上限 (°)
+
+    // 生效全波束角：空框/非法 -> 自动取上限；有效 -> 取用户值并夹断到 ≤ 上限(超限回写)
+    const raw = parseFloat(this.data.beam);
+    let bDeg, clampText = null;
+    if (!(raw > 0)) bDeg = bMaxDeg;
+    else if (raw > bMaxDeg) { bDeg = bMaxDeg; clampText = bMaxDeg.toFixed(1); }
+    else bDeg = raw;
+
+    const eta = (bDeg / 2) * DEG;                                   // 半角 (rad)
+    const lambda = Math.asin(clamp(r / RE * Math.sin(eta), -1, 1)) - eta;
+    const cl = Math.cos(gd.latitude);
+    const u = [cl * Math.cos(gd.longitude), Math.sin(gd.latitude), -cl * Math.sin(gd.longitude)];
+    this._selFootprint = this._circleOnSphere(u, lambda, 72);
+
+    // 显示：placeholder 常显 ε=0 上限；超限回写夹断值（清空后不再被自动回填）。
+    // 锁定态不回写——保留锁定值原样平等作用于每颗星，几何仍按各星 ε=0 上限夹断
+    const autoText = bMaxDeg.toFixed(1);
+    const patch = {};
+    if (autoText !== this.data.beamAuto) patch.beamAuto = autoText;
+    if (clampText != null && !this.data.beamLock && clampText !== this.data.beam) patch.beam = clampText;
+    if (Object.keys(patch).length) this.setData(patch);
+  },
+
+  // 波束角输入：空=自动(ε=0 上限随高度，由 placeholder 常显)；非空=自定义(几何夹断到 ≤ 上限)。即时重画覆盖圈
+  onBeamInput(e) {
+    this.setData({ beam: e.detail.value }, () => {
+      if (this._selIdx < 0) return;
+      const now = new Date();
+      this._buildFootprint(this._recs[this._selIdx], now, sat.gstime(now));
+    });
+  },
+
+  // 锁定/解锁波束角：锁定后切换卫星不重置该值（见 _beamResetPatch）
+  toggleBeamLock() {
+    this.setData({ beamLock: !this.data.beamLock });
+    wx.vibrateShort({ type: 'light' });
+  },
+
+  // 切换/取消选星时的波束重置补丁：未锁定=清空回到自动；锁定=保留 beam，仅清 placeholder（由下次 _buildFootprint 重填）
+  _beamResetPatch() {
+    return this.data.beamLock ? { beamAuto: '' } : { beam: '', beamAuto: '' };
   },
 
   // 以单位矢量 u 为轴心、地心半角 lambda 的地表小圆（返回渲染系点列，半径 RE）
@@ -761,7 +836,7 @@ Page({
 
     // 选中卫星的几何（在星点之下绘制）
     if (this._selFootprint) this._drawPath(this._selFootprint, cx, cy, scale, Rpx, {
-      color: 'rgba(123,180,204,0.55)', hiddenColor: 'rgba(123,180,204,0.1)', width: 1, dash: [4, 3]
+      color: 'rgba(150,215,240,0.92)', hiddenColor: 'rgba(150,215,240,0.2)', width: 1, dash: [4, 3]
     });
     if (this._selTrack) this._drawPath(this._selTrack, cx, cy, scale, Rpx, {
       color: 'rgba(194,162,94,0.6)', hiddenColor: 'rgba(194,162,94,0.12)', width: 1
@@ -988,7 +1063,7 @@ Page({
       // 点空白处：取消选中
       this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null;
       this._selPos = null;
-      this.setData({ selected: null });
+      this.setData(Object.assign({ selected: null }, this._beamResetPatch()));
       return;
     }
     this._selectSat(best);
@@ -1036,8 +1111,10 @@ Page({
     const card = this._selCardData(idx, now, gmst);
     if (!card) return;
     this._selIdx = idx;
+    this.setData(this._beamResetPatch()); // 新选星 -> 未锁定则波束回到自动；锁定则保留固定值
     this._buildSelectedGeometry(idx, now, gmst);
     this.setData({ selected: card });
+    this._saveSelection();
   },
 
   // 实时刷新：按当前真实时间重算渲染子集的位置（不重新抽稀），并更新选中星几何/信息卡
@@ -1064,7 +1141,8 @@ Page({
   closeCard() {
     this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null;
     this._selPos = null;
-    this.setData({ selected: null });
+    this.setData(Object.assign({ selected: null }, this._beamResetPatch()));
+    this._saveSelection();
   },
 
   toggleRotate() {

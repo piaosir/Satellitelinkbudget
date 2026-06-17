@@ -25,6 +25,12 @@
             bindfocus="onSearchFocus1" bindinput="onSearchInput1" confirm-type="search" />
           <text wx:if="{{kw1}}" class="sch-clr" bindtap="clearSearch1">✕</text>
         </view>
+        <!-- 波束角(全波束°)：placeholder 常显该星 ε=0 上限，可手填更小值；清空即回到自动 -->
+        <view class="bw-row">
+          <text class="bw-l">波束角</text>
+          <input class="bw-in" type="digit" value="{{beam1}}" placeholder="{{beam1Auto || '自动'}}" data-slot="1" bindinput="onBeamInput" />
+          <text class="bw-u">°</text>
+        </view>
         <view wx:if="{{results1.length}}" class="sch-res">
           <view class="sch-res-hd">
             <text class="sch-res-ti">{{group1Label}} · {{results1.length}} 颗</text>
@@ -52,6 +58,12 @@
           <input class="sch-in" value="{{kw2}}" placeholder="{{group2 ? '可输入过滤，或在下方直接选' : '点此选分组后即可选星'}}"
             bindfocus="onSearchFocus2" bindinput="onSearchInput2" confirm-type="search" />
           <text wx:if="{{kw2}}" class="sch-clr" bindtap="clearSearch2">✕</text>
+        </view>
+        <!-- 波束角(全波束°)：placeholder 常显该星 ε=0 上限，可手填更小值；清空即回到自动 -->
+        <view class="bw-row">
+          <text class="bw-l">波束角</text>
+          <input class="bw-in" type="digit" value="{{beam2}}" placeholder="{{beam2Auto || '自动'}}" data-slot="2" bindinput="onBeamInput" />
+          <text class="bw-u">°</text>
         </view>
         <view wx:if="{{results2.length}}" class="sch-res">
           <view class="sch-res-hd">
@@ -164,10 +176,6 @@
       <view class="kv"><text class="k">ISL 斜距（当前）</text><text class="v">{{dCur}} km</text></view>
       <view class="kv"><text class="k">几何视距上限</text><text class="v">{{dMax}} km</text></view>
       <view class="kv"><text class="k">视距裕量</text><text class="v {{blocked ? 'v-bad' : 'v-ok'}}">{{losMargin}} km</text></view>
-      <view class="kv"><text class="k">视线切线高度</text><text class="v">{{tangentText}}</text></view>
-      <view class="kv"><text class="k">当前地心夹角</text><text class="v">{{thetaCur}}°</text></view>
-      <view class="kv"><text class="k">最大可视夹角</text><text class="v">{{thetaMaxDeg}}°</text></view>
-      <view class="kv"><text class="k">两星轨道高度差</text><text class="v">{{deltaH}} km</text></view>
       <view class="kv"><text class="k">ISL时延</text><text class="v">{{delayMs}} ms</text></view>
     </view>
   </view>

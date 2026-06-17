@@ -26,6 +26,17 @@
     </view>
     <view wx:if="{{statusText && !loading}}" class="meta-warn">{{statusText}}</view>
 
+    <!-- 波束角设置（选中卫星后出现）：placeholder 常显该星 ε=0 上限，可手填更小值；空=最大覆盖。
+         置于顶部并 adjust-position=false：键盘弹出时不顶动地球/动画，输入更稳 -->
+    <view wx:if="{{selected}}" class="beam-bar">
+      <text class="beam-bar-l">波束角</text>
+      <input class="beam-bar-in" type="digit" value="{{beam}}" placeholder="{{beamAuto ? beamAuto + ' (ε0上限)' : '自动'}}"
+             adjust-position="{{false}}" hold-keyboard="{{true}}" confirm-type="done" bindinput="onBeamInput" />
+      <text class="beam-bar-u">°</text>
+      <image class="beam-lock" src="{{beamLock ? lockIcon : unlockIcon}}" mode="aspectFit" bindtap="toggleBeamLock" />
+      <text class="beam-bar-tip">{{beamLock ? '已锁定 · 对每颗星生效' : '空=最大覆盖'}}</text>
+    </view>
+
     <!-- 搜索结果下拉 -->
     <view wx:if="{{searchResults.length}}" class="search-panel">
       <scroll-view scroll-y class="search-scroll">

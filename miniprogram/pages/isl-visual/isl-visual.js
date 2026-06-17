@@ -57,11 +57,9 @@ Page({
     dCur: '--',          // 当前 ISL 斜距 km
     dMax: '--',          // 几何视距上限 km
     losMargin: '--',     // 视距裕量 = 上限 − 当前 km
-    thetaCur: '--',      // 当前地心角分离 °
-    thetaMaxDeg: '--',   // 几何最大角分离 °
-    tangentText: '--',   // 切线高度描述
-    deltaH: '--',        // 两星高度差 km
     delayMs: '--',       // ISL 单向时延 ms
+    beam1: '', beam2: '',          // 各星全波束角(°)用户自定义文本：空=自动取该星 ε=0 上限，非空=自定义
+    beam1Auto: '', beam2Auto: '',  // 自动(ε=0)波束角文本，作输入框 placeholder 常显（空框时仍能看到波束角）
     rttMs: '--',         // ISL 往返时延 ms
     statusText: '视距通畅',
     blocked: false,
@@ -90,8 +88,10 @@ Page({
   _rafId: 0,
   _zoom: 1, _pinching: false, _pinchStartDist: 0, _pinchStartZoom: 1,
   _rec1: null, _rec2: null,       // 两颗星 satrec（null=未选）
+  _satGroup1: '', _satGroup2: '', // 已选星的真实所属分组（全选态下与 group* 不同，恢复 satrec 时用它）
   _groupSats1: null, _groupSats2: null, // 已选分组的全量卫星（组内搜索用，避免重复加载）
   _orbit1: null, _orbit2: null,   // 轨道环 render-XYZ 缓存
+  _foot1: null, _foot2: null,     // 覆盖范围足迹圈 render-XYZ 缓存（当前波束角对应的地面足迹）
   _P1: null, _P2: null, _station: null,
   _R1: 0, _R2: 0, _maxR: RE * 3,  // 当前两星地心半径 + 自适应缩放基准
   _lastG: 0,                      // 最近一次计算用的 gmst（供轨道环重建复用）
@@ -102,9 +102,8 @@ Page({
 
   onLoad() {
     this._baseTime = Date.now();  // 时间轴以进入页面的此刻为锚点（非实时探索）
-    // 默认自动选两颗「中国星网」卫星（星下点贴近中国、连线跨在中国上空）；选不到再保持空结果
-    this._recompute();
-    this._pickDefaults();
+    // 先尝试恢复上次的分组/选星/地球站缓存；无缓存或缓存失效时内部回退到默认自动选两颗中国星网
+    this._restoreSelection();
   },
 
   onReady() {
@@ -225,6 +224,7 @@ Page({
       ['group' + slot]: key, ['group' + slot + 'Label']: label,
       ['groupOpen' + slot]: false, ['kw' + slot]: '', ['results' + slot]: []
     });
+    this._saveSelection();
     wx.vibrateShort({ type: 'light' });
     // 全选=跨全部星座的搜索索引；其余=单组全量 TLE
     const loader = (key === 'all')
@@ -287,11 +287,14 @@ Page({
       let rec;
       try { rec = sat.omm2satrec(s); } catch (e) { rec = null; }
       if (!rec || rec.error) { wx.showToast({ title: '根数解析失败', icon: 'none' }); return; }
-      if (slot === 1) { this._rec1 = rec; this.setData({ sat1Name: s.name, sat1Norad: s.noradId, kw1: s.name, results1: [] }); }
-      else { this._rec2 = rec; this.setData({ sat2Name: s.name, sat2Norad: s.noradId, kw2: s.name, results2: [] }); }
+      this['_satGroup' + slot] = group; // 记真实所属分组（恢复 satrec 用）
+      // 新选星 -> 清空波束自定义，回到自动(该星 ε=0 上限，由 placeholder 显示)
+      if (slot === 1) { this._rec1 = rec; this.setData({ sat1Name: s.name, sat1Norad: s.noradId, kw1: s.name, results1: [], beam1: '' }); }
+      else { this._rec2 = rec; this.setData({ sat2Name: s.name, sat2Norad: s.noradId, kw2: s.name, results2: [], beam2: '' }); }
       this._recompute();
       this._refreshOrbits(this._lastG);
       this._resumeDraw(); // 选定后列表收起、地球恢复 -> 重启绘制循环
+      this._saveSelection();
       wx.vibrateShort({ type: 'light' });
     }).catch(() => wx.showToast({ title: '加载失败', icon: 'none' }));
   },
@@ -345,6 +348,7 @@ Page({
       if (!second) return;
       this._rec1 = first.rec;
       this._rec2 = second.rec;
+      this._satGroup1 = 'guowang'; this._satGroup2 = 'guowang';
       this._groupSats1 = sats; this._groupSats2 = sats; // 默认组缓存，后续组内搜索零加载
       const gwLabel = GROUP_LABEL.guowang;
       this.setData({
@@ -357,9 +361,82 @@ Page({
       this._refreshOrbits(this._lastG);
     }).catch(() => {});
   },
+  // ===================== 选择缓存（永久持久化，切出再开保持不变） =====================
+  // 写入：分组/选星（含真实所属分组）/地球站。默认自动选星不主动写——只有用户动过任意项后才落盘。
+  _saveSelection() {
+    const d = this.data;
+    try {
+      wx.setStorageSync('isl/selection', {
+        group1: d.group1, group2: d.group2,
+        group1Label: d.group1Label, group2Label: d.group2Label,
+        sat1Norad: d.sat1Norad, sat1Name: d.sat1Name, sat1Group: this._satGroup1,
+        sat2Norad: d.sat2Norad, sat2Name: d.sat2Name, sat2Group: this._satGroup2,
+        esLat: d.esLat, esLon: d.esLon, latHemi: d.latHemi, lonHemi: d.lonHemi
+      });
+    } catch (e) { /* 存储失败不影响功能 */ }
+  },
+
+  // 恢复入口：无缓存 -> 原默认流程；有缓存 -> 先恢复地球站/分组，再异步解析 satrec。
+  // 槽位卫星为空=用户有意清空，保持空；非空但解析失败=失效，丢弃整份卫星选择回退默认（地球站仍保留）。
+  _restoreSelection() {
+    let saved = null;
+    try { saved = wx.getStorageSync('isl/selection'); } catch (e) { saved = null; }
+    if (!saved || typeof saved !== 'object') { this._recompute(); this._pickDefaults(); return; }
+
+    // 地球站 + 分组标签/关键字：纯展示态，立即恢复（永不失效）
+    const patch = {};
+    if (saved.esLat != null) patch.esLat = saved.esLat;
+    if (saved.esLon != null) patch.esLon = saved.esLon;
+    if (saved.latHemi) patch.latHemi = saved.latHemi;
+    if (saved.lonHemi) patch.lonHemi = saved.lonHemi;
+    if (saved.group1) { patch.group1 = saved.group1; patch.group1Label = saved.group1Label || ''; }
+    if (saved.group2) { patch.group2 = saved.group2; patch.group2Label = saved.group2Label || ''; }
+    if (saved.sat1Name) { patch.sat1Name = saved.sat1Name; patch.sat1Norad = saved.sat1Norad || ''; patch.kw1 = saved.sat1Name; }
+    if (saved.sat2Name) { patch.sat2Name = saved.sat2Name; patch.sat2Norad = saved.sat2Norad || ''; patch.kw2 = saved.sat2Name; }
+    this.setData(patch);
+
+    // 两槽位都为空：用户有意未选/已清空，保持空（不回退默认）
+    if (!saved.sat1Norad && !saved.sat2Norad) { this._recompute(); return; }
+
+    // 异步解析每个非空槽位的 satrec（用真实所属分组 sat*Group，全选态下与 group* 不同）
+    const tasks = [];
+    if (saved.sat1Norad) tasks.push(this._resolveSat(saved.sat1Group || saved.group1, saved.sat1Norad, 1));
+    if (saved.sat2Norad) tasks.push(this._resolveSat(saved.sat2Group || saved.group2, saved.sat2Norad, 2));
+    Promise.all(tasks).then((oks) => {
+      if (oks.every(Boolean)) { this._recompute(); this._refreshOrbits(this._lastG); return; }
+      // 失效回退：清掉卫星选择（保留地球站），重新自动选两颗中国星网
+      this._rec1 = null; this._rec2 = null; this._orbit1 = null; this._orbit2 = null;
+      this._foot1 = null; this._foot2 = null;
+      this._satGroup1 = ''; this._satGroup2 = '';
+      this.setData({
+        group1: '', group2: '', group1Label: '', group2Label: '',
+        sat1Name: '', sat1Norad: '', sat2Name: '', sat2Norad: '', kw1: '', kw2: '',
+        beam1: '', beam2: '', beam1Auto: '', beam2Auto: ''
+      });
+      this._recompute();
+      this._pickDefaults();
+    });
+  },
+
+  // 按真实所属分组加载并解析单颗 satrec，成功写入对应槽位，返回 true/false
+  _resolveSat(group, noradId, slot) {
+    if (!group) return Promise.resolve(false);
+    return tleStore.loadGroupSats(group).then(({ sats }) => {
+      const id = String(noradId);
+      const s = (sats || []).find((x) => String(x.noradId) === id);
+      if (!s) return false;
+      let rec; try { rec = sat.omm2satrec(s); } catch (e) { rec = null; }
+      if (!rec || rec.error) return false;
+      this['_satGroup' + slot] = group;
+      this['_groupSats' + slot] = sats; // 顺带缓存全量，后续组内搜索零加载
+      if (slot === 1) this._rec1 = rec; else this._rec2 = rec;
+      return true;
+    }).catch(() => false);
+  },
+
   // 清除：保留已选分组，仅清掉关键字与已选卫星，并重新列出该组（便于改选同组其它星）
-  clearSearch1() { this._rec1 = null; this._orbit1 = null; this.setData({ kw1: '', sat1Name: '', sat1Norad: '' }); this._recompute(); if (this.data.group1) this._filterGroup(1, ''); else { this.setData({ results1: [] }); this._resumeDraw(); } },
-  clearSearch2() { this._rec2 = null; this._orbit2 = null; this.setData({ kw2: '', sat2Name: '', sat2Norad: '' }); this._recompute(); if (this.data.group2) this._filterGroup(2, ''); else { this.setData({ results2: [] }); this._resumeDraw(); } },
+  clearSearch1() { this._rec1 = null; this._orbit1 = null; this._foot1 = null; this._satGroup1 = ''; this.setData({ kw1: '', sat1Name: '', sat1Norad: '', beam1: '', beam1Auto: '' }); this._recompute(); this._saveSelection(); if (this.data.group1) this._filterGroup(1, ''); else { this.setData({ results1: [] }); this._resumeDraw(); } },
+  clearSearch2() { this._rec2 = null; this._orbit2 = null; this._foot2 = null; this._satGroup2 = ''; this.setData({ kw2: '', sat2Name: '', sat2Norad: '', beam2: '', beam2Auto: '' }); this._recompute(); this._saveSelection(); if (this.data.group2) this._filterGroup(2, ''); else { this.setData({ results2: [] }); this._resumeDraw(); } },
 
   _fmtTime(d) {
     const p = (n) => String(n).padStart(2, '0');
@@ -403,6 +480,88 @@ Page({
   _refreshOrbits(g) {
     this._orbit1 = this._buildOrbit(this._rec1, g);
     this._orbit2 = this._buildOrbit(this._rec2, g);
+    const f1 = this._buildFootprint(this._rec1, g, 1);
+    const f2 = this._buildFootprint(this._rec2, g, 2);
+    this._foot1 = f1 ? f1.pts : null;
+    this._foot2 = f2 ? f2.pts : null;
+    // 自动(ε=0)波束角 -> placeholder(空框也常显)；仅当用户值超上限时才回写夹断值，
+    // 其余一律不动输入框文本（清空后不再被自动回填，可正常重输）
+    const patch = {};
+    patch.beam1Auto = f1 ? f1.autoText : '';
+    patch.beam2Auto = f2 ? f2.autoText : '';
+    if (f1 && f1.clamp != null) patch.beam1 = f1.clamp;
+    if (f2 && f2.clamp != null) patch.beam2 = f2.clamp;
+    let dirty = false;
+    for (const k in patch) { if (patch[k] !== this.data[k]) { dirty = true; break; } }
+    if (dirty) this.setData(patch);
+  },
+
+  // 覆盖范围足迹圈：按该星「全波束角 B」算地面足迹。
+  // 几何(地心 O、卫星 S、地面边缘 P)：半角 η=B/2 为星上天底角，地心半角
+  //   λ = arcsin( (RE+h)/RE · sinη ) − η，有效需 η ≤ η_max=arcsin(RE/(RE+h))（再大波束就射向太空）。
+  // 生效 B：用户填了有效值则取之(夹断到 ≤ 上限 B_max=2·η_max)，否则自动取上限(边缘掠地平 ε=0)。
+  // 返回 {pts, autoText: ε=0 上限文本(作 placeholder), clamp: 超限时回写的夹断文本或 null}。
+  _buildFootprint(rec, g, slot) {
+    if (!rec) return null;
+    let pv;
+    try { pv = sat.propagate(rec, new Date(this._calcMs || Date.now())); } catch (e) { return null; }
+    if (!pv || !pv.position) return null;
+    const gd = sat.eciToGeodetic(pv.position, g);
+    const h = gd.height;
+    if (!(h > 0)) return null;
+    const r = RE + h;
+    const etaMax = Math.asin(clamp(RE / r, -1, 1));   // 星上天底角上限 (rad)
+    const bMaxDeg = 2 * etaMax / DEG;                  // ε=0 全波束角上限 (°)
+
+    // 生效全波束角：空框/非法 -> 自动取上限；有效 -> 取用户值并夹断到 ≤ 上限(超限回写)
+    const raw = num(this.data['beam' + slot], NaN);
+    let bDeg, clamp_ = null;
+    if (!(raw > 0)) { bDeg = bMaxDeg; }
+    else if (raw > bMaxDeg) { bDeg = bMaxDeg; clamp_ = bMaxDeg.toFixed(1); }
+    else { bDeg = raw; }
+
+    const eta = (bDeg / 2) * DEG;                                   // 半角 (rad)
+    const lambda = Math.asin(clamp(r / RE * Math.sin(eta), -1, 1)) - eta;
+    const cl = Math.cos(gd.latitude);
+    // 星下点单位矢量（渲染系，与海岸线同手性）
+    const u = [cl * Math.cos(gd.longitude), Math.sin(gd.latitude), -cl * Math.sin(gd.longitude)];
+    return { pts: this._circleOnSphere(u, lambda, 72), autoText: bMaxDeg.toFixed(1), clamp: clamp_ };
+  },
+
+  // 波束角输入：空=自动(ε=0 上限随高度，由 placeholder 常显)；非空=自定义(几何夹断到 ≤ 上限)。即时重画覆盖圈
+  onBeamInput(e) {
+    const slot = e.currentTarget.dataset.slot;
+    this.setData({ ['beam' + slot]: e.detail.value });
+    this._refreshOrbits(this._lastG);
+  },
+
+  // 以单位矢量 u 为轴心、地心半角 lambda 的地表小圆（返回渲染系点列，半径 RE）
+  _circleOnSphere(u, lambda, N) {
+    // 构造与 u 正交的基 e1,e2
+    let ref = Math.abs(u[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0];
+    let e1 = [
+      u[1] * ref[2] - u[2] * ref[1],
+      u[2] * ref[0] - u[0] * ref[2],
+      u[0] * ref[1] - u[1] * ref[0]
+    ];
+    const n1 = Math.hypot(e1[0], e1[1], e1[2]) || 1;
+    e1 = [e1[0] / n1, e1[1] / n1, e1[2] / n1];
+    const e2 = [
+      u[1] * e1[2] - u[2] * e1[1],
+      u[2] * e1[0] - u[0] * e1[2],
+      u[0] * e1[1] - u[1] * e1[0]
+    ];
+    const cosL = Math.cos(lambda), sinL = Math.sin(lambda);
+    const pts = [];
+    for (let k = 0; k <= N; k++) {
+      const th = (k / N) * 2 * Math.PI, c = Math.cos(th), s = Math.sin(th);
+      pts.push([
+        RE * (cosL * u[0] + sinL * (c * e1[0] + s * e2[0])),
+        RE * (cosL * u[1] + sinL * (c * e1[1] + s * e2[1])),
+        RE * (cosL * u[2] + sinL * (c * e1[2] + s * e2[2]))
+      ]);
+    }
+    return pts;
   },
 
   // 地球站地表位置（与海岸线同一坐标系：极轴=Y，经度 0 在 +X，经度取负以对齐地图朝向）
@@ -482,13 +641,11 @@ Page({
 
     if (st1 && st2) {
       const P1 = st1.P, P2 = st2.P, R1 = st1.R, R2 = st2.R;
-      // 弦长 + 当前地心角
+      // 弦长（ISL 当前斜距）
       const dx = P2[0] - P1[0], dy = P2[1] - P1[1], dz = P2[2] - P1[2];
       const dCur = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const dot = P1[0] * P2[0] + P1[1] * P2[1] + P1[2] * P2[2];
-      const thetaCur = Math.acos(clamp(dot / (R1 * R2), -1, 1)) / DEG;
 
-      // 视线与地心最近距离（切线高度）
+      // 视线与地心最近距离（判定是否被地球/大气遮挡）
       const dd = dx * dx + dy * dy + dz * dz;
       const t = dd > 0 ? -(P1[0] * dx + P1[1] * dy + P1[2] * dz) / dd : -1;
       let minDist, hasGrazing;
@@ -500,23 +657,15 @@ Page({
         minDist = Math.min(R1, R2);
         hasGrazing = false;
       }
-      const tangentAlt = minDist - RE;
       const blocked = hasGrazing && (minDist < Rc);
 
       // 几何视距上限（与相位无关，仅取决于半径与余隙）
-      const a1 = R1 > Rc ? Math.acos(clamp(Rc / R1, -1, 1)) : 0;
-      const a2 = R2 > Rc ? Math.acos(clamp(Rc / R2, -1, 1)) : 0;
-      const thetaMax = (a1 + a2) / DEG;
       const dMax = Math.sqrt(Math.max(0, R1 * R1 - Rc * Rc)) + Math.sqrt(Math.max(0, R2 * R2 - Rc * Rc));
       const delay = dCur / C_KM_S * 1000;
 
       patch.dCur = dCur.toFixed(1);
       patch.dMax = dMax.toFixed(1);
       patch.losMargin = (dMax - dCur).toFixed(1);
-      patch.thetaCur = thetaCur.toFixed(1);
-      patch.thetaMaxDeg = thetaMax.toFixed(1);
-      patch.tangentText = hasGrazing ? `${tangentAlt.toFixed(0)} km` : '不掠地球';
-      patch.deltaH = Math.abs(st1.h - st2.h).toFixed(0);
       patch.delayMs = delay.toFixed(3);
       patch.rttMs = (delay * 2).toFixed(3);
       patch.blocked = blocked;
@@ -524,8 +673,7 @@ Page({
     } else {
       // 未选满两颗星 -> ISL 几何置空
       patch.dCur = '--'; patch.dMax = '--'; patch.losMargin = '--';
-      patch.thetaCur = '--'; patch.thetaMaxDeg = '--'; patch.tangentText = '--';
-      patch.deltaH = '--'; patch.delayMs = '--'; patch.rttMs = '--';
+      patch.delayMs = '--'; patch.rttMs = '--';
       patch.blocked = false; patch.statusText = '请选择两颗卫星';
     }
 
@@ -536,7 +684,10 @@ Page({
 
   onInput(e) {
     const key = e.currentTarget.dataset.key;
-    this.setData({ [key]: e.detail.value }, () => this._recompute());
+    this.setData({ [key]: e.detail.value }, () => {
+      this._recompute();
+      if (key === 'esLat' || key === 'esLon') this._saveSelection(); // 地球站经纬度入缓存
+    });
   },
   // 显示/隐藏 卫星1 / 卫星2 / 地球站（仅影响 3D 渲染，下一帧自动生效）
   onToggle(e) {
@@ -565,9 +716,9 @@ Page({
   toggleHemi(e) {
     const key = e.currentTarget.dataset.key;
     if (key === 'esLat') {
-      this.setData({ latHemi: this.data.latHemi === '°N' ? '°S' : '°N' }, () => this._recompute());
+      this.setData({ latHemi: this.data.latHemi === '°N' ? '°S' : '°N' }, () => { this._recompute(); this._saveSelection(); });
     } else {
-      this.setData({ lonHemi: this.data.lonHemi === '°E' ? '°W' : '°E' }, () => this._recompute());
+      this.setData({ lonHemi: this.data.lonHemi === '°E' ? '°W' : '°E' }, () => { this._recompute(); this._saveSelection(); });
     }
     wx.vibrateShort({ type: 'light' });
   },
@@ -705,6 +856,11 @@ Page({
     this._drawCoastline(cx, cy, scale, Rpx);
 
     const show1 = d.show1, show2 = d.show2, showSt = d.showStation;
+
+    // 覆盖范围(地平可视足迹圈，虚线)：颜色随各星区分，用更鲜亮的同色调+加粗加深，使两星覆盖一眼可辨
+    // 卫星1 偏青蓝、卫星2 偏暖金，比星点/轨道更高饱和；画在轨道环/星点之下，避免遮挡链路与星点
+    if (show1 && this._foot1) this._drawPath(this._foot1, cx, cy, scale, Rpx, { color: 'rgba(90,200,235,0.62)', hiddenColor: 'rgba(90,200,235,0.12)', width: 1, dash: [4, 3] });
+    if (show2 && this._foot2) this._drawPath(this._foot2, cx, cy, scale, Rpx, { color: 'rgba(240,180,60,0.62)', hiddenColor: 'rgba(240,180,60,0.12)', width: 1, dash: [4, 3] });
 
     // 两条真实轨道环（缓存 render-XYZ，逐帧只做投影）
     if (show1 && this._orbit1) this._drawPath(this._orbit1, cx, cy, scale, Rpx, { color: 'rgba(111,159,200,0.4)', hiddenColor: 'rgba(255,255,255,0.08)', width: 1 });

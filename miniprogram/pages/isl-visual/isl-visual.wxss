@@ -254,6 +254,35 @@
 }
 .cl-wide { width: 150rpx; }
 .cl-mid { width: 64rpx; margin-left: 14rpx; }
+/* 选星卡片内的波束角行（与搜索框同宽、紧随其下） */
+.bw-row {
+  display: flex;
+  align-items: center;
+  margin-top: 8rpx;
+}
+.bw-l {
+  font-size: 20rpx;
+  color: #8b94a3;
+  flex-shrink: 0;
+  margin-right: 8rpx;
+}
+.bw-in {
+  flex: 1;
+  min-width: 0;
+  background: #0e1219;
+  border: 1rpx solid #283039;
+  border-radius: 4rpx;
+  padding: 5rpx 9rpx;
+  font-size: 21rpx;
+  color: #e6e9ef;
+  font-family: 'DIN Alternate', 'Roboto Mono', Consolas, monospace;
+}
+.bw-u {
+  font-size: 20rpx;
+  color: #5c6675;
+  flex-shrink: 0;
+  margin-left: 6rpx;
+}
 .cf {
   flex: 1;
   min-width: 0;
