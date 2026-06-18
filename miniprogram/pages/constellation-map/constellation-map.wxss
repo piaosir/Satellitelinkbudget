@@ -65,16 +65,94 @@
   padding-left: 12rpx;
 }
 
-/* 按钮行 */
-.btn-row {
+/* 时间轴行：旋转/实时开关 + 拖动轨道 + 时刻读数 */
+.tl-row {
   margin-top: 12rpx;
+  gap: 12rpx;
 }
-.meta-inline {
+.tl-row .btn-mini {
+  flex: 0 0 auto;
+}
+/* 自定义进度条：细轨 + 渐变填充 + 小巧圆点（与星间链路一致） */
+.tb-track {
+  position: relative;
   flex: 1;
+  min-width: 0;
+  height: 56rpx;            /* 透明大触区，整条轨道可点可拖 */
+  margin: 0 22rpx;          /* 留出圆点半径+光晕的余量，端点处不压住时间读数 */
   display: flex;
-  flex-wrap: wrap;
-  gap: 14rpx;
-  justify-content: flex-end;
+  align-items: center;
+}
+.tb-bar {
+  position: relative;
+  width: 100%;
+  height: 8rpx;
+  background: rgba(90, 130, 165, 0.18);
+  border-radius: 8rpx;
+  overflow: hidden;
+}
+.tb-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #3f7f96, #7fd4ec);
+  border-radius: 6rpx;
+}
+.tb-knob {
+  position: absolute;
+  top: 50%;
+  width: 26rpx;
+  height: 26rpx;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #eaf6fb;
+  border: 2rpx solid #cfe9f3;
+  transition: width .08s, height .08s;
+  animation: tbPulse 2.2s ease-in-out infinite;
+}
+/* 按住轨道时放大圆点，给出抓取反馈，落点更直观 */
+.tb-track:active .tb-knob {
+  width: 38rpx;
+  height: 38rpx;
+}
+/* 呼吸光晕：内圈实色点 + 外圈柔光，缓慢起伏，既显眼又不喧宾夺主（与星间链路一致） */
+@keyframes tbPulse {
+  0%, 100% { box-shadow: 0 0 0 3rpx rgba(127,212,236,0.22), 0 0 10rpx 2rpx rgba(127,212,236,0.45); }
+  50%      { box-shadow: 0 0 0 5rpx rgba(127,212,236,0.32), 0 0 18rpx 4rpx rgba(127,212,236,0.7); }
+}
+.tb-time {
+  font-size: 20rpx;
+  color: #8ab4cc;
+  flex-shrink: 0;
+  text-align: right;
+  min-width: 96rpx;
+  font-family: 'DIN Alternate', 'Roboto Mono', Consolas, monospace;
+}
+/* 精调步进：等宽铺满，加大点按目标 */
+.tb-steps {
+  display: flex;
+  gap: 8rpx;
+  margin-top: 10rpx;
+}
+.tb-step, .tb-now {
+  flex: 1;
+  text-align: center;
+  font-size: 20rpx;
+  line-height: 1;
+  padding: 10rpx 0;
+  color: #b9c8d8;
+  background: rgba(90, 130, 165, 0.12);
+  border: 1rpx solid rgba(110, 145, 180, 0.25);
+  border-radius: 6rpx;
+}
+.tb-step:active, .tb-now:active {
+  background: rgba(90, 130, 165, 0.24);
+}
+.tb-now {
+  color: #cfe0ee;
+  border-color: rgba(123, 180, 204, 0.5);
+}
+.tb-dis {
+  opacity: 0.34;
 }
 
 /* 搜索结果下拉 */
@@ -116,25 +194,6 @@
   color: #9fd0ef;
   border-color: rgba(123, 180, 204, 0.6);
 }
-.meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18rpx;
-  margin-top: 12rpx;
-}
-.meta-item {
-  font-size: 22rpx;
-  color: #7f93a8;
-}
-.meta-load {
-  font-size: 24rpx;
-  color: #7bb4cc;
-}
-.meta-warn {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  color: #c2a25e;
-}
 
 /* 3D 地球：绝对铺满整页，尺寸恒定，不受控制条/信息卡布局变化影响（避免非等比拉伸变形） */
 .globe-wrap {
@@ -157,6 +216,30 @@
   text-align: center;
   font-size: 22rpx;
   color: rgba(150, 180, 210, 0.5);
+}
+/* 数据元信息浮层：地球底部左侧，位于提示行之上（选中星时被信息卡覆盖，符合上下文） */
+.globe-meta {
+  position: absolute;
+  left: 24rpx;
+  bottom: 52rpx;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4rpx 18rpx;
+  max-width: 72%;
+}
+.gm-item {
+  font-size: 22rpx;
+  color: rgba(150, 180, 210, 0.72);
+}
+.gm-load {
+  font-size: 22rpx;
+  color: #7bb4cc;
+}
+.gm-warn {
+  font-size: 22rpx;
+  color: #c2a25e;
 }
 
 /* 信息卡：浮层固定底部，不挤压地球画布 */
@@ -268,12 +351,16 @@
   width: 40rpx;
   height: 40rpx;
 }
-.beam-bar-tip {
-  font-size: 22rpx;
+/* 未选星时的占位提示，使常显的控制行左侧不空 */
+.beam-bar-hint {
+  font-size: 24rpx;
   color: #66788c;
-  flex: 1;
-  text-align: right;
-  margin-left: 14rpx;
+}
+/* 旋转/实时开关：靠右常显（选星时填补锁按钮后的空白） */
+.beam-bar-toggles {
+  margin-left: auto;
+  display: flex;
+  gap: 12rpx;
 }
 .card-legend {
   display: flex;

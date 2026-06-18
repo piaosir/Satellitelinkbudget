@@ -13,15 +13,14 @@
       <!-- 卫星1 -->
       <view class="sat-col">
         <view class="card-title"><view class="tag-dot dot-sat1"></view>卫星1
-          <text class="grp-chip {{group1 ? '' : 'grp-empty'}}" catchtap="toggleGroup1">{{group1Label || '选择分组'}} ▾</text>
+          <text class="grp-chip {{group1 ? '' : 'grp-empty'}}" catchtap="toggleGroup1">{{group1Label || '全部'}} ▾</text>
           <view wx:if="{{groupOpen1}}" class="grp-pop">
-            <view wx:for="{{groupList}}" wx:key="key" class="grp-item {{group1 === item.key ? 'grp-on' : ''}}"
+            <view wx:for="{{groupList}}" wx:key="key" class="grp-item {{group1 === item.key ? 'grp-on' : (item.key ? '' : 'grp-all')}}"
               data-key="{{item.key}}" data-label="{{item.label}}" catchtap="onPickGroup1">{{item.label}}</view>
-            <view class="grp-item {{group1 === 'all' ? 'grp-on' : 'grp-all'}}" data-key="all" data-label="全部卫星" catchtap="onPickGroup1">全选</view>
           </view>
         </view>
         <view class="sch">
-          <input class="sch-in" value="{{kw1}}" placeholder="{{group1 ? '可输入过滤，或在下方直接选' : '点此选分组后即可选星'}}"
+          <input class="sch-in" value="{{kw1}}" placeholder="{{group1 ? '组内过滤，或在下方直接选' : '输入卫星名或 NORAD 搜索'}}"
             bindfocus="onSearchFocus1" bindinput="onSearchInput1" confirm-type="search" />
           <text wx:if="{{kw1}}" class="sch-clr" bindtap="clearSearch1">✕</text>
         </view>
@@ -33,7 +32,7 @@
         </view>
         <view wx:if="{{results1.length}}" class="sch-res">
           <view class="sch-res-hd">
-            <text class="sch-res-ti">{{group1Label}} · {{results1.length}} 颗</text>
+            <text class="sch-res-ti">{{group1Label || '搜索结果'}} · {{results1.length}} 颗</text>
             <text class="sch-res-x" catchtap="closeResults1">✕ 关闭</text>
           </view>
           <scroll-view class="sch-res-list" scroll-y>
@@ -47,15 +46,14 @@
       <!-- 卫星2 -->
       <view class="sat-col">
         <view class="card-title"><view class="tag-dot dot-sat2"></view>卫星2
-          <text class="grp-chip {{group2 ? '' : 'grp-empty'}}" catchtap="toggleGroup2">{{group2Label || '选择分组'}} ▾</text>
+          <text class="grp-chip {{group2 ? '' : 'grp-empty'}}" catchtap="toggleGroup2">{{group2Label || '全部'}} ▾</text>
           <view wx:if="{{groupOpen2}}" class="grp-pop">
-            <view wx:for="{{groupList}}" wx:key="key" class="grp-item {{group2 === item.key ? 'grp-on' : ''}}"
+            <view wx:for="{{groupList}}" wx:key="key" class="grp-item {{group2 === item.key ? 'grp-on' : (item.key ? '' : 'grp-all')}}"
               data-key="{{item.key}}" data-label="{{item.label}}" catchtap="onPickGroup2">{{item.label}}</view>
-            <view class="grp-item {{group2 === 'all' ? 'grp-on' : 'grp-all'}}" data-key="all" data-label="全部卫星" catchtap="onPickGroup2">全选</view>
           </view>
         </view>
         <view class="sch">
-          <input class="sch-in" value="{{kw2}}" placeholder="{{group2 ? '可输入过滤，或在下方直接选' : '点此选分组后即可选星'}}"
+          <input class="sch-in" value="{{kw2}}" placeholder="{{group2 ? '组内过滤，或在下方直接选' : '输入卫星名或 NORAD 搜索'}}"
             bindfocus="onSearchFocus2" bindinput="onSearchInput2" confirm-type="search" />
           <text wx:if="{{kw2}}" class="sch-clr" bindtap="clearSearch2">✕</text>
         </view>
@@ -67,7 +65,7 @@
         </view>
         <view wx:if="{{results2.length}}" class="sch-res">
           <view class="sch-res-hd">
-            <text class="sch-res-ti">{{group2Label}} · {{results2.length}} 颗</text>
+            <text class="sch-res-ti">{{group2Label || '搜索结果'}} · {{results2.length}} 颗</text>
             <text class="sch-res-x" catchtap="closeResults2">✕ 关闭</text>
           </view>
           <scroll-view class="sch-res-list" scroll-y>

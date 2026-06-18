@@ -66,6 +66,9 @@ Page({
     selected: null,          // 选中卫星信息卡
     autoRotate: true,
     liveRefresh: false,      // 实时刷新卫星位置开关（与旋转独立，1Hz）
+    timeOffset: 0,           // 时间轴：相对锚点的偏移（分钟，0~1440 = 0~24h，仅向未来）
+    timePct: 0,              // 进度条填充/圆点位置（timeOffset/1440*100）
+    timeLabel: '此刻',       // 时间轴当前对应的绝对时刻文本（live 态由 WXML 直接显示“实时”）
     keyword: '',             // 搜索关键字
     searchResults: [],       // 搜索结果 [{idx, name, noradId, slot}]
     beam: '',                // 选中星全波束角(°)用户自定义文本：空=自动取 ε=0 上限，非空=自定义
@@ -91,12 +94,16 @@ Page({
   _selOrbit: null, _selTrack: null, _selFootprint: null,
   _selPos: null,      // 选中卫星当前渲染坐标（保证抽稀/搜索命中也能高亮）
   _refreshTimer: null,// 位置实时刷新定时器
+  _baseTime: 0,       // 时间轴锚点“此刻”（ms）；非实时时计算时刻 = 锚点 + timeOffset
+  _trackLeft: 0, _trackW: 0, // 时间轴轨道触区的视口左缘/宽度（onReady 量一次，拖动时换算位置）
+  _lastTimeCalc: 0,   // 拖动节流时间戳
   _index: null,       // 全局搜索索引 [{name, noradId, group}]（跨分组，懒加载）
   _indexLoading: false,
   _pendingNorad: null,// 跨分组选中：切组加载后待定位的 NORAD
   _pendingNoFace: false,// 恢复缓存选星时为 true：只选中不转向、不停自转（保持进页面默认旋转）
 
   onLoad() {
+    this._baseTime = Date.now(); // 时间轴以进入页面的此刻为锚点（非实时探索）
     // 恢复上次的分组 + 选中卫星（永久缓存，切出再开保持不变）
     let saved = null;
     try { saved = wx.getStorageSync('constellation/selection'); } catch (e) { saved = null; }
@@ -113,6 +120,7 @@ Page({
   },
   onReady() {
     this._initCanvas();
+    this._measureTrack();
   },
   onShow() {
     if (this.data.liveRefresh) this._startRefresh(); // 仅当开关开启时恢复刷新
@@ -242,11 +250,69 @@ Page({
     this.setData({ autoRotate: false });
   },
 
-  refreshNow() {
-    // 不重新下载，仅用已加载 TLE 重算此刻位置
-    if (!this._recs.length) return this._loadGroup(this.data.groupIndex);
-    this._computePositions();
+  // ===================== 时间轴（非实时，未来 0~24h；与星间链路一致） =====================
+  // 计算用时刻：实时=真实此刻；否则=锚点 + 偏移
+  _calcAt() {
+    if (this.data.liveRefresh) return new Date();
+    return new Date(this._baseTime + this.data.timeOffset * 60000);
+  },
+  // 量一次轨道触区的视口左缘/宽度（顶部布局固定，量一次即可复用）
+  _measureTrack(cb) {
+    wx.createSelectorQuery().in(this).select('.tb-track').boundingClientRect((r) => {
+      if (r && r.width > 0) { this._trackLeft = r.left; this._trackW = r.width; }
+      if (cb) cb();
+    }).exec();
+  },
+  // 触摸位置 -> 偏移：换算 0~1440min，若在实时态则先退出并以当下为新锚点，按偏移重算
+  // 节流到 ~16fps，避免拖动时 setData/SGP4 过密；touchend 会清节流确保落点精确
+  _applyTouch(clientX) {
+    if (!this._trackW) return;
+    const pct = clamp((clientX - this._trackLeft) / this._trackW, 0, 1);
+    const v = Math.round(pct * 1440);
+    const patch = { timeOffset: v, timePct: v / 1440 * 100 };
+    if (this.data.liveRefresh) { patch.liveRefresh = false; this._stopRefresh(); this._baseTime = Date.now(); }
+    this.setData(patch);
+    const now = Date.now();
+    if (now - (this._lastTimeCalc || 0) < 60) return;
+    this._lastTimeCalc = now;
+    this._refreshPositions();
+  },
+  onTrackTouch(e) {
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    if (this._trackW) this._applyTouch(t.clientX);
+    else this._measureTrack(() => this._applyTouch(t.clientX)); // 首触若未量到则补量
+  },
+  onTrackEnd(e) {
+    const t = e.changedTouches && e.changedTouches[0];
+    if (!t || !this._trackW) return;
+    this._lastTimeCalc = 0; // 清节流，保证抬手落点精确
+    this._applyTouch(t.clientX);
+  },
+  resetTime() {
+    if (this.data.liveRefresh || !this.data.timeOffset) return; // 实时态/已在此刻：无需重置
+    this._baseTime = Date.now();
+    this.setData({ timeOffset: 0, timePct: 0 });
+    this._refreshPositions();
     wx.vibrateShort({ type: 'light' });
+  },
+  // 精调步进：拖动粗选后用 ±1m/±10m/±1h 精确落到目标分钟（限制在 0~24h 内）
+  stepTime(e) {
+    if (this.data.liveRefresh) return; // 实时态不步进
+    const delta = parseInt(e.currentTarget.dataset.d, 10) || 0;
+    const v = clamp((this.data.timeOffset || 0) + delta, 0, 1440);
+    if (v === this.data.timeOffset) return; // 已到端点：不空转
+    this.setData({ timeOffset: v, timePct: v / 1440 * 100 });
+    this._refreshPositions();
+    wx.vibrateShort({ type: 'light' });
+  },
+  // 时间轴标签：偏移 0 显示“此刻”，否则显示偏移量 + 绝对时刻 MM-DD HH:MM
+  _fmtStamp(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    const off = this.data.timeOffset;
+    if (this.data.liveRefresh || !off) return this.data.liveRefresh ? '实时' : '此刻';
+    const oh = Math.floor(off / 60), om = off % 60;
+    return `+${oh}h${p(om)}m · ${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   },
 
   _fileID(name) {
@@ -505,7 +571,7 @@ Page({
 
   // 对全部卫星算“此刻”地固坐标 -> 渲染坐标；超出上限则均匀抽稀渲染
   _computePositions() {
-    const now = new Date();
+    const now = this._calcAt();
     const gmst = sat.gstime(now);
     const recs = this._recs, meta = this._meta;
     const all = [];
@@ -539,7 +605,7 @@ Page({
       selCard = this._selCardData(this._selIdx, now, gmst);
     }
 
-    const patch = { loading: false, statusText: '', calcTime: this._fmt(now) };
+    const patch = { loading: false, statusText: '', calcTime: this._fmt(now), timeLabel: this._fmtStamp(now) };
     if (selCard) patch.selected = selCard;
     this.setData(patch);
 
@@ -638,7 +704,7 @@ Page({
   onBeamInput(e) {
     this.setData({ beam: e.detail.value }, () => {
       if (this._selIdx < 0) return;
-      const now = new Date();
+      const now = this._calcAt();
       this._buildFootprint(this._recs[this._selIdx], now, sat.gstime(now));
     });
   },
@@ -1106,7 +1172,7 @@ Page({
   },
 
   _selectSat(idx) {
-    const now = new Date();
+    const now = this._calcAt();
     const gmst = sat.gstime(now);
     const card = this._selCardData(idx, now, gmst);
     if (!card) return;
@@ -1122,20 +1188,19 @@ Page({
     if (this._dragging || this._pinching) return; // 手势中跳过，避免卡顿叠加
     const render = this._render;
     if (!render || !render.length) return;
-    const now = new Date();
+    const now = this._calcAt();
     const gmst = sat.gstime(now);
     for (let k = 0; k < render.length; k++) {
       const pv = sat.propagate(this._recs[render[k].idx], now);
       if (pv && pv.position) render[k].pos = ecefToRender(sat.eciToEcf(pv.position, gmst));
     }
+    const patch = { calcTime: this._fmt(now), timeLabel: this._fmtStamp(now) };
     if (this._selIdx >= 0) {
       this._buildSelectedGeometry(this._selIdx, now, gmst);
       const card = this._selCardData(this._selIdx, now, gmst);
-      if (card) this.setData({ selected: card, calcTime: this._fmt(now) });
-      else this.setData({ calcTime: this._fmt(now) });
-    } else {
-      this.setData({ calcTime: this._fmt(now) });
+      if (card) patch.selected = card;
     }
+    this.setData(patch);
   },
 
   closeCard() {
@@ -1153,9 +1218,17 @@ Page({
   // 实时刷新开关（与旋转独立，可叠加）；开启 1Hz 按真实时间推进卫星位置
   toggleRefresh() {
     const on = !this.data.liveRefresh;
-    this.setData({ liveRefresh: on });
-    if (on) { this._startRefresh(); this._refreshPositions(); } // 立即先刷一次
-    else this._stopRefresh();
+    if (on) {
+      this.setData({ liveRefresh: on });
+      this._startRefresh();
+      this._refreshPositions(); // 立即先刷一次
+    } else {
+      // 退出实时：以当前真实时刻为新锚点，时间轴回到“此刻”
+      this._stopRefresh();
+      this._baseTime = Date.now();
+      this.setData({ liveRefresh: false, timeOffset: 0, timePct: 0, timeLabel: '此刻' });
+      this._refreshPositions();
+    }
     wx.vibrateShort({ type: 'light' });
   }
 });

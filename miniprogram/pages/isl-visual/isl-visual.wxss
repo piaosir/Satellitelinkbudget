@@ -92,7 +92,7 @@
 .dot-station { background: #6fb88f; }
 
 /* ===== 选星：已选名 + 搜索框 + 结果下拉 ===== */
-/* 分组 chip：点击展开分组浮层 */
+/* 分组 chip：点击展开分组浮层（可选浏览；默认「全部」=全局搜索） */
 .grp-chip {
   margin-left: auto;
   max-width: 66%;

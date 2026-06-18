@@ -12,29 +12,40 @@
         <text wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">✕</text>
       </view>
     </view>
-    <view class="ctrl-row btn-row">
-      <view class="btn-mini" bindtap="refreshNow">刷新此刻</view>
-      <view class="btn-mini {{autoRotate ? 'btn-on' : ''}}" bindtap="toggleRotate">{{autoRotate ? '旋转中' : '旋转停'}}</view>
-      <view class="btn-mini {{liveRefresh ? 'btn-on' : ''}}" bindtap="toggleRefresh">{{liveRefresh ? '实时开' : '实时关'}}</view>
-      <view class="meta-inline">
-        <text wx:if="{{loading}}" class="meta-load">{{statusText}}</text>
-        <block wx:else>
-          <text class="meta-item">在轨 {{satCount}}</text>
-          <text class="meta-item">OMM：{{dataTime}}</text>
-        </block>
+    <!-- 时间轴行：拖动轨道 + 时刻读数（未来 0~24h，与星间链路一致） -->
+    <view class="ctrl-row tl-row">
+      <view class="tb-track" bindtouchstart="onTrackTouch" catchtouchmove="onTrackTouch" bindtouchend="onTrackEnd">
+        <view class="tb-bar"><view class="tb-fill" style="width:{{timePct}}%"></view></view>
+        <view class="tb-knob" style="left:{{timePct}}%"></view>
       </view>
+      <text class="tb-time">{{liveRefresh ? '实时' : timeLabel}}</text>
     </view>
-    <view wx:if="{{statusText && !loading}}" class="meta-warn">{{statusText}}</view>
+    <!-- 精调步进 -->
+    <view class="tb-steps">
+      <text class="tb-step {{liveRefresh ? 'tb-dis' : ''}}" data-d="-60" bindtap="stepTime">−1h</text>
+      <text class="tb-step {{liveRefresh ? 'tb-dis' : ''}}" data-d="-10" bindtap="stepTime">−10m</text>
+      <text class="tb-step {{liveRefresh ? 'tb-dis' : ''}}" data-d="-1" bindtap="stepTime">−1m</text>
+      <text class="tb-now {{(!liveRefresh && timeOffset > 0) ? '' : 'tb-dis'}}" bindtap="resetTime">此刻</text>
+      <text class="tb-step {{liveRefresh ? 'tb-dis' : ''}}" data-d="1" bindtap="stepTime">+1m</text>
+      <text class="tb-step {{liveRefresh ? 'tb-dis' : ''}}" data-d="10" bindtap="stepTime">+10m</text>
+      <text class="tb-step {{liveRefresh ? 'tb-dis' : ''}}" data-d="60" bindtap="stepTime">+1h</text>
+    </view>
 
-    <!-- 波束角设置（选中卫星后出现）：placeholder 常显该星 ε=0 上限，可手填更小值；空=最大覆盖。
-         置于顶部并 adjust-position=false：键盘弹出时不顶动地球/动画，输入更稳 -->
-    <view wx:if="{{selected}}" class="beam-bar">
-      <text class="beam-bar-l">波束角</text>
-      <input class="beam-bar-in" type="digit" value="{{beam}}" placeholder="{{beamAuto ? beamAuto + ' (ε0上限)' : '自动'}}"
-             adjust-position="{{false}}" hold-keyboard="{{true}}" confirm-type="done" bindinput="onBeamInput" />
-      <text class="beam-bar-u">°</text>
-      <image class="beam-lock" src="{{beamLock ? lockIcon : unlockIcon}}" mode="aspectFit" bindtap="toggleBeamLock" />
-      <text class="beam-bar-tip">{{beamLock ? '已锁定 · 对每颗星生效' : '空=最大覆盖'}}</text>
+    <!-- 控制行：常显不收回。右侧旋转/实时开关常在；左侧波束角设置仅选中卫星后出现，
+         框内常显该星 ε=0 上限(最大覆盖)，可手填更小值。adjust-position=false：键盘弹出不顶动地球/动画 -->
+    <view class="beam-bar">
+      <block wx:if="{{selected}}">
+        <text class="beam-bar-l">波束角</text>
+        <input class="beam-bar-in" type="digit" value="{{beam}}" placeholder="{{beamAuto || '自动'}}"
+               adjust-position="{{false}}" hold-keyboard="{{true}}" confirm-type="done" bindinput="onBeamInput" />
+        <text class="beam-bar-u">°</text>
+        <image class="beam-lock" src="{{beamLock ? lockIcon : unlockIcon}}" mode="aspectFit" bindtap="toggleBeamLock" />
+      </block>
+      <text wx:else class="beam-bar-hint">轻触卫星设置波束角</text>
+      <view class="beam-bar-toggles">
+        <view class="btn-mini {{autoRotate ? 'btn-on' : ''}}" bindtap="toggleRotate">{{autoRotate ? '旋转中' : '旋转停'}}</view>
+        <view class="btn-mini {{liveRefresh ? 'btn-on' : ''}}" bindtap="toggleRefresh">{{liveRefresh ? '实时开' : '实时关'}}</view>
+      </view>
     </view>
 
     <!-- 搜索结果下拉 -->
@@ -55,6 +66,15 @@
       bindtouchstart="onTouchStart" catchtouchmove="onTouchMove"
       bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"
       catchwheel="onWheel"></canvas>
+    <!-- 数据元信息：移到地球底部浮层，顶部腾给时间轴（选中星时被信息卡覆盖，符合上下文） -->
+    <view class="globe-meta">
+      <text wx:if="{{loading}}" class="gm-load">{{statusText}}</text>
+      <block wx:else>
+        <text class="gm-item">在轨 {{satCount}}</text>
+        <text class="gm-item">OMM {{dataTime}}</text>
+        <text wx:if="{{statusText}}" class="gm-warn">{{statusText}}</text>
+      </block>
+    </view>
     <view class="globe-hint">轻触星点查看 · 拖动旋转 · 双指缩放</view>
   </view>
 

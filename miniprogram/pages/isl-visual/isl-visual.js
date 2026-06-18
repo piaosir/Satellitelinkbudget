@@ -24,10 +24,12 @@ const GROUP_LABEL = {
   stations: '空间站', planet: 'Planet', spire: 'Spire'
 };
 
-// 可选星座分组（先选分组、再在组内选具体卫星）；顺序按常用度排
-const GROUP_LIST = ['guowang', 'qianfan', 'starlink', 'oneweb', 'kuiper', 'beidou', 'gps', 'glonass',
-  'galileo', 'o3b', 'geo', 'iridium', 'globalstar', 'stations', 'planet', 'spire']
-  .map((k) => ({ key: k, label: GROUP_LABEL[k] || k }));
+// 可选分组浏览（不想打字时点 chip 选一组、组内直接挑星）；首项空 key=回到全局搜索；其余按常用度排
+const GROUP_LIST = [{ key: '', label: '全部（全局搜索）' }].concat(
+  ['guowang', 'qianfan', 'starlink', 'oneweb', 'kuiper', 'beidou', 'gps', 'glonass',
+    'galileo', 'o3b', 'geo', 'iridium', 'globalstar', 'stations', 'planet', 'spire']
+    .map((k) => ({ key: k, label: GROUP_LABEL[k] || k }))
+);
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const num = (v, def) => {
@@ -37,10 +39,10 @@ const num = (v, def) => {
 
 Page({
   data: {
-    // 选星：先选分组 -> 组内搜索/选具体卫星
+    // 选星：默认跨星座全局搜（打字即搜）；也可点 chip 选一组、组内不打字直接挑（分组可选）
     groupList: GROUP_LIST,
-    group1: '', group2: '',            // 已选分组 key（空=未选）
-    group1Label: '', group2Label: '',  // 已选分组中文名（卫星右侧 chip 显示）
+    group1: '', group2: '',            // 当前分组 key（空=全局搜索模式；非空=浏览/过滤该组）
+    group1Label: '', group2Label: '',  // 当前分组中文名（chip 显示，空=「全部」）
     groupOpen1: false, groupOpen2: false, // 分组选择浮层开关
     kw1: '', kw2: '',
     results1: [], results2: [],
@@ -88,8 +90,10 @@ Page({
   _rafId: 0,
   _zoom: 1, _pinching: false, _pinchStartDist: 0, _pinchStartZoom: 1,
   _rec1: null, _rec2: null,       // 两颗星 satrec（null=未选）
-  _satGroup1: '', _satGroup2: '', // 已选星的真实所属分组（全选态下与 group* 不同，恢复 satrec 时用它）
-  _groupSats1: null, _groupSats2: null, // 已选分组的全量卫星（组内搜索用，避免重复加载）
+  _satGroup1: '', _satGroup2: '', // 已选星的真实所属分组（恢复 satrec 时用它）
+  _groupSats1: null, _groupSats2: null, // 当前浏览分组的全量卫星（组内过滤用，避免重复加载）
+  _index: null,            // 跨星座搜索索引 [{name,noradId,group}]（懒加载，与星座地图同源）
+  _indexLoading: false,    // 索引下载中标记（避免重复触发）
   _orbit1: null, _orbit2: null,   // 轨道环 render-XYZ 缓存
   _foot1: null, _foot2: null,     // 覆盖范围足迹圈 render-XYZ 缓存（当前波束角对应的地面足迹）
   _P1: null, _P2: null, _station: null,
@@ -119,7 +123,7 @@ Page({
   },
   onUnload() {
     this._stopLive();
-    if (this._rafId && this._canvas) this._canvas.cancelAnimationFrame(this._rafId);
+    this._caf(this._rafId);
   },
 
   // ===================== 实时开关（1Hz） =====================
@@ -210,31 +214,81 @@ Page({
     wx.vibrateShort({ type: 'light' });
   },
 
-  // ===================== 选分组 / 组内选星 =====================
-  // 展开/收起分组浮层（同时关掉另一槽的分组浮层，避免两层叠在一起）
+  // ===================== 选星：默认全局搜，分组可选浏览 =====================
+  // 两种模式按 group{slot} 区分：空=全局搜索（打字才出结果）；非空=浏览该组（不打字也列出，打字组内过滤）
+
+  // ---- 分组浮层：点 chip 展开，选一组即进浏览模式；选「全部」回到全局搜索 ----
   toggleGroup1() { this.setData({ groupOpen1: !this.data.groupOpen1, groupOpen2: false }); this._resumeDraw(); },
   toggleGroup2() { this.setData({ groupOpen2: !this.data.groupOpen2, groupOpen1: false }); this._resumeDraw(); },
-
   onPickGroup1(e) { const ds = e.currentTarget.dataset; this._selectGroup(1, ds.key, ds.label); },
   onPickGroup2(e) { const ds = e.currentTarget.dataset; this._selectGroup(2, ds.key, ds.label); },
-
-  // 选定分组：记录分组、清空原有搜索/选星，加载该组全量卫星并直接列出（便于立刻挑具体卫星）
   _selectGroup(slot, key, label) {
+    this['_groupSats' + slot] = null; // 换组 -> 弃旧缓存
     this.setData({
-      ['group' + slot]: key, ['group' + slot + 'Label']: label,
+      ['group' + slot]: key, ['group' + slot + 'Label']: key ? (label || GROUP_LABEL[key] || key) : '',
       ['groupOpen' + slot]: false, ['kw' + slot]: '', ['results' + slot]: []
     });
     this._saveSelection();
     wx.vibrateShort({ type: 'light' });
-    // 全选=跨全部星座的搜索索引；其余=单组全量 TLE
-    const loader = (key === 'all')
-      ? tleStore.ensureSearchIndex().then((index) => ({ sats: index || [] }))
-      : tleStore.loadGroupSats(key);
-    loader.then(({ sats }) => {
-      // GEO：预算每颗定点经度并按经度排序（定点星经度基本不变，进组时算一次即可）
+    if (key) this._listGroup(slot, ''); else this._resumeDraw(); // 全局模式：等用户打字
+  },
+
+  // ---- 全局搜索（group{slot} 为空时）：懒加载跨星座索引，打字才出结果 ----
+  _ensureIndex() {
+    if (this._index || this._indexLoading) return;
+    this._indexLoading = true;
+    tleStore.ensureSearchIndex().then((index) => {
+      this._index = index || [];
+      this._indexLoading = false;
+      // 就绪后重跑仍处全局模式且有关键字的槽位（浏览模式与索引无关）
+      if (!this.data.group1 && (this.data.kw1 || '').trim()) this._searchGlobal(1, this.data.kw1);
+      if (!this.data.group2 && (this.data.kw2 || '').trim()) this._searchGlobal(2, this.data.kw2);
+    }).catch(() => { this._indexLoading = false; });
+  },
+  // 空关键字 -> 清空列表（打字才搜）；否则跨星座名/NORAD 命中，封顶 40 条早停（kw 已由 _onInput 写入）
+  _searchGlobal(slot, raw) {
+    const kw = (raw || '').trim().toLowerCase();
+    if (!kw) { this.setData({ ['results' + slot]: [] }); this._resumeDraw(); return; }
+    this._ensureIndex();
+    const idx = this._index;
+    if (!idx || !idx.length) return; // 索引未就绪：就绪回调会重跑本次搜索
+    const out = [];
+    for (let i = 0; i < idx.length && out.length < 40; i++) {
+      const s = idx[i];
+      if (s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
+        out.push({ name: s.name, noradId: s.noradId, group: s.group, groupLabel: GROUP_LABEL[s.group] || s.group });
+      }
+    }
+    this.setData({ ['results' + slot]: out });
+    this._resumeDraw(); // 结果增减会改变地球显隐 -> 重启绘制循环（隐藏期间 RAF 可能已停）
+  },
+
+  // ---- 分组浏览（group{slot} 非空时）：懒加载该组全量 sats 后按 kw 过滤列出 ----
+  _listGroup(slot, kw) {
+    const key = this.data['group' + slot];
+    if (!key) return;
+    if (this['_groupSats' + slot]) { this._filterGroup(slot, kw); return; }
+    tleStore.loadGroupSats(key).then(({ sats }) => {
+      if (this.data['group' + slot] !== key) return; // 异步期间用户已换组 -> 丢弃
+      // GEO：进组时算一次定点经度并按经度排序（定点星经度基本不变）
       this['_groupSats' + slot] = (key === 'geo') ? this._withGeoLon(sats || []) : (sats || []);
-      this._filterGroup(slot, '');
+      this._filterGroup(slot, this.data['kw' + slot]); // 用最新 kw（异步期间可能已变）
     }).catch(() => wx.showToast({ title: '分组加载失败', icon: 'none' }));
+  },
+  // 组内过滤：空关键字=列出前若干颗；GEO 带定点经度
+  _filterGroup(slot, raw) {
+    const sats = this['_groupSats' + slot] || [];
+    const kw = (raw || '').trim().toLowerCase();
+    const key = this.data['group' + slot], label = this.data['group' + slot + 'Label'];
+    const out = [];
+    for (let i = 0; i < sats.length && out.length < 60; i++) {
+      const s = sats[i];
+      if (!kw || s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
+        out.push({ name: s.name, noradId: s.noradId, group: key, groupLabel: label, lonText: s.lonText || '' });
+      }
+    }
+    this.setData({ ['results' + slot]: out });
+    this._resumeDraw();
   },
   // 给 GEO 卫星标注定点经度（SGP4 取此刻星下点经度）并按经度升序排
   _withGeoLon(sats) {
@@ -256,29 +310,20 @@ Page({
     out.sort((a, b) => key(a.lon) - key(b.lon));
     return out;
   },
-  // 组内按关键字过滤（空关键字=列出前若干颗）；全选态下每条用其真实所属星座
-  _filterGroup(slot, raw) {
-    const sats = this['_groupSats' + slot] || [];
-    const kw = (raw || '').trim().toLowerCase();
-    const grp = this.data['group' + slot], label = this.data['group' + slot + 'Label'];
-    const isAll = grp === 'all';
-    const out = [];
-    for (let i = 0; i < sats.length && out.length < 60; i++) {
-      const s = sats[i];
-      if (!kw || s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
-        const g = isAll ? (s.group || '') : grp;
-        out.push({ name: s.name, noradId: s.noradId, group: g, groupLabel: isAll ? (GROUP_LABEL[g] || g) : label, lonText: s.lonText || '' });
-      }
-    }
-    this.setData({ ['results' + slot]: out });
-    this._resumeDraw(); // 结果增减会改变地球显隐 -> 重启绘制循环（隐藏期间 RAF 可能已停）
-  },
-  onSearchInput1(e) { this.setData({ kw1: e.detail.value }); if (this.data.group1) this._filterGroup(1, e.detail.value); },
-  onSearchInput2(e) { this.setData({ kw2: e.detail.value }); if (this.data.group2) this._filterGroup(2, e.detail.value); },
-  // 点搜索框：已选分组 -> 直接重列该组全部卫星（不打字也能挑/换星）；未选分组 -> 展开分组选择来引导
-  onSearchFocus1() { if (this.data.group1) this._filterGroup(1, ''); else this.setData({ groupOpen1: true, groupOpen2: false }); },
-  onSearchFocus2() { if (this.data.group2) this._filterGroup(2, ''); else this.setData({ groupOpen2: true, groupOpen1: false }); },
 
+  // ---- 输入/聚焦：按当前模式分派 ----
+  _onInput(slot, val) {
+    this.setData({ ['kw' + slot]: val });
+    if (this.data['group' + slot]) this._listGroup(slot, val); // 浏览模式：组内过滤
+    else this._searchGlobal(slot, val);                        // 全局模式：跨星座搜
+  },
+  onSearchInput1(e) { this._onInput(1, e.detail.value); },
+  onSearchInput2(e) { this._onInput(2, e.detail.value); },
+  // 点搜索框：浏览模式 -> 重列该组全部（不打字也能挑/换星）；全局模式 -> 不打扰，等打字或点 chip 选组
+  onSearchFocus1() { if (this.data.group1) this._listGroup(1, ''); },
+  onSearchFocus2() { if (this.data.group2) this._listGroup(2, ''); },
+
+  // 选中某条结果：按其真实所属分组加载 TLE、解析 satrec，并把 chip 切到该星所属星座
   _pick(noradId, group, slot) {
     tleStore.loadGroupSats(group).then(({ sats }) => {
       const id = String(noradId);
@@ -288,9 +333,15 @@ Page({
       try { rec = sat.omm2satrec(s); } catch (e) { rec = null; }
       if (!rec || rec.error) { wx.showToast({ title: '根数解析失败', icon: 'none' }); return; }
       this['_satGroup' + slot] = group; // 记真实所属分组（恢复 satrec 用）
-      // 新选星 -> 清空波束自定义，回到自动(该星 ε=0 上限，由 placeholder 显示)
-      if (slot === 1) { this._rec1 = rec; this.setData({ sat1Name: s.name, sat1Norad: s.noradId, kw1: s.name, results1: [], beam1: '' }); }
-      else { this._rec2 = rec; this.setData({ sat2Name: s.name, sat2Norad: s.noradId, kw2: s.name, results2: [], beam2: '' }); }
+      // 顺带把整组缓存进浏览态：选后 chip 即落到该星所属星座，再点搜索框可零加载挑同组邻星
+      this['_groupSats' + slot] = (group === 'geo') ? this._withGeoLon(sats || []) : (sats || []);
+      if (slot === 1) this._rec1 = rec; else this._rec2 = rec;
+      // 新选星 -> chip 切到该星所属星座；清空波束自定义，回到自动(该星 ε=0 上限，由 placeholder 显示)
+      this.setData({
+        ['sat' + slot + 'Name']: s.name, ['sat' + slot + 'Norad']: s.noradId,
+        ['kw' + slot]: s.name, ['results' + slot]: [], ['beam' + slot]: '',
+        ['group' + slot]: group, ['group' + slot + 'Label']: GROUP_LABEL[group] || group
+      });
       this._recompute();
       this._refreshOrbits(this._lastG);
       this._resumeDraw(); // 选定后列表收起、地球恢复 -> 重启绘制循环
@@ -303,7 +354,7 @@ Page({
   // 关闭卫星列表浮层（不选也能退出；已选卫星保持不变）
   closeResults1() { this.setData({ results1: [] }); this._resumeDraw(); },
   closeResults2() { this.setData({ results2: [] }); this._resumeDraw(); },
-  // 点空白遮罩：一并收起分组与卫星列表，地球恢复
+  // 点空白遮罩：收起分组浮层与卫星列表，地球恢复
   closeAllPops() { this.setData({ groupOpen1: false, groupOpen2: false, results1: [], results2: [] }); this._resumeDraw(); },
 
   // 进页面默认选两颗「中国星网(HULIANWANG)」卫星：取此刻星下点最贴近中国、且彼此较近的一对，
@@ -349,7 +400,7 @@ Page({
       this._rec1 = first.rec;
       this._rec2 = second.rec;
       this._satGroup1 = 'guowang'; this._satGroup2 = 'guowang';
-      this._groupSats1 = sats; this._groupSats2 = sats; // 默认组缓存，后续组内搜索零加载
+      this._groupSats1 = sats; this._groupSats2 = sats; // 默认组缓存：点搜索框即可零加载挑同组邻星
       const gwLabel = GROUP_LABEL.guowang;
       this.setData({
         group1: 'guowang', group1Label: gwLabel,
@@ -428,15 +479,15 @@ Page({
       let rec; try { rec = sat.omm2satrec(s); } catch (e) { rec = null; }
       if (!rec || rec.error) return false;
       this['_satGroup' + slot] = group;
-      this['_groupSats' + slot] = sats; // 顺带缓存全量，后续组内搜索零加载
       if (slot === 1) this._rec1 = rec; else this._rec2 = rec;
       return true;
     }).catch(() => false);
   },
 
-  // 清除：保留已选分组，仅清掉关键字与已选卫星，并重新列出该组（便于改选同组其它星）
-  clearSearch1() { this._rec1 = null; this._orbit1 = null; this._foot1 = null; this._satGroup1 = ''; this.setData({ kw1: '', sat1Name: '', sat1Norad: '', beam1: '', beam1Auto: '' }); this._recompute(); this._saveSelection(); if (this.data.group1) this._filterGroup(1, ''); else { this.setData({ results1: [] }); this._resumeDraw(); } },
-  clearSearch2() { this._rec2 = null; this._orbit2 = null; this._foot2 = null; this._satGroup2 = ''; this.setData({ kw2: '', sat2Name: '', sat2Norad: '', beam2: '', beam2Auto: '' }); this._recompute(); this._saveSelection(); if (this.data.group2) this._filterGroup(2, ''); else { this.setData({ results2: [] }); this._resumeDraw(); } },
+  // 清除：清掉关键字/已选卫星/所属星座 chip，回到空态（再打字即重新全局搜）
+  // 清除：回到全局搜索空态（清关键字/选星/分组与组缓存），再打字即跨星座搜
+  clearSearch1() { this._rec1 = null; this._orbit1 = null; this._foot1 = null; this._satGroup1 = ''; this._groupSats1 = null; this.setData({ kw1: '', sat1Name: '', sat1Norad: '', group1: '', group1Label: '', groupOpen1: false, beam1: '', beam1Auto: '', results1: [] }); this._recompute(); this._saveSelection(); this._resumeDraw(); },
+  clearSearch2() { this._rec2 = null; this._orbit2 = null; this._foot2 = null; this._satGroup2 = ''; this._groupSats2 = null; this.setData({ kw2: '', sat2Name: '', sat2Norad: '', group2: '', group2Label: '', groupOpen2: false, beam2: '', beam2Auto: '', results2: [] }); this._recompute(); this._saveSelection(); this._resumeDraw(); },
 
   _fmtTime(d) {
     const p = (n) => String(n).padStart(2, '0');
@@ -750,18 +801,43 @@ Page({
       });
   },
 
+  // 结果浮层展开时 canvas 被 hidden：此时不应继续绘制——PC 端对隐藏 canvas 调 requestAnimationFrame 会抛错
+  _canvasHidden() { return !!(this.data.results1.length || this.data.results2.length); },
+
+  // ---- 帧调度：PC 端绕开 canvas.requestAnimationFrame ----
+  // PC 端微信的 canvas.requestAnimationFrame 内部是异步转调全局 window.requestAnimationFrame；
+  // 当这条在途帧真正触发时若 canvas 已 hidden(display:none)，框架内部会用 undefined 回调去调
+  // window.requestAnimationFrame -> 抛 "parameter 1 is not of type 'Function'"。该抛错发生在框架自身的
+  // 事件循环 tick 里（不在我们调用栈），try/catch 拦不住，且仅 PC 复现。故 PC 端改用 setTimeout 驱动帧循环，
+  // 完全不碰 canvas RAF；移动端性能敏感，仍用原生 canvas RAF。
+  _isPC() {
+    if (this._pc === undefined) {
+      let p = '';
+      try { p = (wx.getDeviceInfo ? wx.getDeviceInfo() : wx.getSystemInfoSync()).platform || ''; } catch (e) {}
+      this._pc = (p === 'windows' || p === 'mac');
+    }
+    return this._pc;
+  },
+  _raf(cb) { return this._isPC() ? setTimeout(cb, 16) : this._canvas.requestAnimationFrame(cb); },
+  _caf(id) {
+    if (!id) return;
+    if (this._isPC()) clearTimeout(id); else if (this._canvas) this._canvas.cancelAnimationFrame(id);
+  },
+
   _loop() {
     if (!this._canvas) return;
+    if (this._canvasHidden()) { this._rafId = 0; return; } // 隐藏期间停链，待 _resumeDraw 重启
     // 缩放(双指/滚轮)不打断自转：仅单指拖动(手动接管视角)时暂停自转
     if (this._autoRotate && !this._dragging) this._yaw += 0.0006;
     this._draw();
-    this._rafId = this._canvas.requestAnimationFrame(() => this._loop());
+    this._rafId = this._raf(() => this._loop());
   },
   // 浮层关闭、地球从 hidden 恢复显示后，RAF 链可能已因隐藏中断 -> 重启一条（带去重，绝不双跑）
+  // 浮层仍展开（canvas 隐藏）时保持停止，避免对隐藏 canvas 调 RAF（PC 端会报错）
   _resumeDraw() {
     if (!this._canvas) return;
-    if (this._rafId) { this._canvas.cancelAnimationFrame(this._rafId); this._rafId = 0; }
-    this._loop();
+    if (this._rafId) { this._caf(this._rafId); this._rafId = 0; }
+    if (!this._canvasHidden()) this._loop();
   },
 
   // 旋转 + 正交投影
