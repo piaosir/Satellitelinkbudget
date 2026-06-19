@@ -657,7 +657,10 @@ Page({
     this._P2 = st2 ? st2.P : null;
     this._R1 = st1 ? st1.R : 0;
     this._R2 = st2 ? st2.R : 0;
-    this._maxR = Math.max(this._R1, this._R2, RE * 1.05);
+    // 自适应缩放基准用「轨道远地点半径」而非当前地心半径：远地点 = a(1+e)·RE，与时间无关，
+    // 避免拖动时间轴时偏心轨道(如 FREGAT DEB / GPS 退役星)的瞬时半径随时间漂移引起整图缩放跳动。
+    const apoR = (rec) => (rec && rec.a) ? rec.a * (1 + rec.ecco) * RE : 0;
+    this._maxR = Math.max(apoR(this._rec1), apoR(this._rec2), this._R1, this._R2, RE * 1.05);
 
     // 地球站（始终可算）：输入框存正数“量值”，半球由 latHemi/lonHemi 决定符号（南纬/西经取负）
     const latMag = Math.abs(num(d.esLat, 0));

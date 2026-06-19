@@ -597,6 +597,7 @@ Page({
       render = this._decimate(all, MAX_RENDER);
     }
     this._render = render;
+    this._recomputeBaseMaxR();   // 渲染集变化(换组/刷新数据/抽稀)后重算缩放基准并缓存
 
     // 若已选中某星，刷新它的轨道/足迹与信息卡（与实时刷新保持一致）
     let selCard = null;
@@ -873,6 +874,26 @@ Page({
     c.lineWidth = 1; c.strokeStyle = 'rgba(110,145,180,0.22)'; c.stroke();
   },
 
+  // 自适应缩放基准：星点瞬时最大地心半径 + 选中星轨道远地点(a(1+e)·RE，与时间无关)。
+  // 仅在换组/刷新数据/选星/取消选中时调用并缓存到 _baseMaxR；时间轴拖动不更新，避免整图缩放跳动。
+  _recomputeBaseMaxR() {
+    let m = RE * 1.05;
+    const render = this._render || [];
+    for (let i = 0; i < render.length; i++) {
+      const p = render[i].pos;
+      const r = Math.hypot(p[0], p[1], p[2]);
+      if (r > m) m = r;
+    }
+    if (this._selIdx >= 0) {
+      const rec = this._recs[this._selIdx];
+      if (rec && rec.a) {                       // 远地点半径 = a(1+e)·RE（rec.a 为地球半径单位），保证选中星整条轨道始终在视野内
+        const apo = rec.a * (1 + rec.ecco) * RE;
+        if (apo > m) m = apo;
+      }
+    }
+    this._baseMaxR = m;
+  },
+
   _draw() {
     const ctx = this._ctx;
     if (!ctx) return;
@@ -883,13 +904,10 @@ Page({
     this._cYaw = Math.cos(this._yaw); this._sYaw = Math.sin(this._yaw);
     this._cPitch = Math.cos(this._pitch); this._sPitch = Math.sin(this._pitch);
 
-    // 最远渲染半径：取所选轨道或星点的最大半径，保证 GEO 也在视野内
-    let maxR = RE * 1.05;
-    for (let i = 0; i < this._render.length; i++) {
-      const p = this._render[i].pos;
-      const r = Math.hypot(p[0], p[1], p[2]);
-      if (r > maxR) maxR = r;
-    }
+    // 最远渲染半径(自适应缩放基准)：由 _recomputeBaseMaxR 维护并缓存，仅在换组/刷新数据/选星时更新，
+    // 不随时间轴变化——否则偏心轨道(如空间站组 FREGAT DEB、GPS 退役星)瞬时半径随时间漂移会让整图缩放跳动。
+    let maxR = this._baseMaxR;
+    if (!maxR) { this._recomputeBaseMaxR(); maxR = this._baseMaxR || RE * 1.05; }
     const half = Math.min(w, h) / 2 * 0.9;
     const scale = (half / maxR) * this._zoom;   // 自适应基准 × 用户双指缩放
     const Rpx = RE * scale;
@@ -1129,6 +1147,7 @@ Page({
       // 点空白处：取消选中
       this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null;
       this._selPos = null;
+      this._recomputeBaseMaxR();   // 去掉选中星远地点项，基准回落到星点
       this.setData(Object.assign({ selected: null }, this._beamResetPatch()));
       return;
     }
@@ -1177,6 +1196,7 @@ Page({
     const card = this._selCardData(idx, now, gmst);
     if (!card) return;
     this._selIdx = idx;
+    this._recomputeBaseMaxR();   // 折入选中星远地点：偏心/高轨星整条轨道始终在视野内，且基准不随时间漂移
     this.setData(this._beamResetPatch()); // 新选星 -> 未锁定则波束回到自动；锁定则保留固定值
     this._buildSelectedGeometry(idx, now, gmst);
     this.setData({ selected: card });
@@ -1206,6 +1226,7 @@ Page({
   closeCard() {
     this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null;
     this._selPos = null;
+    this._recomputeBaseMaxR();   // 取消选中：去掉选中星远地点项，基准回落到星点
     this.setData(Object.assign({ selected: null }, this._beamResetPatch()));
     this._saveSelection();
   },
