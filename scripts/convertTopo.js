@@ -7,18 +7,23 @@
  *   - "虚拟"左上角: 纬度 +90.125°, 经度 -180.125°, 行/列递增 1/12°
  *     lat(row) = 90.125 - row/12 ; lon(col) = -180.125 + col/12
  *
- * 输出: topo_v1.bin — 全精度 Int16 LE 二进制 (2164×4324, 值=高度米)
- *   - 海拔含负值(海平面以下), 故用带符号 Int16 (范围 ±32767, 足够覆盖 ±9000m)
- *   - 大小 ≈ 17.85 MB, 不打包进小程序, 上传云存储后由 app.js 懒加载
+ * 输出:
+ *   topo_v1.bin — 全精度 Int16 LE 二进制 (2164×4324, 值=高度米), ≈17.85 MB(中间产物)
+ *     - 海拔含负值(海平面以下), 故用带符号 Int16 (范围 ±32767, 足够覆盖 ±9000m)
+ *   topo_v1.gz  — 上面的 bin 经 gzip 无损压缩, ≈4.32 MB
+ *     - 高程一字节不改(无损), 解压后与 .bin 完全一致
+ *     - 仅这个 .gz 上传云存储; app.js 下载后用 pako 解压再注入(详见 app.js _downloadTopoData)
  *
  * 使用方法: node scripts/convertTopo.js
  */
 
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const INPUT_FILE = 'C:\\Users\\85256\\Downloads\\TOPO.dat';
 const OUTPUT_BIN = path.join(__dirname, '..', 'topo_v1.bin');
+const OUTPUT_GZ = path.join(__dirname, '..', 'topo_v1.gz');
 
 const ROWS = 2164;
 const COLS = 4324;
@@ -66,4 +71,11 @@ fs.writeFileSync(OUTPUT_BIN, buf);
 console.log(`  输出: ${OUTPUT_BIN}`);
 console.log(`  大小: ${(buf.length / 1024 / 1024).toFixed(2)} MB`);
 console.log(`  高度范围: ${minVal} ~ ${maxVal} m, 裁剪点数: ${clipped}`);
-console.log('\n完成。请将 topo_v1.bin 上传到云存储, 并把 fileID 填入 app.js 的 TOPO_CLOUD_FILE。');
+
+console.log('\ngzip 无损压缩 ...');
+const gz = zlib.gzipSync(buf, { level: 9 });
+fs.writeFileSync(OUTPUT_GZ, gz);
+console.log(`  输出: ${OUTPUT_GZ}`);
+console.log(`  大小: ${(gz.length / 1024 / 1024).toFixed(2)} MB (压缩比 ${(buf.length / gz.length).toFixed(1)}×)`);
+
+console.log('\n完成。请将 topo_v1.gz 上传到云存储, 并把 fileID 填入 app.js 的 TOPO_CLOUD_FILE。');

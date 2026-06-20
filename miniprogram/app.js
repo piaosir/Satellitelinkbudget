@@ -1,6 +1,7 @@
 // app.js
 const { setFullPrecisionData } = require('./utils/rainRate');
 const { setFullPrecisionElevation } = require('./utils/elevation');
+const pako = require('./utils/lib/pako_inflate.min.js');
 const { setData: setCloudParamsData } = require('./data/cloudParamsGrid');
 const { setData: setWaterVaporData } = require('./data/waterVaporGrid');
 
@@ -266,12 +267,15 @@ App({
   },
 
   // ===== P.1511 海拔数据加载 =====
-  // 云存储文件路径 (上传 topo_v1.bin 后填入对应 fileID)
-  TOPO_CLOUD_FILE: 'cloud://cloud1-8gjv5ekx41d6fb76.636c-cloud1-8gjv5ekx41d6fb76-1385987144/TOPO/topo_v1.bin',
-  TOPO_LOCAL_PATH: wx.env.USER_DATA_PATH + '/topo_v1.bin',
+  // 云存储现在只放 gzip 无损压缩包 topo_v1.gz(≈4.32MB, 原 17.85MB)。
+  // 下载后用 pako 解压成 Int16 二进制再注入; 本地缓存仍存解压后的 bin,
+  // 因此 pako 只在"首次下载"时跑一次, 热启动读本地缓存与旧版完全一致。
+  // ↓ 上传 topo_v1.gz 后填入对应 fileID
+  TOPO_CLOUD_FILE: 'cloud://cloud1-8gjv5ekx41d6fb76.636c-cloud1-8gjv5ekx41d6fb76-1385987144/TOPO/topo_v1.gz',
+  TOPO_LOCAL_PATH: wx.env.USER_DATA_PATH + '/topo_v1.bin', // 本地缓存=解压后的 bin
   TOPO_VERSION_KEY: 'topo_data_version',
-  TOPO_CURRENT_VERSION: 'v1',
-  TOPO_EXPECTED_SIZE: 2164 * 4324 * 2, // 18,714,272 bytes (int16)
+  TOPO_CURRENT_VERSION: 'v2', // v1→v2: 数据源改 gzip, 让旧缓存失效重新下载
+  TOPO_EXPECTED_SIZE: 2164 * 4324 * 2, // 18,714,272 bytes (int16, 解压后)
 
   _loadTopoData() {
     const fs = wx.getFileSystemManager();
@@ -296,27 +300,30 @@ App({
   },
 
   _downloadTopoData(fs) {
-    console.log('[P.1511] 开始后台下载全精度海拔数据...');
+    console.log('[P.1511] 开始后台下载全精度海拔数据(gzip)...');
     wx.cloud.downloadFile({
       fileID: this.TOPO_CLOUD_FILE,
       success: (res) => {
         if (res.statusCode === 200 && res.tempFilePath) {
           try {
-            const arrayBuffer = fs.readFileSync(res.tempFilePath);
+            // 下载到的是 gzip 压缩包, 先解压成 Int16 二进制
+            const gzBuf = fs.readFileSync(res.tempFilePath);
+            const inflated = pako.inflate(new Uint8Array(gzBuf)); // Uint8Array
+            const arrayBuffer = inflated.buffer;
             if (arrayBuffer.byteLength !== this.TOPO_EXPECTED_SIZE) {
-              console.warn('[P.1511] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              console.warn('[P.1511] 解压后数据大小不匹配:', arrayBuffer.byteLength);
               return;
             }
 
-            // 持久化到用户目录
+            // 持久化解压后的 bin 到用户目录(后续热启动直接读, 不再解压)
             fs.writeFileSync(this.TOPO_LOCAL_PATH, arrayBuffer);
             wx.setStorageSync(this.TOPO_VERSION_KEY, this.TOPO_CURRENT_VERSION);
 
             // 注入到 elevation 模块
             setFullPrecisionElevation(arrayBuffer);
-            console.log('[P.1511] 下载并缓存成功');
+            console.log('[P.1511] 下载解压并缓存成功');
           } catch (e) {
-            console.error('[P.1511] 保存失败:', e.message);
+            console.error('[P.1511] 解压/保存失败:', e.message);
           }
         }
       },
