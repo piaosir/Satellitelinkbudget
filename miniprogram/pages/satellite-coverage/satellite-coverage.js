@@ -4196,6 +4196,23 @@ Page({
       }
     }
     
+    // 覆盖图总开关打开时，剔除缓存中恢复出来的覆盖图叠加层（覆盖线条、覆盖值/波束中心/波束名标记），
+    // 仅保留等仰角线（黑/白线条）与搜索/定位标记，确保对用户呈现为“暂无覆盖数据”。
+    if (coverageIndex.COVERAGE_HIDDEN) {
+      if (updateData.polylines) {
+        // 覆盖线条为彩色，等仰角线为黑/白色——只保留等仰角线
+        updateData.polylines = updateData.polylines.filter(p =>
+          p.color === '#000000' || p.color === '#FFFFFF'
+        );
+      }
+      if (updateData.markers) {
+        // 覆盖值(1000-1999)/波束中心(3000-3999)/波束名(4000-4999)标记一律剔除
+        updateData.markers = updateData.markers.filter(m =>
+          !(m.id >= 1000 && m.id < 5000)
+        );
+      }
+    }
+
     if (Object.keys(updateData).length > 0) {
       // 根据当前地图类型调整标记和线条的颜色
       const isSatelliteMode = this.data.enableSatellite;

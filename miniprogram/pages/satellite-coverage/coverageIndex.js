@@ -5,6 +5,10 @@
  * 注意：覆盖数据已移至云存储，从云端动态加载
  */
 
+// ⚠️ 覆盖图总开关：置为 true 时，对所有卫星统一隐藏覆盖图，对用户显示为“暂无覆盖数据”。
+// 索引数据保持不变，仅在展示层屏蔽；需要恢复时改回 false 即可。
+const COVERAGE_HIDDEN = true;
+
 // 覆盖数据基础路径 (GXT原始文件)
 const COVERAGE_BASE_PATH_GXT = '/pages/satellite-coverage/CoverageDATA/CoverageForWechat/';
 // 覆盖数据基础路径 (JSON转换后文件 - 现在从云存储加载)
@@ -659,11 +663,14 @@ function getSatelliteDisplayName(satelliteName) {
  * @returns {boolean}
  */
 function hasCoverageData(satelliteName) {
+  // 总开关打开时，一律视为没有覆盖数据（隐藏所有覆盖图）
+  if (COVERAGE_HIDDEN) return false;
   return satelliteName in coverageIndex;
 }
 
 module.exports = {
   coverageIndex,
+  COVERAGE_HIDDEN,
   COVERAGE_BASE_PATH,
   getSatellitesWithCoverage,
   getBeamsForSatellite,
