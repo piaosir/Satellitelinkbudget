@@ -2,7 +2,9 @@
 // 卫星覆盖图页面 - 使用原生map组件展示卫星覆盖范围
 
 const app = getApp();
-const coverageIndex = require('./coverageIndex.js');
+// 旧内置卫星目录 coverageIndex.js 已切断：覆盖数据唯一来源为「密钥导入」的波束快照。
+// 波束逐条持久化在本地缓存（gxtBeam_<id> + 索引 gxtBeamIds），onLoad 时 _loadImportedBeams() 读回，
+// 当前卫星+类型下的波束由 _beamsForCurrent()/refreshBeamList() 现算，不再有独立的目录索引。
 
 Page({
   data: {
@@ -47,8 +49,13 @@ Page({
     
     // 卫星选择弹窗
     showSatellitePopup: false,
-    
-    // 卫星列表（与AR对星保持一致）
+
+    // 自定义卫星弹窗
+    showCustomSatPopup: false,   // 添加自定义卫星弹窗
+    customSatName: '',           // 自定义卫星名称
+    customSatPosition: '',       // 自定义卫星轨位（°E）
+
+    // 卫星列表（内置，作为导入波束的归属容器；波束数据来源=密钥导入）
     satellites: [
       { "name": "CHINASAT 6D", "position": 125, "coverage": { "lat": 25, "lng": 125, "radius": 3500 } },
       { "name": "CHINASAT 6C", "position": 130.5, "coverage": { "lat": 22, "lng": 130.5, "radius": 3200 } },
@@ -73,17 +80,14 @@ Page({
       { "name": "AsiaSat 5", "position": 100.5, "coverage": { "lat": 28, "lng": 100.5, "radius": 4000 } },
       { "name": "AsiaSat 6", "position": 120, "coverage": { "lat": 25, "lng": 120, "radius": 3800 } },
       { "name": "AsiaSat 7", "position": 105.5, "coverage": { "lat": 30, "lng": 105.5, "radius": 4000 } },
-      { "name": "AsiaSat 9", "position": 122, "coverage": { "lat": 24, "lng": 122, "radius": 4200 } },
-      { "name": "JCSAT-1C", "position": 150, "coverage": { "lat": 15, "lng": 150, "radius": 3000 } },
-      { "name": "JCSAT-2B", "position": 154, "coverage": { "lat": 12, "lng": 154, "radius": 2800 } },
-      { "name": "JCSAT-3A", "position": 128, "coverage": { "lat": 22, "lng": 128, "radius": 3200 } },
-      { "name": "JCSAT-4B", "position": 124, "coverage": { "lat": 24, "lng": 124, "radius": 3100 } }
+      { "name": "AsiaSat 9", "position": 122, "coverage": { "lat": 24, "lng": 122, "radius": 4200 } }
     ],
     
     // 地图覆盖物
     circles: [],       // 覆盖区域圆形
     markers: [],       // 标记点
     polylines: [],     // 等仰角线
+    polygons: [],      // 协调区多边形（填充层，来自导入快照）
     
     // 用户是否在覆盖范围内
     isInCoverage: false,
@@ -143,7 +147,15 @@ Page({
 
     // 选点回传模式（给首页方位仰角工具使用）
     pickMode: false,
-    pickSource: ''
+    pickSource: '',
+
+    // 密钥导入 → 波束（数据唯一来源）
+    showImportPopup: false,    // 密钥导入弹窗
+    importKeyInput: '',        // 密钥输入框（归一后的 8 位，无分隔符）
+    otpCells: [],              // 8 位分格渲染单元（含中间只读“-”分隔）
+    importKeyFocus: false,     // 分格输入是否聚焦（控制光标/高亮）
+    importBeamName: '',        // 导入时可填的波束名
+    importing: false           // 导入进行中
   },
 
   onLoad(options) {
@@ -168,6 +180,9 @@ Page({
     } catch (e) {
       this._isAndroid = false;
     }
+
+    // 载入用户持久化的自定义卫星（追加到内置列表尾部，供下方按名/索引定位）
+    this._loadCustomSatellites();
 
     // 获取从主页面传来的卫星索引（优先按名称查找，避免两页面列表顺序不同导致错位）
     let satelliteIndex = 0;
@@ -215,9 +230,15 @@ Page({
       }, 400);
     }
     
-    // 检查并初始化覆盖数据状态
+    // 加载本地持久化的导入波束（秒开）
+    this._loadImportedBeams();
+
+    // 初始化覆盖数据状态（刷新当前卫星+类型下的波束列表）
     this.updateCoverageDataStatus();
-    
+
+    // 本地秒开后，异步与云数据库同步（云端为准 + 本地独有者补传上云）
+    this._syncBeamsFromCloud().catch(e => console.warn('波束云同步异常：', (e && e.errMsg) || e));
+
     // 获取用户位置
     this.getUserLocation();
   },
@@ -617,8 +638,45 @@ Page({
     if (currentSegment.length >= 2) {
       segments.push(currentSegment);
     }
-    
+
     return segments;
+  },
+
+  /**
+   * 将（可能跨越180°经线的）填充多边形环切分成若干条“不跨越对映线”的子多边形，
+   * 供 map polygons 的 fillColor 使用。与折线用的 splitContourAtAntimeridian 同源：
+   * 复用其“在对映线处插入±179.9999边界点并断段”的能力，把各段当作独立闭合多边形。
+   * 切分后任一子多边形相邻两点的经度差都 <180°，避免 map 组件跨对映线内插出
+   * 超出 [-180,180] 的经度而报错（LatLng.lng 取值应在 [-180,180] / updateMultiMarker faild）。
+   * @param {Array} points - 已标准化到[-180,180]的环点 [{latitude, longitude}]
+   * @returns {Array} 子多边形数组 [[{latitude,longitude}], ...]；未跨越对映线时原样返回 [points]
+   */
+  splitPolygonAtAntimeridian(points) {
+    if (!Array.isArray(points) || points.length < 3) {
+      return (Array.isArray(points) && points.length) ? [points] : [];
+    }
+
+    // 找第一条跨越对映线的边（含闭合边 last→first）；都不跨越则直接整环填充
+    let crossIdx = -1;
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i].longitude;
+      const b = points[(i + 1) % points.length].longitude;
+      if (Math.abs(b - a) > 180) { crossIdx = i; break; }
+    }
+    if (crossIdx === -1) return [points];
+
+    // 旋转环，使其从“某次跨越之后的第一点”开始，并把该点补到末尾重新闭合。
+    // 这样首/尾段自然分属对映线两侧、无需手动合并，切出的每段各占一个半球。
+    const rotated = [];
+    for (let k = 0; k < points.length; k++) {
+      rotated.push(points[(crossIdx + 1 + k) % points.length]);
+    }
+    rotated.push(rotated[0]);
+
+    // 复用折线切分（在对映线处插入边界点并断段），各段即为分属两半球的子多边形
+    const polys = this.splitContourAtAntimeridian(rotated)
+      .filter(seg => Array.isArray(seg) && seg.length >= 3);
+    return polys.length ? polys : [points];
   },
 
   /**
@@ -1009,6 +1067,85 @@ Page({
     this.setData({ showSatellitePopup: false });
   },
 
+  // —— 自定义卫星 ——
+  // 从本地缓存载入自定义卫星，去重后追加到内置列表尾部
+  _loadCustomSatellites() {
+    try {
+      const customs = wx.getStorageSync('coverage_custom_satellites');
+      if (!Array.isArray(customs) || !customs.length) return;
+      const existing = new Set(this.data.satellites.map(s => String(s.name).toLowerCase()));
+      const merged = [...this.data.satellites];
+      customs.forEach(s => {
+        if (!s || !s.name) return;
+        const key = String(s.name).toLowerCase();
+        if (existing.has(key)) return;
+        existing.add(key);
+        const pos = Number(s.position);
+        merged.push({ name: s.name, position: pos, coverage: s.coverage || { lat: 0, lng: pos, radius: 3000 }, custom: true });
+      });
+      this.setData({ satellites: merged });
+    } catch (e) { console.warn('载入自定义卫星失败', e); }
+  },
+  // 把当前列表里的自定义卫星写回缓存
+  _persistCustomSatellites() {
+    try {
+      const customs = this.data.satellites
+        .filter(s => s.custom)
+        .map(s => ({ name: s.name, position: s.position, coverage: s.coverage }));
+      wx.setStorageSync('coverage_custom_satellites', customs);
+    } catch (e) { console.warn('保存自定义卫星失败', e); }
+  },
+  showCustomSatPanel() { this.setData({ showCustomSatPopup: true, customSatName: '', customSatPosition: '' }); },
+  hideCustomSatPanel() { this.setData({ showCustomSatPopup: false }); },
+  onCustomSatNameInput(e) { this.setData({ customSatName: e.detail.value }); },
+  onCustomSatPositionInput(e) { this.setData({ customSatPosition: e.detail.value }); },
+  confirmAddCustomSat() {
+    const name = (this.data.customSatName || '').trim();
+    const pos = parseFloat((this.data.customSatPosition || '').trim());
+    if (!name) { wx.showToast({ title: '请输入卫星名称', icon: 'none' }); return; }
+    if (!isFinite(pos) || pos < -180 || pos > 180) { wx.showToast({ title: '轨位需在 −180~180°', icon: 'none' }); return; }
+    if (this.data.satellites.some(s => String(s.name).toLowerCase() === name.toLowerCase())) {
+      wx.showToast({ title: '已存在同名卫星', icon: 'none' }); return;
+    }
+    const sat = { name, position: pos, coverage: { lat: 0, lng: pos, radius: 3000 }, custom: true };
+    const satellites = [...this.data.satellites, sat];
+    const newIndex = satellites.length - 1;
+    this.setData({ satellites, showCustomSatPopup: false }, () => {
+      this._persistCustomSatellites();
+      // 直接选中新增卫星（复用切换逻辑，含地图重绘/缓存加载）
+      this.onSatelliteChange({ currentTarget: { dataset: { index: newIndex } } });
+    });
+  },
+  onDeleteCustomSat(e) {
+    const index = parseInt(e.currentTarget.dataset.index);
+    const sat = this.data.satellites[index];
+    if (!sat || !sat.custom) return;
+    wx.showModal({
+      title: '删除自定义卫星',
+      content: `确认删除「${sat.name}」？`,
+      success: (res) => {
+        if (!res.confirm) return;
+        const cur = this.data.currentSatellite;
+        const deletingCurrent = cur && cur.name === sat.name;
+        const satellites = this.data.satellites.filter((_, i) => i !== index);
+        if (deletingCurrent) {
+          // 删的是当前卫星：切到第 1 颗并走完整重绘/缓存流程；列表空则清空当前
+          this.setData({ satellites }, () => {
+            this._persistCustomSatellites();
+            if (satellites.length) this.onSatelliteChange({ currentTarget: { dataset: { index: 0 } } });
+            else this.setData({ currentSatellite: null, satelliteIndex: 0 });
+          });
+        } else {
+          // 删的是其它卫星：仅按名修正当前卫星的新索引（其索引在删除后可能前移）
+          let satelliteIndex = cur ? satellites.findIndex(s => s.name === cur.name) : 0;
+          if (satelliteIndex < 0) satelliteIndex = 0;
+          this.setData({ satellites, satelliteIndex });
+          this._persistCustomSatellites();
+        }
+      }
+    });
+  },
+
   // 切换卫星
   onSatelliteChange(e) {
     const index = parseInt(e.currentTarget.dataset.index);
@@ -1039,7 +1176,8 @@ Page({
     this.setData({
       polylines: [],
       markers: [],
-      circles: []
+      circles: [],
+      polygons: []
     });
     
     // 使用 setTimeout 确保地图组件有时间处理清空操作
@@ -1122,7 +1260,8 @@ Page({
     this.setData({
       polylines: [],
       markers: [],
-      circles: []
+      circles: [],
+      polygons: []
     });
     
     // 使用 setTimeout 确保地图组件有时间处理清空操作
@@ -1199,136 +1338,410 @@ Page({
     });
   },
 
+  // ============================================================================
+  // 覆盖数据 = 密钥导入的波束（可累积、可删除、本地持久化）。工作流：
+  //   选卫星 → 选 EIRP/G·T → 「导入」输入密钥 → 该快照覆盖【合并为一个波束】追加到当前卫星+类型下 →
+  //   多选波束绘制（自定义值筛选照旧）→ 长按波束标签弹✕删除。多边形随其所属波束一起导入/删除。
+  //   卫星列表为内置列表；仿真平台「发送到小程序」是波束数据的唯一来源。
+  // ============================================================================
+
+  // 本地持久化：逐波束存 gxtBeam_<id>，索引存 gxtBeamIds（规避单键 1MB 上限）
+  _loadImportedBeams() {
+    let ids = [];
+    try { ids = wx.getStorageSync('gxtBeamIds') || []; } catch (e) {}
+    const beams = [];
+    for (const id of ids) {
+      try { const b = wx.getStorageSync('gxtBeam_' + id); if (b && b.id) beams.push(b); } catch (e) {}
+    }
+    this._importedBeams = beams;
+  },
+  _persistBeam(beam) {
+    try {
+      wx.setStorageSync('gxtBeam_' + beam.id, beam);
+      wx.setStorageSync('gxtBeamIds', (this._importedBeams || []).map(b => b.id));
+    } catch (e) { console.warn('波束持久化失败（本会话仍可用）：', e); }
+  },
+  _removeBeamStorage(id) {
+    try { wx.removeStorageSync('gxtBeam_' + id); wx.setStorageSync('gxtBeamIds', (this._importedBeams || []).map(b => b.id)); } catch (e) {}
+  },
+  _newBeamId() { return 'b' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36); },
+
+  // —— 波束云端持久化（云数据库 gxtBeams，按 openid 隔离、跨设备同步）——
+  // 需在云开发控制台新建集合 gxtBeams 并把权限设为「仅创建者可读写」。
+  // 云端为准、本地缓存做离线镜像+秒开；写操作全部 best-effort（失败不影响本地可用）。
+  // 每条文档：{ _id(云自增), _openid(自动), bid(客户端波束id), satelliteName, type, beamName,
+  //            contours, borePoints, polygons, createdAt, updatedAt }；波束对象上另存 _cloudId=_id。
+  _gxtColl() {
+    try { if (wx.cloud && wx.cloud.database) return wx.cloud.database().collection('gxtBeams'); } catch (e) {}
+    return null;
+  },
+  // 拉取本用户全部云端波束（分页，规避单页 20 条上限）
+  async _cloudGetAllBeams() {
+    const coll = this._gxtColl();
+    if (!coll) return [];
+    const all = [];
+    const PAGE = 20;
+    for (let skip = 0; skip < 2000; skip += PAGE) {   // 硬上限 2000 条，防跑飞
+      const res = await coll.skip(skip).limit(PAGE).get();
+      const batch = (res && res.data) || [];
+      all.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+    return all.map(doc => ({
+      id: doc.bid || doc._id,
+      _cloudId: doc._id,
+      satelliteName: doc.satelliteName,
+      type: doc.type,
+      beamName: doc.beamName || '波束',
+      contours: Array.isArray(doc.contours) ? doc.contours : [],
+      borePoints: Array.isArray(doc.borePoints) ? doc.borePoints : [],
+      polygons: Array.isArray(doc.polygons) ? doc.polygons : []
+    }));
+  },
+  // 新增一条波束到云端，回填 _cloudId
+  async _cloudAddBeam(beam) {
+    const coll = this._gxtColl();
+    if (!coll || !beam) return;
+    const now = Date.now();
+    const res = await coll.add({ data: {
+      bid: beam.id,
+      satelliteName: beam.satelliteName,
+      type: beam.type,
+      beamName: beam.beamName || '波束',
+      contours: beam.contours || [],
+      borePoints: beam.borePoints || [],
+      polygons: beam.polygons || [],
+      createdAt: now, updatedAt: now
+    } });
+    if (res && res._id) beam._cloudId = res._id;
+  },
+  // 改名：只更新 beamName 字段（不重传大体量等值线）；未上云过的补传
+  async _cloudRenameBeam(beam) {
+    const coll = this._gxtColl();
+    if (!coll || !beam) return;
+    if (beam._cloudId) {
+      await coll.doc(beam._cloudId).update({ data: { beamName: beam.beamName, updatedAt: Date.now() } });
+    } else {
+      await this._cloudAddBeam(beam);
+    }
+  },
+  // 删除云端对应文档
+  async _cloudRemoveBeam(beam) {
+    const coll = this._gxtColl();
+    if (!coll || !beam || !beam._cloudId) return;
+    await coll.doc(beam._cloudId).remove();
+  },
+  // 把 this._importedBeams 全量重写进本地镜像，并清掉已不存在波束的残留键
+  _rewriteLocalMirror() {
+    try {
+      const beams = this._importedBeams || [];
+      const newIds = new Set(beams.map(b => b.id));
+      let oldIds = [];
+      try { oldIds = wx.getStorageSync('gxtBeamIds') || []; } catch (e) {}
+      oldIds.forEach(id => { if (!newIds.has(id)) { try { wx.removeStorageSync('gxtBeam_' + id); } catch (e) {} } });
+      beams.forEach(b => { try { wx.setStorageSync('gxtBeam_' + b.id, b); } catch (e) {} });
+      wx.setStorageSync('gxtBeamIds', beams.map(b => b.id));
+    } catch (e) { console.warn('本地镜像写入失败：', e); }
+  },
+  // 云端同步：本地已秒开后异步跑。云端为准；本地有云端无者（离线导入/首次迁移）补传上云并保留。
+  async _syncBeamsFromCloud() {
+    if (!this._gxtColl()) return;
+    let cloudBeams;
+    try {
+      cloudBeams = await this._cloudGetAllBeams();
+    } catch (e) {
+      console.warn('云端波束读取失败（保持本地缓存）：', (e && e.errMsg) || e);
+      return;   // 离线/无权限/集合未建：保持本地，不覆盖
+    }
+    const local = this._importedBeams || [];
+    const cloudBids = new Set(cloudBeams.map(b => b.id));
+    const pending = local.filter(b => !cloudBids.has(b.id));   // 本地独有 → 补传
+    for (const lb of pending) {
+      try { await this._cloudAddBeam(lb); } catch (e) { console.warn('波束迁移上云失败：', (e && e.errMsg) || e); }
+    }
+    this._importedBeams = [...cloudBeams, ...pending];   // 两者 bid 不相交
+    this._rewriteLocalMirror();
+    this.refreshBeamList();
+    if (this.data.showCoverageContours) this.drawSelectedBeams();
+  },
+
+  // 把一份快照的覆盖【合并为一个波束的数据】：全部等值线合并（保留烘入颜色），bore 汇合，多边形归入该波束
+  _mergeSnapshotToBeamData(snap) {
+    const beams = (snap && snap.coverage && Array.isArray(snap.coverage.beams)) ? snap.coverage.beams : [];
+    const contours = [];
+    const borePoints = [];
+    beams.forEach(b => {
+      (Array.isArray(b.contours) ? b.contours : []).forEach(c => { if (c && c.g !== undefined && Array.isArray(c.p)) contours.push(c); });
+      (Array.isArray(b.bore) ? b.bore : []).forEach(pt => { if (Array.isArray(pt) && pt.length >= 2) borePoints.push({ pos: [pt[0], pt[1]] }); });
+    });
+    return { contours, borePoints, polygons: Array.isArray(snap.polygons) ? snap.polygons : [] };
+  },
+
+  // 当前卫星 + 类型下的导入波束
+  _beamsForCurrent() {
+    const sat = this.data.currentSatellite; if (!sat) return [];
+    return (this._importedBeams || []).filter(b => b.satelliteName === sat.name && b.type === this.data.selectedType);
+  },
+
+  // 刷新波束选择框（availableBeams=[{id,name}]），并据当前卫星更新 EIRP/GT 是否已有导入波束
+  refreshBeamList() {
+    const sat = this.data.currentSatellite;
+    const availableBeams = this._beamsForCurrent().map(b => ({ id: b.id, name: b.beamName || '波束' }));
+    const validIds = new Set(availableBeams.map(x => x.id));
+    const selectedBeams = (this.data.selectedBeams || []).filter(id => validIds.has(id));
+    const all = sat ? (this._importedBeams || []).filter(b => b.satelliteName === sat.name) : [];
+    this.setData({
+      availableBeams,
+      selectedBeams,
+      hasCoverageData: true,               // 卫星常在，波束面板常开（内含导入入口）
+      hasEIRP: all.some(b => b.type === 'EIRP'),
+      hasGT: all.some(b => b.type === 'GT')
+    });
+  },
+
+  // 绘制当前选中的导入波束（+ 其携带的多边形）
+  drawSelectedBeams() {
+    const selected = this.data.selectedBeams || [];
+    const beams = (this._importedBeams || []).filter(b => selected.includes(b.id));
+    if (!beams.length) { wx.showToast({ title: '请选择要绘制的波束', icon: 'none' }); this.setData({ showCoverageContours: false, polygons: [] }); return; }
+    const beamDataList = beams.map(b => ({ id: b.id, beamName: b.beamName, contours: b.contours, borePoints: b.borePoints }));
+    this._activePolygons = beams.reduce((acc, b) => acc.concat(Array.isArray(b.polygons) ? b.polygons : []), []);
+    // 是否含覆盖等值线（有 g 值）。只有协调区多边形、无等值线的波束是合法的——
+    // 此时不能走 processMultiBeamData（会误报「无有效覆盖数据」），改为清覆盖等值线层后交给 drawPolygons。
+    const hasContours = beamDataList.some(d => Array.isArray(d.contours) && d.contours.some(c => c && c.g !== undefined));
+    if (hasContours) {
+      this.processMultiBeamData(beamDataList, this.data.selectedType);
+    } else {
+      this._clearCoverageContourLayers(beamDataList);
+    }
+    this.drawPolygons();
+  },
+
+  // 清除覆盖等值线相关叠加层（覆盖线条/覆盖值·波束中心·波束名标记/覆盖填充），
+  // 保留仰角线(黑白线条)、卫星标记(id=1)、仰角标注(100-999)、搜索/定位标记(5000-9999)。
+  // 用于「只有协调区多边形、无等值线」的波束：置好状态，多边形交给随后的 drawPolygons 重建。
+  _clearCoverageContourLayers(beamDataList) {
+    const keptPolylines = (this.data.polylines || []).filter(p => p.color === '#000000' || p.color === '#FFFFFF');
+    const keptMarkers = (this.data.markers || []).filter(m => m.id === 1 || (m.id >= 100 && m.id < 1000) || (m.id >= 5000 && m.id < 10000));
+    this.setData({
+      currentCoverageDataList: beamDataList || [],
+      currentCoverageData: (beamDataList && beamDataList[0]) || null,
+      availableGainValues: [],
+      selectedGainValues: [],
+      gainValueItems: [],
+      showCoveragePopup: false,
+      showCoverageContours: true,
+      polylines: keptPolylines,
+      markers: keptMarkers,
+      polygons: []   // 覆盖填充清空；drawPolygons 随后重建协调区多边形层（zIndex≥1000）
+    });
+  },
+
+  // —— 协调区多边形渲染：画当前【绘制中波束】携带的多边形（this._activePolygons）——
+  // 填充形状进 map polygons 绑定（独立层），数值/名称标注进 markers(2000-2999 段)
+  drawPolygons() {
+    const list = this._activePolygons || [];
+    const coordPolys = [];
+    const labelMarkers = [];
+    let polyLabelId = 2000;
+    list.forEach((pg, pgIdx) => {
+      const pts = Array.isArray(pg.pts) ? pg.pts : [];
+      const points = pts
+        .filter(p => Array.isArray(p) && p.length >= 2 && isFinite(p[0]) && isFinite(p[1]) && p[1] >= -90 && p[1] <= 90)
+        .map(p => ({ latitude: p[1], longitude: this.normalizeLongitude(p[0]) }));
+      if (points.length < 3) return;
+      const to8 = (c) => { const h = String(c || '#3b82f6').replace('#', ''); return '#' + (h.length >= 8 ? h.slice(0, 8) : (h.length >= 6 ? h.slice(0, 6) + 'FF' : '3B82F6FF')); };
+      const op = (typeof pg.fillOp === 'number' ? pg.fillOp : 0.18);
+      const a = Math.round(Math.max(0, Math.min(1, op)) * 255).toString(16).padStart(2, '0').toUpperCase();
+      const fill6 = String(pg.fillColor || pg.color || '#3b82f6').replace('#', '').slice(0, 6);
+      const strokeHex = to8(pg.color || '#3b82f6').slice(0, 7);   // #RRGGBB：标注取线色
+      const coordStrokeWidth = pg.width || 2;
+      const coordStrokeColor = to8(pg.color || '#3b82f6');
+      const coordFillColor = (pg.fillOn === false) ? '#00000000' : ('#' + fill6 + a);
+      // 跨越180°经线时切分为分属两半球的子多边形（同覆盖填充/仰角线口径），
+      // 否则整环填充；避免 map 组件跨对映线内插出界报错（updateMultiMarker faild）。
+      this.splitPolygonAtAntimeridian(points).forEach(poly => {
+        coordPolys.push({
+          points: poly,
+          strokeWidth: coordStrokeWidth,
+          strokeColor: coordStrokeColor,
+          fillColor: coordFillColor,
+          zIndex: 1000   // 协调区多边形填充层
+        });
+      });
+      const fontSize = Math.max(9, Math.min(16, pg.labelSize || 12));
+      // 数值沿边界线标注：协调区多边形本质是手绘等值线，数值=等值线值，应嵌在线上（satsoft 风格）而非质心
+      const valStr = (pg.value !== undefined && pg.value !== null && String(pg.value).trim() !== '') ? String(pg.value).trim() : '';
+      if (valStr) {
+        this.calculateContourLabelPositions(points, Number(pg.value) || 0, pgIdx).forEach((lp) => {
+          labelMarkers.push({
+            id: polyLabelId++, latitude: lp.point.latitude, longitude: lp.point.longitude,
+            iconPath: '/images/transparent.png', width: 1, height: 1,
+            label: this._buildCenteredLabel(valStr, fontSize, strokeHex, 0)   // anchorY=0：标签中心压在线上
+          });
+        });
+      }
+      // 名称（可选）：留在质心作区域标题
+      const nameStr = (pg.name !== undefined && pg.name !== null && String(pg.name).trim() !== '') ? String(pg.name).trim() : '';
+      if (nameStr) {
+        const cx = points.reduce((s, p) => s + p.longitude, 0) / points.length;
+        const cy = points.reduce((s, p) => s + p.latitude, 0) / points.length;
+        labelMarkers.push({
+          id: polyLabelId++, latitude: cy, longitude: cx,
+          iconPath: '/images/transparent.png', width: 1, height: 1,
+          label: this._buildCenteredLabel(nameStr, fontSize, strokeHex, -6)
+        });
+      }
+    });
+    // 保留非多边形标注（多边形标注 id 段 2000-2999 由本函数重建）
+    const keptMarkers = this.data.markers.filter(m => !(m.id >= 2000 && m.id < 3000));
+    this.setData({ polygons: coordPolys, markers: [...keptMarkers, ...labelMarkers] });
+  },
+
+  // —— 密钥导入弹窗（把一份覆盖快照导入为「当前卫星+类型」下的一个波束）——
+  showImportPanel() {
+    if (!this.data.currentSatellite) { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
+    this.setData({ showImportPopup: true, showSatellitePopup: false, importKeyInput: '', otpCells: this._buildOtpCells(''), importKeyFocus: false, importBeamName: '' });
+  },
+  hideImportPanel() { this.setData({ showImportPopup: false, importKeyFocus: false }); },
+  // 分格渲染：8 个格子 + 第 4/5 格之间一个只读“-”；active=下一个待输入格（满 8 位时无）
+  _buildOtpCells(key) {
+    const chars = String(key || '').split('');
+    const n = chars.length;
+    const cells = [];
+    for (let i = 0; i < 8; i++) {
+      if (i === 4) cells.push({ id: 'sep', sep: true });
+      cells.push({ id: 'c' + i, sep: false, char: chars[i] || '', filled: i < n, active: i === n });
+    }
+    return cells;
+  },
+  onImportKeyInput(e) {
+    const key = this._normalizeKey(e.detail.value).slice(0, 8);
+    this.setData({ importKeyInput: key, otpCells: this._buildOtpCells(key), importKeyFocus: true });
+  },
+  onOtpFocus() { this.setData({ importKeyFocus: true }); },
+  onOtpBlur() { this.setData({ importKeyFocus: false }); },
+  focusOtp() { if (!this.data.importKeyFocus) this.setData({ importKeyFocus: true }); },
+  onImportNameInput(e) { this.setData({ importBeamName: e.detail.value }); },
+  // 归一密钥：去分隔符、大写（与云函数/仿真平台同口径）
+  _normalizeKey(raw) { return String(raw == null ? '' : raw).toUpperCase().replace(/[^A-Z0-9]/g, ''); },
+  confirmImport() {
+    const sat = this.data.currentSatellite;
+    if (!sat) { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
+    const key = this._normalizeKey(this.data.importKeyInput);
+    if (!/^[A-Z0-9]{8}$/.test(key)) { wx.showToast({ title: '请输入 8 位密钥', icon: 'none' }); return; }
+    if (this.data.importing) return;
+    this.setData({ importing: true });
+    wx.showLoading({ title: '导入中...' });
+    wx.cloud.callFunction({
+      name: 'importGxtSnapshot',
+      data: { key },
+      success: res => {
+        wx.hideLoading();
+        this.setData({ importing: false });
+        const r = res && res.result;
+        console.log('[导入] 云函数返回：', r);
+        if (r && r.success && r.data) {
+          // 云函数内联返回快照数据 → 合并为一个波束的数据
+          const bd = this._mergeSnapshotToBeamData(r.data);
+          if (!bd.contours.length && !bd.polygons.length) { wx.showModal({ title: '导入为空', content: '该密钥的快照没有可用的覆盖等值线或多边形。', showCancel: false }); return; }
+          const beamName = (this.data.importBeamName || '').trim() || (r.data && r.data.name) || ('波束' + (this._beamsForCurrent().length + 1));
+          const beam = { id: this._newBeamId(), satelliteName: sat.name, type: this.data.selectedType, beamName: beamName, contours: bd.contours, borePoints: bd.borePoints, polygons: bd.polygons };
+          this._importedBeams = [...(this._importedBeams || []), beam];
+          this._persistBeam(beam);
+          this._cloudAddBeam(beam).catch(e => console.warn('波束上云失败（已存本地）：', (e && e.errMsg) || e));
+          this.setData({ showImportPopup: false, importKeyInput: '', otpCells: this._buildOtpCells(''), importKeyFocus: false, importBeamName: '' });
+          this.refreshBeamList();
+          // 自动选中并绘制新导入的波束
+          this.setData({ selectedBeams: [...this.data.selectedBeams, beam.id] });
+          this.drawSelectedBeams();
+          wx.showToast({ title: '已导入波束「' + beamName + '」', icon: 'none', duration: 2000 });
+        } else {
+          wx.showModal({ title: '导入失败', content: (r && r.errMsg) || ('云函数无有效返回：' + JSON.stringify(r)), showCancel: false });
+        }
+      },
+      fail: err => {
+        wx.hideLoading();
+        this.setData({ importing: false });
+        console.error('[导入] 云函数调用失败：', err);
+        wx.showModal({
+          title: '导入失败',
+          content: '调用云函数失败：' + ((err && err.errMsg) || '未知错误') + '\n请确认已在微信开发者工具右键 cloudfunctions/importGxtSnapshot →「上传并部署：云端安装依赖」。',
+          showCancel: false
+        });
+      }
+    });
+  },
+
+  // —— 波束长按 → 操作菜单（重命名 / 删除）——
+  onBeamLongPress(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!(this._importedBeams || []).some(b => b.id === id)) return;
+    wx.showActionSheet({
+      itemList: ['重命名', '删除'],
+      success: res => {
+        if (res.tapIndex === 0) this._renameBeamById(id);
+        else if (res.tapIndex === 1) this._deleteBeamById(id);
+      }
+    });
+  },
+
+  // 重命名单个波束（本地镜像 + 云端只改名字段）
+  _renameBeamById(id) {
+    const beam = (this._importedBeams || []).find(b => b.id === id);
+    if (!beam) return;
+    wx.showModal({
+      title: '重命名波束',
+      editable: true,
+      placeholderText: '输入波束名',
+      content: beam.beamName || '',
+      success: r => {
+        if (!r.confirm) return;
+        const name = (r.content || '').trim();
+        if (!name) { wx.showToast({ title: '名称不能为空', icon: 'none' }); return; }
+        beam.beamName = name;
+        this._persistBeam(beam);
+        this._cloudRenameBeam(beam).catch(err => console.warn('云端改名失败（本地已改）：', (err && err.errMsg) || err));
+        this.setData({ showBeamLabels: true });
+        this.refreshBeamList();
+        if (this.data.showCoverageContours) this.drawSelectedBeams();
+        wx.showToast({ title: '已重命名', icon: 'success' });
+      }
+    });
+  },
+
+  // 删除单个波束（本地 + 云端）
+  _deleteBeamById(id) {
+    const beam = (this._importedBeams || []).find(b => b.id === id);
+    const name = beam ? beam.beamName : '';
+    wx.showModal({
+      title: '删除波束', content: '确定删除导入的波束「' + name + '」？',
+      success: r => {
+        if (!r.confirm) return;
+        if (beam) this._cloudRemoveBeam(beam).catch(err => console.warn('云端删除失败（本地已删）：', (err && err.errMsg) || err));
+        this._importedBeams = (this._importedBeams || []).filter(b => b.id !== id);
+        this._removeBeamStorage(id);
+        this.setData({ selectedBeams: (this.data.selectedBeams || []).filter(x => x !== id) });
+        this.refreshBeamList();
+        if (this.data.showCoverageContours) this.drawSelectedBeams();
+        else this.setData({ polygons: [] });
+      }
+    });
+  },
+
   /**
    * 更新当前卫星的覆盖数据状态
    */
   updateCoverageDataStatus() {
-    const { currentSatellite } = this.data;
-    if (!currentSatellite) return;
-    
-    const hasCoverage = coverageIndex.hasCoverageData(currentSatellite.name);
-    
-    if (hasCoverage) {
-      const bands = coverageIndex.getBandsForSatellite(currentSatellite.name);
-      const firstBand = bands[0] || '';
-      
-      this.setData({
-        hasCoverageData: true,
-        availableBands: bands,
-        selectedBand: firstBand
-      });
-      
-      // 初始化第一个频段的波束
-      if (firstBand) {
-        this.updateBeamsForBand(firstBand);
-      }
-      
-      // 尝试从缓存加载之前的设置（包括搜索标记和线条）
-      this.loadCoverageSettings();
-    } else {
-      this.setData({
-        hasCoverageData: false,
-        availableBands: [],
-        availableBeams: [],
-        selectedBand: '',
-        selectedBeams: [],
-        hasEIRP: false,
-        hasGT: false
-      });
-      
-      // 即使没有覆盖数据，也要尝试恢复搜索标记和线条
-      this.loadDrawnContentOnly();
-    }
-  },
-
-  /**
-   * 更新指定频段的波束列表
-   */
-  updateBeamsForBand(band) {
-    const { currentSatellite } = this.data;
-    if (!currentSatellite) return;
-    
-    const beams = coverageIndex.getBeamsForBand(currentSatellite.name, band);
-    const beamNames = [...new Set(beams.map(b => b.beam))];
-    
-    this.setData({
-      availableBeams: beamNames,
-      selectedBeams: []  // 切换频段时清空已选波束
-    });
-    
-    // 更新类型可用性（根据整个频段）
-    this.updateTypeAvailabilityForBand(band);
-  },
-
-  /**
-   * 更新EIRP/GT类型的可用性（根据整个频段）
-   */
-  updateTypeAvailabilityForBand(band) {
-    const { currentSatellite } = this.data;
-    if (!currentSatellite) return;
-    
-    const beams = coverageIndex.getBeamsForBand(currentSatellite.name, band);
-    
-    const hasEIRP = beams.some(b => b.type === 'EIRP');
-    const hasGT = beams.some(b => b.type === 'GT');
-    
-    // 自动选择可用的类型
-    let selectedType = this.data.selectedType;
-    if (selectedType === 'EIRP' && !hasEIRP && hasGT) {
-      selectedType = 'GT';
-    } else if (selectedType === 'GT' && !hasGT && hasEIRP) {
-      selectedType = 'EIRP';
-    }
-    
-    this.setData({
-      hasEIRP,
-      hasGT,
-      selectedType
-    });
-  },
-
-  /**
-   * 更新EIRP/GT类型的可用性（根据选中的波束）
-   */
-  updateTypeAvailability(band, beamList) {
-    const { currentSatellite } = this.data;
-    if (!currentSatellite) return;
-    
-    const allBeams = coverageIndex.getBeamsForBand(currentSatellite.name, band);
-    const matchingBeams = allBeams.filter(b => beamList.includes(b.beam));
-    
-    const hasEIRP = matchingBeams.some(b => b.type === 'EIRP');
-    const hasGT = matchingBeams.some(b => b.type === 'GT');
-    
-    // 自动选择可用的类型
-    let selectedType = this.data.selectedType;
-    if (selectedType === 'EIRP' && !hasEIRP && hasGT) {
-      selectedType = 'GT';
-    } else if (selectedType === 'GT' && !hasGT && hasEIRP) {
-      selectedType = 'EIRP';
-    }
-    
-    this.setData({
-      hasEIRP,
-      hasGT,
-      selectedType
-    });
+    if (!this.data.currentSatellite) return;
+    this.refreshBeamList();   // 刷新当前卫星+类型下的导入波束列表
   },
 
   /**
    * 显示覆盖图设置弹窗
    */
   showCoveragePanel() {
-    const { hasCoverageData } = this.data;
-    
-    if (!hasCoverageData) {
-      wx.showToast({
-        title: '该卫星暂无覆盖数据',
-        icon: 'none'
-      });
-      return;
-    }
-    
+    if (!this.data.currentSatellite) { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
     this.setData({ showCoveragePopup: true });
   },
 
@@ -1342,57 +1755,25 @@ Page({
   /**
    * 频段选择改变
    */
-  onBandChange(e) {
-    const band = e.currentTarget.dataset.band;
-    this.setData({ selectedBand: band });
-    this.updateBeamsForBand(band);
-    // 自动保存设置
-    this.saveCoverageSettings();
-  },
+  onBandChange() {},   // 频段已去除（新模型：覆盖=导入的波束，不分频段）
 
   /**
    * 波束选择改变（多选）
    */
   onBeamChange(e) {
-    const beam = e.currentTarget.dataset.beam;
-    const { selectedBeams, selectedBand } = this.data;
-    
-    let newSelectedBeams;
-    if (selectedBeams.includes(beam)) {
-      // 已选中，取消选择
-      newSelectedBeams = selectedBeams.filter(b => b !== beam);
-    } else {
-      // 未选中，添加选择
-      newSelectedBeams = [...selectedBeams, beam];
-    }
-    
-    this.setData({ selectedBeams: newSelectedBeams });
-    
-    // 更新类型可用性
-    if (newSelectedBeams.length > 0) {
-      this.updateTypeAvailability(selectedBand, newSelectedBeams);
-    }
-    // 自动保存设置
-    this.saveCoverageSettings();
+    const id = e.currentTarget.dataset.id;
+    const selectedBeams = this.data.selectedBeams || [];
+    const newSel = selectedBeams.includes(id) ? selectedBeams.filter(x => x !== id) : [...selectedBeams, id];
+    this.setData({ selectedBeams: newSel });
   },
 
   /**
    * 全选/取消全选波束
    */
   toggleAllBeams() {
-    const { availableBeams, selectedBeams, selectedBand } = this.data;
-    const allSelected = selectedBeams.length === availableBeams.length;
-    
-    const newSelectedBeams = allSelected ? [] : [...availableBeams];
-    
-    this.setData({ selectedBeams: newSelectedBeams });
-    
-    // 更新类型可用性
-    if (newSelectedBeams.length > 0) {
-      this.updateTypeAvailability(selectedBand, newSelectedBeams);
-    }
-    // 自动保存设置
-    this.saveCoverageSettings();
+    const ids = (this.data.availableBeams || []).map(b => b.id);
+    const allSel = ids.length > 0 && (this.data.selectedBeams || []).length === ids.length;
+    this.setData({ selectedBeams: allSel ? [] : ids });
   },
 
   /**
@@ -1400,232 +1781,8 @@ Page({
    */
   onTypeChange(e) {
     const type = e.currentTarget.dataset.type;
-    const { hasEIRP, hasGT } = this.data;
-    
-    // 检查类型是否可用
-    if (type === 'EIRP' && !hasEIRP) {
-      wx.showToast({ title: 'EIRP数据不可用', icon: 'none' });
-      return;
-    }
-    if (type === 'GT' && !hasGT) {
-      wx.showToast({ title: 'G/T数据不可用', icon: 'none' });
-      return;
-    }
-    
     this.setData({ selectedType: type });
-    // 自动保存设置
-    this.saveCoverageSettings();
-  },
-
-  /**
-   * 仅加载覆盖数据（不重绘），用于从缓存恢复时补充数据
-   * @param {string} selectedBand - 选中的频段
-   * @param {Array} selectedBeams - 选中的波束列表
-   * @param {string} selectedType - 选中的类型
-   */
-  loadCoverageDataOnly(selectedBand, selectedBeams, selectedType) {
-    const { currentSatellite } = this.data;
-    
-    if (!currentSatellite || !selectedBand || selectedBeams.length === 0) {
-      return;
-    }
-    
-    // 获取卫星文件夹名
-    const satellite = coverageIndex.coverageIndex[currentSatellite.name];
-    if (!satellite) {
-      return;
-    }
-    
-    const satelliteFolder = satellite.folder;
-    const allBeams = coverageIndex.getBeamsForBand(currentSatellite.name, selectedBand);
-    
-    // 收集所有需要加载的波束信息
-    const beamsToLoad = [];
-    for (const beamName of selectedBeams) {
-      const beamInfo = allBeams.find(b => b.beam === beamName && b.type === selectedType);
-      if (beamInfo) {
-        const jsonFilename = beamInfo.file.replace(/\.gxt$/i, '.json');
-        beamsToLoad.push({
-          beamName: beamName,
-          filename: jsonFilename,
-          satelliteFolder: satelliteFolder
-        });
-      }
-    }
-    
-    if (beamsToLoad.length === 0) {
-      return;
-    }
-    
-    // 设置加载中状态
-    this.setData({ isLoadingCoverageData: true });
-    
-    // 初始化多波束加载（静默模式，不显示loading）
-    this.pendingBeamDataForRestore = [];
-    this.totalBeamsToRestore = beamsToLoad.length;
-    this.restoredBeamsCount = 0;
-    
-    // 并行加载所有波束数据
-    for (const beam of beamsToLoad) {
-      this.loadCoverageDataOnlyFromCloud(beam.satelliteFolder, beam.filename, beam.beamName, selectedType);
-    }
-  },
-
-  /**
-   * 从云存储加载覆盖数据（仅加载数据，不绘制）
-   */
-  loadCoverageDataOnlyFromCloud(satelliteFolder, filename, beamName, selectedType) {
-    const that = this;
-    
-    wx.cloud.callFunction({
-      name: 'getCoverageData',
-      data: {
-        satellite: satelliteFolder,
-        filename: filename
-      },
-      success: res => {
-        if (res.result && res.result.success && res.result.data) {
-          that.processCoverageDataForRestore(res.result.data, beamName, selectedType);
-        } else if (res.result && res.result.tempUrl) {
-          // 如果云函数返回临时URL，则通过URL下载
-          that.downloadCoverageDataOnlyFromUrl(res.result.tempUrl, beamName, selectedType);
-        } else {
-          that.restoredBeamsCount++;
-          that.checkAllBeamsRestoredDataLoaded();
-        }
-      },
-      fail: err => {
-        console.error('加载覆盖数据失败:', err);
-        that.restoredBeamsCount++;
-        that.checkAllBeamsRestoredDataLoaded();
-      }
-    });
-  },
-
-  /**
-   * 从URL下载覆盖数据（仅加载数据，不绘制）
-   */
-  downloadCoverageDataOnlyFromUrl(url, beamName, selectedType) {
-    const that = this;
-    
-    wx.request({
-      url: url,
-      success: res => {
-        if (res.statusCode === 200 && res.data) {
-          that.processCoverageDataForRestore(res.data, beamName, selectedType);
-        } else {
-          that.restoredBeamsCount++;
-          that.checkAllBeamsRestoredDataLoaded();
-        }
-      },
-      fail: err => {
-        console.error('下载覆盖数据失败:', err);
-        that.restoredBeamsCount++;
-        that.checkAllBeamsRestoredDataLoaded();
-      }
-    });
-  },
-
-  /**
-   * 处理恢复的覆盖数据（仅存储，不绘制）
-   */
-  processCoverageDataForRestore(data, beamName, selectedType) {
-    if (!data || !data.contours) {
-      this.restoredBeamsCount++;
-      this.checkAllBeamsRestoredDataLoaded();
-      return;
-    }
-    
-    // 添加波束名到数据中
-    data.beamName = beamName;
-    data.type = selectedType;
-    
-    // 添加到待处理列表
-    this.pendingBeamDataForRestore.push(data);
-    this.restoredBeamsCount++;
-    
-    // 检查是否所有波束都加载完成
-    this.checkAllBeamsRestoredDataLoaded();
-  },
-
-  /**
-   * 检查所有恢复数据是否加载完成
-   */
-  checkAllBeamsRestoredDataLoaded() {
-    if (this.restoredBeamsCount < this.totalBeamsToRestore) {
-      return;
-    }
-    
-    const beamDataList = this.pendingBeamDataForRestore;
-    
-    if (beamDataList.length === 0) {
-      // 没有数据，重置加载状态
-      this.setData({ isLoadingCoverageData: false });
-      return;
-    }
-    
-    // 提取所有波束的覆盖值
-    const allGainValues = new Set();
-    const perBeamGainSets = [];
-    beamDataList.forEach(data => {
-      if (data && data.contours) {
-        const beamGains = new Set();
-        data.contours.forEach(c => {
-          if (c && c.g !== undefined) {
-            allGainValues.add(c.g);
-            beamGains.add(c.g);
-          }
-        });
-        if (beamGains.size > 0) {
-          perBeamGainSets.push(beamGains);
-        }
-      }
-    });
-    
-    const gainValues = [...allGainValues].sort((a, b) => b - a);
-    
-    if (gainValues.length === 0) {
-      // 没有有效数据，重置加载状态
-      this.setData({ isLoadingCoverageData: false });
-      return;
-    }
-    
-    // 多波束时求交集，用于更合理的默认选择
-    let commonGainValues = gainValues;
-    if (perBeamGainSets.length > 1) {
-      const intersection = gainValues.filter(v => 
-        perBeamGainSets.every(s => s.has(v))
-      );
-      if (intersection.length > 0) {
-        commonGainValues = intersection;
-      }
-    }
-    
-    // 使用缓存的增益值选择，如果没有则从共有值中默认选3个，并保证每个波束至少有一条
-    const cachedSelectedGainValues = this.data.selectedGainValues;
-    const selectedGainValues = cachedSelectedGainValues.length > 0 
-      ? cachedSelectedGainValues.filter(v => gainValues.includes(v))
-      : (perBeamGainSets.length > 1
-        ? this.selectDefaultGainValuesMultiBeam(gainValues, commonGainValues, perBeamGainSets)
-        : this.selectDefaultGainValues(commonGainValues));
-    
-    const gainValueItems = gainValues.map(v => ({
-      value: v,
-      selected: selectedGainValues.includes(v)
-    }));
-    
-    // 存储多波束数据（不绘制，因为线条已从缓存恢复）
-    this.setData({
-      currentCoverageDataList: beamDataList,
-      currentCoverageData: beamDataList[0],
-      availableGainValues: gainValues,
-      selectedGainValues: selectedGainValues,
-      gainValueItems,
-      // 重置加载状态
-      isLoadingCoverageData: false
-    });
-    
-    console.log('已从缓存恢复覆盖数据:', beamDataList.length, '个波束');
+    this.refreshBeamList();   // 切类型 → 刷新该类型下的导入波束（允许切到空类型再导入）
   },
 
   /**
@@ -1634,69 +1791,15 @@ Page({
    * 从云存储动态加载覆盖数据
    */
   loadAndDrawCoverage() {
-    const { currentSatellite, selectedBand, availableBeams, selectedType } = this.data;
-    let { selectedBeams } = this.data;
-    
-    if (!currentSatellite || !selectedBand) {
-      wx.showToast({ title: '请先选择频段', icon: 'none' });
-      return;
+    if (!this.data.currentSatellite) { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
+    // 未选波束则默认绘制当前列表全部
+    if ((this.data.selectedBeams || []).length === 0) {
+      const ids = (this.data.availableBeams || []).map(b => b.id);
+      if (!ids.length) { wx.showToast({ title: '请先「导入」波束', icon: 'none' }); return; }
+      this.setData({ selectedBeams: ids });
     }
-    
-    // 如果没有选择波束，使用全部可用波束
-    if (selectedBeams.length === 0 && availableBeams.length > 0) {
-      selectedBeams = [...availableBeams];
-      this.setData({ selectedBeams });
-      // 更新类型可用性
-      this.updateTypeAvailability(selectedBand, selectedBeams);
-      // 保存设置
-      this.saveCoverageSettings();
-    }
-    
-    if (selectedBeams.length === 0) {
-      wx.showToast({ title: '无可用波束', icon: 'none' });
-      return;
-    }
-    
-    // 获取卫星文件夹名
-    const satellite = coverageIndex.coverageIndex[currentSatellite.name];
-    if (!satellite) {
-      wx.showToast({ title: '卫星数据不存在', icon: 'none' });
-      return;
-    }
-    
-    const satelliteFolder = satellite.folder;
-    const allBeams = coverageIndex.getBeamsForBand(currentSatellite.name, selectedBand);
-    
-    // 收集所有需要加载的波束信息
-    const beamsToLoad = [];
-    for (const beamName of selectedBeams) {
-      const beamInfo = allBeams.find(b => b.beam === beamName && b.type === selectedType);
-      if (beamInfo) {
-        const jsonFilename = beamInfo.file.replace(/\.gxt$/i, '.json');
-        beamsToLoad.push({
-          beamName: beamName,
-          filename: jsonFilename,
-          satelliteFolder: satelliteFolder
-        });
-      }
-    }
-    
-    if (beamsToLoad.length === 0) {
-      wx.showToast({ title: '未找到对应覆盖数据', icon: 'none' });
-      return;
-    }
-    
-    wx.showLoading({ title: '加载中...' });
-    
-    // 初始化多波束加载
-    this.pendingBeamData = [];
-    this.totalBeamsToLoad = beamsToLoad.length;
-    this.loadedBeamsCount = 0;
-    
-    // 并行加载所有波束数据
-    for (const beam of beamsToLoad) {
-      this.loadCoverageFromCloudMulti(beam.satelliteFolder, beam.filename, beam.beamName, selectedType);
-    }
+    this.setData({ showCoveragePopup: false });
+    this.drawSelectedBeams();
   },
 
   /**
@@ -2241,11 +2344,11 @@ Page({
     
     const polylines = [];
     const colors = this.generateColorPalette(selectedValues.length);
-    
+
     // 保留现有的marker（卫星标记id=1，等仰角线标记id>=100且<1000，搜索标记id>=5000且<10000）
     // 注意：波束名标记id在4000-4999范围，不会被保留，每次重新绘制
     // 排除id>=10000的残留描边层markers
-    const existingMarkers = this.data.markers.filter(m => m.id === 1 || (m.id >= 100 && m.id < 1000) || (m.id >= 5000 && m.id < 10000));
+    const existingMarkers = this.data.markers.filter(m => m.id === 1 || (m.id >= 100 && m.id < 1000) || (m.id >= 2000 && m.id < 3000) || (m.id >= 5000 && m.id < 10000));
     const coverageMarkers = [];
     let markerIdCounter = 1000;  // 使用自增计数器避免同一增益值多段等值线导致ID重复
     
@@ -2255,7 +2358,7 @@ Page({
       if (!selectedValues.includes(contour.g)) return;
       
       const colorIndex = selectedValues.indexOf(contour.g);
-      const color = colors[colorIndex % colors.length];
+      const color = contour.color || colors[colorIndex % colors.length];   // 优先用快照烘入的原始配色
       
       // 数据格式: p 是点数组，每个点是 [lon, lat]
       if (contour.p && contour.p.length >= 2) {
@@ -2410,12 +2513,12 @@ Page({
     
     const polylines = [];
     const coverageMarkers = [];
-    
+
     // 保留现有的marker（卫星标记id=1，等仰角线标记id>=100且<1000，搜索标记id>=5000且<10000）
     // 注意：波束名标记id在4000-4999范围，不会被保留，每次重新绘制
     // 排除id>=10000的残留描边层markers
-    const existingMarkers = this.data.markers.filter(m => m.id === 1 || (m.id >= 100 && m.id < 1000) || (m.id >= 5000 && m.id < 10000));
-    
+    const existingMarkers = this.data.markers.filter(m => m.id === 1 || (m.id >= 100 && m.id < 1000) || (m.id >= 2000 && m.id < 3000) || (m.id >= 5000 && m.id < 10000));
+
     // 为每个波束分配不同的颜色系
     const beamColorSets = [
       ['#FF0000', '#FF4500', '#FFA500', '#FFD700', '#FFFF00'],  // 红-橙-黄系
@@ -2450,9 +2553,9 @@ Page({
         if (!contour || contour.g === undefined) return;
         if (!selectedValues.includes(contour.g)) return;
         
-        // 根据增益值在该波束中的排序分配颜色
+        // 优先用快照烘入的原始配色；缺省再按增益值在该波束中的排序分配
         const valueIndex = uniqueGainValues.indexOf(contour.g);
-        const color = colorSet[valueIndex % colorSet.length];
+        const color = contour.color || colorSet[valueIndex % colorSet.length];
         
         if (contour.p && contour.p.length >= 2) {
           const points = contour.p
@@ -2624,8 +2727,9 @@ Page({
     
     // 保留等仰角线标记（id >= 100 且 < 1000）和搜索标记/定位标签（id >= 5000 且 < 10000）
     // 排除id>=10000的残留描边层markers
-    const preservedMarkers = this.data.markers.filter(m => 
+    const preservedMarkers = this.data.markers.filter(m =>
       (m.id >= 100 && m.id < 1000) ||  // 等仰角线标记
+      (m.id >= 2000 && m.id < 3000) ||  // 协调区多边形标注
       (m.id >= 5000 && m.id < 10000)   // 搜索标记/定位标签
     );
     
@@ -2668,6 +2772,7 @@ Page({
       polylines: elevationPolylines,
       markers: finalMarkers,
       circles: [],
+      polygons: [],
       latitude: centerLat,
       longitude: centerLng,
       scale: 3,
@@ -3932,172 +4037,6 @@ Page({
   },
 
   /**
-   * 从本地缓存加载覆盖图设置
-   * 返回 true 表示成功加载了缓存设置，false 表示没有缓存或加载失败
-   */
-  loadCoverageSettings() {
-    const { currentSatellite, availableBands, availableBeams } = this.data;
-    
-    if (!currentSatellite) return false;
-    
-    const satelliteName = currentSatellite.name;
-    
-    // 先尝试加载v2版本缓存
-    let settings = null;
-    let cacheKey = `coverage_settings_v2_${satelliteName}`;
-    
-    try {
-      settings = wx.getStorageSync(cacheKey);
-      
-      // 如果v2缓存不存在，尝试加载旧版本缓存并迁移
-      if (!settings) {
-        const oldCacheKey = `coverage_settings_${satelliteName}`;
-        const oldSettings = wx.getStorageSync(oldCacheKey);
-        if (oldSettings) {
-          console.log(`迁移 ${satelliteName} 的旧版本缓存`);
-          settings = this.migrateOldCache(oldSettings, satelliteName);
-          // 迁移后删除旧缓存
-          wx.removeStorageSync(oldCacheKey);
-        }
-      }
-      
-      if (!settings) return false;
-      
-      // 验证缓存是否属于当前卫星（防止数据混淆）
-      if (settings.satelliteName && settings.satelliteName !== satelliteName) {
-        console.warn(`缓存数据不匹配: 期望 ${satelliteName}, 实际 ${settings.satelliteName}`);
-        return false;
-      }
-      
-      // 恢复绘制内容（与频段无关）
-      this.restoreDrawnContent(settings);
-      
-      // 验证缓存的频段是否仍然可用
-      if (settings.selectedBand && availableBands.includes(settings.selectedBand)) {
-        // 先更新频段，这会同时更新可用波束列表
-        this.setData({ selectedBand: settings.selectedBand });
-        this.updateBeamsForBand(settings.selectedBand);
-        
-        // 获取更新后的可用波束列表
-        const updatedBeams = this.data.availableBeams;
-        
-        // 验证并恢复波束选择（只保留仍然可用的波束）
-        const validBeams = (settings.selectedBeams || []).filter(beam => 
-          updatedBeams.includes(beam)
-        );
-        
-        if (validBeams.length > 0) {
-          this.setData({ selectedBeams: validBeams });
-          // 更新类型可用性
-          this.updateTypeAvailability(settings.selectedBand, validBeams);
-        }
-        
-        // 恢复类型选择
-        if (settings.selectedType && (settings.selectedType === 'EIRP' || settings.selectedType === 'GT')) {
-          const { hasEIRP, hasGT } = this.data;
-          if ((settings.selectedType === 'EIRP' && hasEIRP) || 
-              (settings.selectedType === 'GT' && hasGT)) {
-            this.setData({ selectedType: settings.selectedType });
-          }
-        }
-        
-        // 恢复增益值选择
-        if (settings.selectedGainValues && settings.selectedGainValues.length > 0) {
-          this.setData({ selectedGainValues: settings.selectedGainValues });
-        }
-        
-        // 恢复波束标签显示状态
-        if (typeof settings.showBeamLabels === 'boolean') {
-          this.setData({ showBeamLabels: settings.showBeamLabels });
-        }
-        
-        // 恢复仰角设置
-        if (settings.elevationAngles && settings.elevationAngles.length > 0) {
-          this.setData({ 
-            elevationAngles: settings.elevationAngles,
-            elevationInputText: settings.elevationAngles.join(', ')
-          });
-        }
-        
-        // 恢复仰角线显示状态
-        if (typeof settings.showElevationContours === 'boolean') {
-          this.setData({ showElevationContours: settings.showElevationContours });
-        }
-        
-        // 恢复覆盖图显示状态
-        if (typeof settings.showCoverageContours === 'boolean') {
-          this.setData({ showCoverageContours: settings.showCoverageContours });
-          
-          // 如果覆盖图已显示，需要重新加载覆盖数据（仅加载数据，不重绘）
-          if (settings.showCoverageContours && validBeams.length > 0) {
-            this.loadCoverageDataOnly(settings.selectedBand, validBeams, settings.selectedType);
-          }
-        }
-        
-        return true;
-      }
-      
-      return false;
-    } catch (e) {
-      console.error('加载覆盖设置失败:', e);
-      return false;
-    }
-  },
-
-  /**
-   * 迁移旧版本缓存到新格式
-   */
-  migrateOldCache(oldSettings, satelliteName) {
-    const polylines = oldSettings.polylines || [];
-    const savedMarkers = oldSettings.savedMarkers || [];
-    const searchMarkers = oldSettings.searchMarkers || [];
-    
-    // 分离等仰角线相关内容和覆盖图相关内容
-    const elevationPolylines = polylines.filter(p => 
-      p.color === '#000000' || p.color === '#FFFFFF'
-    );
-    const coveragePolylines = polylines.filter(p => 
-      p.color !== '#000000' && p.color !== '#FFFFFF'
-    );
-    
-    // 分离标记（排除残留描边层 id >= 10000）
-    const elevationMarkers = savedMarkers.filter(m => m.id >= 100 && m.id < 1000);
-    const coverageMarkers = savedMarkers.filter(m => m.id >= 1000 && m.id < 2000);
-    const beamLabelMarkers = savedMarkers.filter(m => m.id >= 4000 && m.id < 5000);
-    const locationMarkersFromSaved = savedMarkers.filter(m => m.id >= 5000 && m.id < 10000);
-    
-    // 合并位置标记
-    const allLocationMarkers = [...searchMarkers];
-    locationMarkersFromSaved.forEach(m => {
-      if (!allLocationMarkers.find(existing => existing.id === m.id)) {
-        allLocationMarkers.push(m);
-      }
-    });
-    
-    return {
-      version: 2,
-      satelliteName: satelliteName,
-      selectedBand: oldSettings.selectedBand,
-      selectedBeams: oldSettings.selectedBeams,
-      selectedType: oldSettings.selectedType,
-      selectedGainValues: oldSettings.selectedGainValues || [],
-      showBeamLabels: oldSettings.showBeamLabels || false,
-      showCoverageContours: oldSettings.showCoverageContours || false,
-      elevationAngles: oldSettings.elevationAngles || [5, 10],
-      showElevationContours: oldSettings.showElevationContours || false,
-      elevationPolylines: elevationPolylines,
-      elevationMarkers: elevationMarkers,
-      coveragePolylines: coveragePolylines,
-      coverageMarkers: coverageMarkers,
-      borePointMarkers: [],  // 旧缓存无bore数据
-      beamLabelMarkers: beamLabelMarkers,
-      locationMarkers: allLocationMarkers,
-      searchMarkerIdCounter: oldSettings.searchMarkerIdCounter || 5000,
-      timestamp: Date.now()
-    };
-  },
-
-  /**
    * 恢复绘制的内容（搜索标记、线条等）
    * 支持新旧两种缓存格式
    */
@@ -4198,20 +4137,7 @@ Page({
     
     // 覆盖图总开关打开时，剔除缓存中恢复出来的覆盖图叠加层（覆盖线条、覆盖值/波束中心/波束名标记），
     // 仅保留等仰角线（黑/白线条）与搜索/定位标记，确保对用户呈现为“暂无覆盖数据”。
-    if (coverageIndex.COVERAGE_HIDDEN) {
-      if (updateData.polylines) {
-        // 覆盖线条为彩色，等仰角线为黑/白色——只保留等仰角线
-        updateData.polylines = updateData.polylines.filter(p =>
-          p.color === '#000000' || p.color === '#FFFFFF'
-        );
-      }
-      if (updateData.markers) {
-        // 覆盖值(1000-1999)/波束中心(3000-3999)/波束名(4000-4999)标记一律剔除
-        updateData.markers = updateData.markers.filter(m =>
-          !(m.id >= 1000 && m.id < 5000)
-        );
-      }
-    }
+    // （原 COVERAGE_HIDDEN 隐藏门已移除：覆盖数据现由密钥导入的快照提供，恢复的覆盖叠加层照常显示）
 
     if (Object.keys(updateData).length > 0) {
       // 根据当前地图类型调整标记和线条的颜色

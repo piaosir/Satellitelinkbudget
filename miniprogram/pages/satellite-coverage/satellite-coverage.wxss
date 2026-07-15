@@ -287,6 +287,126 @@ page {
   text-overflow: ellipsis;
 }
 
+/* 密钥导入入口按钮 */
+.float-btn-import {
+  min-width: 44px;
+}
+.float-import-text {
+  font-size: 12px;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* 密钥导入 / 波束名编辑弹窗补充样式 */
+.import-tip {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+/* 8 位密钥分格输入（验证码风格） */
+.otp-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.otp-cell {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.otp-cell.is-filled {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+.otp-cell.is-active {
+  border-color: #2563eb;
+  background: #ffffff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.otp-cell-char {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  color: #1f2937;
+  font-family: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace;
+}
+.otp-dash {
+  flex: 0 0 auto;
+  padding: 0 2px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+.otp-caret {
+  width: 2px;
+  height: 22px;
+  background: #2563eb;
+  border-radius: 1px;
+  animation: otpBlink 1.06s steps(1) infinite;
+}
+@keyframes otpBlink {
+  0%, 49.99% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+/* 隐形真实 input：不再盖在分格上，而是移出可视区。
+   原因：Windows/真机 WeChat 的 <input> 是渲染在 webview 之上的原生控件，其文字与「系统光标」
+   都画在原生层——CSS 的 opacity/color/caret-color 都压不住（用户会看到小字母与闪烁的光标）。
+   聚焦由 .otp-field 点击 → focusOtp 程序化触发（input 的 focus 属性），故它无需盖在分格上，
+   移出屏幕即可承接键盘/输入/退格；分格字符与光标全部由 .otp-cell-char / .otp-caret 自绘。 */
+.otp-input {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 100px;
+  height: 44px;
+  opacity: 0;
+}
+.otp-hint {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+.coverage-btn-confirm.disabled {
+  opacity: 0.5;
+}
+
+/* 波束导入行 */
+.import-row {
+  margin-bottom: 10px;
+}
+.import-btn {
+  display: inline-block;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #2563eb;
+  border: 1rpx dashed #2563eb;
+  border-radius: 6px;
+  background: #f0f6ff;
+}
+.beam-tag {
+  position: relative;
+}
+.beam-empty {
+  font-size: 12px;
+  color: #9ca3af;
+  padding: 10px 0;
+  text-align: center;
+}
+.import-name-input {
+  margin-top: 8px;
+}
+
 /* 覆盖状态按钮 */
 .float-btn-status {
   min-width: auto;
@@ -374,6 +494,25 @@ page {
   padding: 4px;
 }
 
+.satellite-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.satellite-add-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  padding: 4px 10px;
+  border: 1rpx solid #2563eb;
+  border-radius: 4px;
+}
+
+.satellite-add-btn:active {
+  background: #eff6ff;
+}
+
 .satellite-popup-list {
   flex: 1;
   overflow-y: auto;
@@ -401,14 +540,63 @@ page {
   font-weight: 600;
 }
 
+.satellite-popup-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .satellite-popup-name {
   font-size: 14px;
   color: #1f2937;
 }
 
+.satellite-custom-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.satellite-popup-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
 .satellite-popup-position {
   font-size: 12px;
   color: #6b7280;
+}
+
+.satellite-del-btn {
+  font-size: 13px;
+  color: #ef4444;
+  padding: 2px 6px;
+}
+
+/* 自定义卫星弹窗：叠在卫星选择器之上（复合选择器提高优先级，不受 .coverage-popup 源码顺序影响） */
+.coverage-popup.custom-sat-popup {
+  z-index: 1003;
+}
+
+.coverage-popup-mask.custom-sat-mask {
+  z-index: 1002;
+}
+
+.custom-sat-field {
+  margin-bottom: 12px;
+}
+
+.custom-sat-label {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
 }
 
 /* 加载遮罩 */

@@ -1,0 +1,9 @@
+{
+  "name": "importGxtSnapshot",
+  "version": "1.0.0",
+  "description": "据密钥从约定 COS 地址拉取覆盖快照并落进用户云存储",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3"
+  }
+}

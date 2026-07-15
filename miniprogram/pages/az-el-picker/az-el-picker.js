@@ -29,10 +29,6 @@ Page({
       { "name": "AsiaSat 6", "position": "120" },
       { "name": "AsiaSat 7", "position": "105.5" },
       { "name": "AsiaSat 9", "position": "122" },
-      { "name": "JCSAT-1C", "position": "150" },
-      { "name": "JCSAT-2B", "position": "154" },
-      { "name": "JCSAT-3A", "position": "128" },
-      { "name": "JCSAT-4B", "position": "124" },
       { "name": "其他", "position": "" }
     ],
     latitude: 35,

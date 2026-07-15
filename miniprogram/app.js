@@ -81,17 +81,34 @@ App({
       this.globalData.linkParams[i] = this.getDefaultLinkParams();
     }
 
-    // 后台静默下载 ITU-R P.837 全精度降雨率数据
-    this._loadP837Data();
+    // 后台静默【串行】下载四份 ITU-R 资源数据。
+    // 必须串行：四份并发下载会同时在微信临时文件区堆多个数 MB 的临时文件，超出临时区容量后
+    // 系统会清理临时文件，导致某个 success 回调里 readFileSync 报 "http://tmp/xxx.bin not found"。
+    // 串行时任一时刻只占用一个临时文件，规避该问题。
+    this._loadITUData();
+  },
 
-    // 后台静默下载 ITU-R P.1511 全精度海拔数据
-    this._loadTopoData();
+  // ITU-R 四份数据串行加载链：并发会撑爆临时文件区(见 onLaunch 注释)，故串行；
+  // 任一份走缓存命中/下载成功/失败回退都返回 resolved，不阻断后续。
+  _loadITUData() {
+    Promise.resolve()
+      .then(() => this._loadP837Data())
+      .then(() => this._loadTopoData())
+      .then(() => this._loadP840Data())
+      .then(() => this._loadP836Data())
+      .catch((e) => console.warn('[ITU] 串行加载异常:', e && e.message));
+  },
 
-    // 后台静默下载 ITU-R P.840 全精度云参数数据
-    this._loadP840Data();
-
-    // 后台静默下载 ITU-R P.836 水汽密度数据
-    this._loadP836Data();
+  // 落盘缓存(非致命)：写 USER_DATA_PATH + 记版本号。失败只告警，
+  // 不影响已注入内存的数据(例如 topo 17.85MB 超出本地文件上限写不进时，内存仍可用)。
+  _persistBin(fs, localPath, arrayBuffer, versionKey, version, tag) {
+    try {
+      fs.writeFileSync(localPath, arrayBuffer);
+      wx.setStorageSync(versionKey, version);
+      console.log('[' + tag + '] 下载并缓存成功');
+    } catch (e) {
+      console.warn('[' + tag + '] 已注入内存，但本地缓存写入失败(下次启动将重新下载):', e.message);
+    }
   },
 
   // ===== P.836 水汽密度数据加载 =====
@@ -102,7 +119,7 @@ App({
   P836_EXPECTED_SIZE: 161 * 321 * 2 * 2,  // 两张 Int16LE 图，206,724 bytes
 
   _loadP836Data() {
-    if (!this.P836_CLOUD_FILE) return;  // fileID 未填写时跳过
+    if (!this.P836_CLOUD_FILE) return Promise.resolve();  // fileID 未填写时跳过
     const fs = wx.getFileSystemManager();
     const savedVersion = wx.getStorageSync(this.P836_VERSION_KEY);
     if (savedVersion === this.P836_CURRENT_VERSION) {
@@ -111,39 +128,44 @@ App({
         if (arrayBuffer && arrayBuffer.byteLength === this.P836_EXPECTED_SIZE) {
           setWaterVaporData(arrayBuffer);
           console.log('[P.836] 从本地缓存加载成功');
-          return;
+          return Promise.resolve();
         }
       } catch (e) {
         console.warn('[P.836] 本地缓存读取失败，重新下载:', e.message);
       }
     }
-    this._downloadP836Data(fs);
+    return this._downloadP836Data(fs);
   },
 
   _downloadP836Data(fs) {
     console.log('[P.836] 开始后台下载水汽密度数据...');
-    wx.cloud.downloadFile({
-      fileID: this.P836_CLOUD_FILE,
-      success: (res) => {
-        if (res.statusCode === 200 && res.tempFilePath) {
-          try {
-            const arrayBuffer = fs.readFileSync(res.tempFilePath);
-            if (arrayBuffer.byteLength !== this.P836_EXPECTED_SIZE) {
-              console.warn('[P.836] 下载数据大小不匹配:', arrayBuffer.byteLength);
-              return;
+    return new Promise((resolve) => {
+      wx.cloud.downloadFile({
+        fileID: this.P836_CLOUD_FILE,
+        success: (res) => {
+          if (res.statusCode === 200 && res.tempFilePath) {
+            try {
+              const arrayBuffer = fs.readFileSync(res.tempFilePath);
+              if (arrayBuffer.byteLength !== this.P836_EXPECTED_SIZE) {
+                console.warn('[P.836] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              } else {
+                // 先注入内存(落盘失败也能用)，再尝试写本地缓存
+                setWaterVaporData(arrayBuffer);
+                this._persistBin(fs, this.P836_LOCAL_PATH, arrayBuffer, this.P836_VERSION_KEY, this.P836_CURRENT_VERSION, 'P.836');
+              }
+            } catch (e) {
+              console.error('[P.836] 读取临时文件失败:', e.message);
             }
-            fs.writeFileSync(this.P836_LOCAL_PATH, arrayBuffer);
-            wx.setStorageSync(this.P836_VERSION_KEY, this.P836_CURRENT_VERSION);
-            setWaterVaporData(arrayBuffer);
-            console.log('[P.836] 下载并缓存成功');
-          } catch (e) {
-            console.error('[P.836] 保存失败:', e.message);
+          } else {
+            console.warn('[P.836] 下载返回异常: statusCode=', res.statusCode);
           }
+          resolve();
+        },
+        fail: (err) => {
+          console.warn('[P.836] 下载失败(将使用P.835纬度带估算):', err.errMsg);
+          resolve();
         }
-      },
-      fail: (err) => {
-        console.warn('[P.836] 下载失败(将使用P.835纬度带估算):', err.errMsg);
-      }
+      });
     });
   },
 
@@ -166,7 +188,7 @@ App({
         if (arrayBuffer && arrayBuffer.byteLength === this.P840_EXPECTED_SIZE) {
           setCloudParamsData(arrayBuffer);
           console.log('[P.840] 从本地缓存加载成功');
-          return;
+          return Promise.resolve();
         }
       } catch (e) {
         console.warn('[P.840] 本地缓存读取失败，重新下载:', e.message);
@@ -174,33 +196,38 @@ App({
     }
 
     // 后台下载
-    this._downloadP840Data(fs);
+    return this._downloadP840Data(fs);
   },
 
   _downloadP840Data(fs) {
     console.log('[P.840] 开始后台下载全精度云参数...');
-    wx.cloud.downloadFile({
-      fileID: this.P840_CLOUD_FILE,
-      success: (res) => {
-        if (res.statusCode === 200 && res.tempFilePath) {
-          try {
-            const arrayBuffer = fs.readFileSync(res.tempFilePath);
-            if (arrayBuffer.byteLength !== this.P840_EXPECTED_SIZE) {
-              console.warn('[P.840] 下载数据大小不匹配:', arrayBuffer.byteLength);
-              return;
+    return new Promise((resolve) => {
+      wx.cloud.downloadFile({
+        fileID: this.P840_CLOUD_FILE,
+        success: (res) => {
+          if (res.statusCode === 200 && res.tempFilePath) {
+            try {
+              const arrayBuffer = fs.readFileSync(res.tempFilePath);
+              if (arrayBuffer.byteLength !== this.P840_EXPECTED_SIZE) {
+                console.warn('[P.840] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              } else {
+                // 先注入内存(落盘失败也能用)，再尝试写本地缓存
+                setCloudParamsData(arrayBuffer);
+                this._persistBin(fs, this.P840_LOCAL_PATH, arrayBuffer, this.P840_VERSION_KEY, this.P840_CURRENT_VERSION, 'P.840');
+              }
+            } catch (e) {
+              console.error('[P.840] 读取临时文件失败:', e.message);
             }
-            fs.writeFileSync(this.P840_LOCAL_PATH, arrayBuffer);
-            wx.setStorageSync(this.P840_VERSION_KEY, this.P840_CURRENT_VERSION);
-            setCloudParamsData(arrayBuffer);
-            console.log('[P.840] 下载并缓存成功');
-          } catch (e) {
-            console.error('[P.840] 保存失败:', e.message);
+          } else {
+            console.warn('[P.840] 下载返回异常: statusCode=', res.statusCode);
           }
+          resolve();
+        },
+        fail: (err) => {
+          console.warn('[P.840] 下载失败(将使用保守回退表):', err.errMsg);
+          resolve();
         }
-      },
-      fail: (err) => {
-        console.warn('[P.840] 下载失败(将使用保守回退表):', err.errMsg);
-      }
+      });
     });
   },
 
@@ -223,7 +250,7 @@ App({
         if (arrayBuffer && arrayBuffer.byteLength === this.P837_EXPECTED_SIZE) {
           setFullPrecisionData(arrayBuffer);
           console.log('[P.837] 从本地缓存加载成功');
-          return;
+          return Promise.resolve();
         }
       } catch (e) {
         console.warn('[P.837] 本地缓存读取失败，重新下载:', e.message);
@@ -231,38 +258,39 @@ App({
     }
 
     // 后台下载
-    this._downloadP837Data(fs);
+    return this._downloadP837Data(fs);
   },
 
   _downloadP837Data(fs) {
     console.log('[P.837] 开始后台下载全精度数据...');
-    wx.cloud.downloadFile({
-      fileID: this.P837_CLOUD_FILE,
-      success: (res) => {
-        if (res.statusCode === 200 && res.tempFilePath) {
-          try {
-            // 读取临时文件
-            const arrayBuffer = fs.readFileSync(res.tempFilePath);
-            if (arrayBuffer.byteLength !== this.P837_EXPECTED_SIZE) {
-              console.warn('[P.837] 下载数据大小不匹配:', arrayBuffer.byteLength);
-              return;
+    return new Promise((resolve) => {
+      wx.cloud.downloadFile({
+        fileID: this.P837_CLOUD_FILE,
+        success: (res) => {
+          if (res.statusCode === 200 && res.tempFilePath) {
+            try {
+              // 读取临时文件
+              const arrayBuffer = fs.readFileSync(res.tempFilePath);
+              if (arrayBuffer.byteLength !== this.P837_EXPECTED_SIZE) {
+                console.warn('[P.837] 下载数据大小不匹配:', arrayBuffer.byteLength);
+              } else {
+                // 先注入 rainRate 模块(落盘失败也能用)，再尝试写本地缓存
+                setFullPrecisionData(arrayBuffer);
+                this._persistBin(fs, this.P837_LOCAL_PATH, arrayBuffer, this.P837_VERSION_KEY, this.P837_CURRENT_VERSION, 'P.837');
+              }
+            } catch (e) {
+              console.error('[P.837] 读取临时文件失败:', e.message);
             }
-
-            // 持久化到用户目录
-            fs.writeFileSync(this.P837_LOCAL_PATH, arrayBuffer);
-            wx.setStorageSync(this.P837_VERSION_KEY, this.P837_CURRENT_VERSION);
-
-            // 注入到 rainRate 模块
-            setFullPrecisionData(arrayBuffer);
-            console.log('[P.837] 下载并缓存成功');
-          } catch (e) {
-            console.error('[P.837] 保存失败:', e.message);
+          } else {
+            console.warn('[P.837] 下载返回异常: statusCode=', res.statusCode);
           }
+          resolve();
+        },
+        fail: (err) => {
+          console.warn('[P.837] 下载失败(将使用0.5°近似数据):', err.errMsg);
+          resolve();
         }
-      },
-      fail: (err) => {
-        console.warn('[P.837] 下载失败(将使用0.5°近似数据):', err.errMsg);
-      }
+      });
     });
   },
 
@@ -288,7 +316,7 @@ App({
         if (arrayBuffer && arrayBuffer.byteLength === this.TOPO_EXPECTED_SIZE) {
           setFullPrecisionElevation(arrayBuffer);
           console.log('[P.1511] 从本地缓存加载成功');
-          return;
+          return Promise.resolve();
         }
       } catch (e) {
         console.warn('[P.1511] 本地缓存读取失败，重新下载:', e.message);
@@ -296,40 +324,44 @@ App({
     }
 
     // 后台下载
-    this._downloadTopoData(fs);
+    return this._downloadTopoData(fs);
   },
 
   _downloadTopoData(fs) {
     console.log('[P.1511] 开始后台下载全精度海拔数据(gzip)...');
-    wx.cloud.downloadFile({
-      fileID: this.TOPO_CLOUD_FILE,
-      success: (res) => {
-        if (res.statusCode === 200 && res.tempFilePath) {
-          try {
-            // 下载到的是 gzip 压缩包, 先解压成 Int16 二进制
-            const gzBuf = fs.readFileSync(res.tempFilePath);
-            const inflated = pako.inflate(new Uint8Array(gzBuf)); // Uint8Array
-            const arrayBuffer = inflated.buffer;
-            if (arrayBuffer.byteLength !== this.TOPO_EXPECTED_SIZE) {
-              console.warn('[P.1511] 解压后数据大小不匹配:', arrayBuffer.byteLength);
-              return;
+    return new Promise((resolve) => {
+      wx.cloud.downloadFile({
+        fileID: this.TOPO_CLOUD_FILE,
+        success: (res) => {
+          if (res.statusCode === 200 && res.tempFilePath) {
+            try {
+              // 下载到的是 gzip 压缩包, 先解压成 Int16 二进制
+              const gzBuf = fs.readFileSync(res.tempFilePath);
+              const inflated = pako.inflate(new Uint8Array(gzBuf)); // Uint8Array
+              if (inflated.byteLength !== this.TOPO_EXPECTED_SIZE) {
+                console.warn('[P.1511] 解压后数据大小不匹配:', inflated.byteLength);
+              } else {
+                // pako 输出可能是大 buffer 上的子视图, 取精确长度的 ArrayBuffer 再用
+                const arrayBuffer = (inflated.byteOffset === 0 && inflated.buffer.byteLength === inflated.byteLength)
+                  ? inflated.buffer
+                  : inflated.buffer.slice(inflated.byteOffset, inflated.byteOffset + inflated.byteLength);
+                // 先注入 elevation 模块(落盘失败也能用)，再尝试写本地缓存(解压后的 bin, 热启动直接读)
+                setFullPrecisionElevation(arrayBuffer);
+                this._persistBin(fs, this.TOPO_LOCAL_PATH, arrayBuffer, this.TOPO_VERSION_KEY, this.TOPO_CURRENT_VERSION, 'P.1511');
+              }
+            } catch (e) {
+              console.error('[P.1511] 解压/读取失败:', e.message);
             }
-
-            // 持久化解压后的 bin 到用户目录(后续热启动直接读, 不再解压)
-            fs.writeFileSync(this.TOPO_LOCAL_PATH, arrayBuffer);
-            wx.setStorageSync(this.TOPO_VERSION_KEY, this.TOPO_CURRENT_VERSION);
-
-            // 注入到 elevation 模块
-            setFullPrecisionElevation(arrayBuffer);
-            console.log('[P.1511] 下载解压并缓存成功');
-          } catch (e) {
-            console.error('[P.1511] 解压/保存失败:', e.message);
+          } else {
+            console.warn('[P.1511] 下载返回异常: statusCode=', res.statusCode);
           }
+          resolve();
+        },
+        fail: (err) => {
+          console.warn('[P.1511] 下载失败(海拔自动填充将不可用):', err.errMsg);
+          resolve();
         }
-      },
-      fail: (err) => {
-        console.warn('[P.1511] 下载失败(海拔自动填充将不可用):', err.errMsg);
-      }
+      });
     });
   },
 

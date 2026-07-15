@@ -13,6 +13,7 @@
     circles="{{circles}}"
     markers="{{markers}}"
     polyline="{{polylines}}"
+    polygons="{{polygons}}"
     show-location="{{showCurrentLocation}}"
     enable-zoom="{{true}}"
     enable-scroll="{{true}}"
@@ -68,7 +69,7 @@
         <text class="bottom-btn-text">{{isLoadingCoverageData ? '加载中' : '自定义'}}</text>
       </view>
     </view>
-    
+
     <!-- 收起/展开小三角按钮 -->
     <view class="bottom-btn-toggle {{bottomBtnsCollapsed ? 'collapsed' : ''}}" bindtap="toggleBottomBtns">
       <view class="toggle-arrow"></view>
@@ -110,61 +111,44 @@
       <text class="coverage-popup-close" bindtap="hideCoveragePanel">✕</text>
     </view>
     <view class="coverage-popup-body">
-      <!-- 频段选择 -->
+      <!-- 类型选择 (EIRP / G·T)：先选类型，再往该类型下导入波束 -->
       <view class="coverage-section">
-        <text class="coverage-section-title">频段</text>
+        <text class="coverage-section-title">类型</text>
         <view class="coverage-tag-group">
-          <view class="coverage-tag {{selectedBand === item ? 'active' : ''}}" 
-                wx:for="{{availableBands}}" 
-                wx:key="*this"
-                data-band="{{item}}"
-                bindtap="onBandChange">
-            {{item}}
-          </view>
+          <view class="coverage-tag {{selectedType === 'EIRP' ? 'active' : ''}}" data-type="EIRP" bindtap="onTypeChange">EIRP</view>
+          <view class="coverage-tag {{selectedType === 'GT' ? 'active' : ''}}" data-type="GT" bindtap="onTypeChange">G/T</view>
         </view>
       </view>
       
-      <!-- 波束选择（多选） -->
+      <!-- 波束（密钥导入为一个波束，可多选绘制；长按标签弹菜单：重命名/删除） -->
       <view class="coverage-section">
         <view class="coverage-section-header">
-          <text class="coverage-section-title">波束（可多选）</text>
+          <text class="coverage-section-title">波束（可多选，长按重命名/删除）</text>
           <text class="coverage-section-toggle" bindtap="toggleAllBeams">
-            {{selectedBeams.length === availableBeams.length ? '取消全选' : '全选'}}
+            {{selectedBeams.length === availableBeams.length && availableBeams.length > 0 ? '取消全选' : '全选'}}
           </text>
+        </view>
+        <view class="import-row">
+          <text class="import-btn" bindtap="showImportPanel">＋ 密钥导入覆盖为波束</text>
         </view>
         <scroll-view scroll-y class="coverage-beam-scroll">
           <view class="coverage-tag-group">
-            <view class="coverage-tag {{utils.includes(selectedBeams, item) ? 'active' : ''}}" 
-                  wx:for="{{availableBeams}}" 
-                  wx:key="*this"
-                  data-beam="{{item}}"
-                  bindtap="onBeamChange">
-              {{item || '默认'}}
+            <view class="coverage-tag beam-tag {{utils.includes(selectedBeams, item.id) ? 'active' : ''}}"
+                  wx:for="{{availableBeams}}"
+                  wx:key="id"
+                  data-id="{{item.id}}"
+                  bindtap="onBeamChange"
+                  bindlongpress="onBeamLongPress">
+              {{item.name}}
             </view>
           </view>
+          <view class="beam-empty" wx:if="{{availableBeams.length === 0}}">当前卫星 + 类型下暂无波束，点上方「＋ 密钥导入」添加</view>
         </scroll-view>
         <view class="coverage-section-hint" wx:if="{{selectedBeams.length > 0}}">
           已选择 {{selectedBeams.length}} 个波束
         </view>
       </view>
-      
-      <!-- 类型选择 -->
-      <view class="coverage-section">
-        <text class="coverage-section-title">类型</text>
-        <view class="coverage-tag-group">
-          <view class="coverage-tag {{selectedType === 'EIRP' ? 'active' : ''}} {{!hasEIRP ? 'disabled' : ''}}" 
-                data-type="EIRP"
-                bindtap="onTypeChange">
-            EIRP
-          </view>
-          <view class="coverage-tag {{selectedType === 'GT' ? 'active' : ''}} {{!hasGT ? 'disabled' : ''}}" 
-                data-type="GT"
-                bindtap="onTypeChange">
-            G/T
-          </view>
-        </view>
-      </view>
-      
+
       <!-- 操作按钮 -->
       <view class="coverage-actions">
         <view class="coverage-btn coverage-btn-cancel" bindtap="hideCoveragePanel">取消</view>
@@ -414,23 +398,90 @@
   <view class="satellite-popup {{showSatellitePopup ? 'show' : ''}}" wx:if="{{showSatellitePopup}}">
     <view class="satellite-popup-header">
       <text class="satellite-popup-title">选择卫星</text>
-      <text class="satellite-popup-close" bindtap="hideSatelliteSelector">✕</text>
+      <view class="satellite-header-actions">
+        <text class="satellite-add-btn" bindtap="showCustomSatPanel">＋自定义卫星</text>
+        <text class="satellite-popup-close" bindtap="hideSatelliteSelector">✕</text>
+      </view>
     </view>
     <scroll-view scroll-y class="satellite-popup-list">
-      <view class="satellite-popup-item {{satelliteIndex === index ? 'active' : ''}}" 
-            wx:for="{{satellites}}" 
+      <view class="satellite-popup-item {{satelliteIndex === index ? 'active' : ''}}"
+            wx:for="{{satellites}}"
             wx:key="index"
             bindtap="onSatelliteChange"
             data-index="{{index}}">
-        <text class="satellite-popup-name">{{item.name}}</text>
-        <text class="satellite-popup-position">{{item.position}}°E</text>
+        <view class="satellite-popup-name-wrap">
+          <text class="satellite-popup-name">{{item.name}}</text>
+          <text wx:if="{{item.custom}}" class="satellite-custom-badge">自定义</text>
+        </view>
+        <view class="satellite-popup-right">
+          <text class="satellite-popup-position">{{item.position}}°E</text>
+          <text wx:if="{{item.custom}}" class="satellite-del-btn" catchtap="onDeleteCustomSat" data-index="{{index}}">✕</text>
+        </view>
       </view>
     </scroll-view>
   </view>
   
   <!-- 卫星选择遮罩 -->
   <view class="satellite-popup-mask {{showSatellitePopup ? 'show' : ''}}" wx:if="{{showSatellitePopup}}" bindtap="hideSatelliteSelector"></view>
-  
+
+  <!-- 自定义卫星弹窗 -->
+  <view class="coverage-popup custom-sat-popup {{showCustomSatPopup ? 'show' : ''}}" wx:if="{{showCustomSatPopup}}">
+    <view class="coverage-popup-header">
+      <text class="coverage-popup-title">自定义卫星</text>
+      <text class="coverage-popup-close" bindtap="hideCustomSatPanel">✕</text>
+    </view>
+    <view class="coverage-popup-body">
+      <view class="import-tip">添加一颗 GEO 卫星（仅名称与轨位；覆盖数据仍由「密钥导入」的波束提供）。</view>
+      <view class="custom-sat-field">
+        <text class="custom-sat-label">卫星名称</text>
+        <input type="text" class="elevation-input-single" placeholder="如 MYSAT 1" value="{{customSatName}}" bindinput="onCustomSatNameInput" />
+      </view>
+      <view class="custom-sat-field">
+        <text class="custom-sat-label">轨位（东经为正，−180 ~ 180°）</text>
+        <input type="text" class="elevation-input-single" placeholder="如 110.5" value="{{customSatPosition}}" bindinput="onCustomSatPositionInput" />
+      </view>
+      <view class="coverage-actions">
+        <view class="coverage-btn coverage-btn-cancel" bindtap="hideCustomSatPanel">取消</view>
+        <view class="coverage-btn coverage-btn-confirm" bindtap="confirmAddCustomSat">添加</view>
+      </view>
+    </view>
+  </view>
+  <view class="coverage-popup-mask custom-sat-mask {{showCustomSatPopup ? 'show' : ''}}" wx:if="{{showCustomSatPopup}}" bindtap="hideCustomSatPanel"></view>
+
+  <!-- 密钥导入弹窗 -->
+  <view class="coverage-popup {{showImportPopup ? 'show' : ''}}" wx:if="{{showImportPopup}}">
+    <view class="coverage-popup-header">
+      <text class="coverage-popup-title">导入覆盖数据</text>
+      <text class="coverage-popup-close" bindtap="hideImportPanel">✕</text>
+    </view>
+    <view class="coverage-popup-body">
+      <view class="import-tip">在仿真平台点「导出 › 发送到小程序」生成密钥后在此输入。导入的覆盖将作为「{{currentSatellite.name}} · {{selectedType === 'GT' ? 'G/T' : 'EIRP'}}」下的一个波束。</view>
+      <!-- 8 位密钥分格输入（验证码风格：中间只读“-”分隔，隐形 input 覆盖全区承接键盘/粘贴/退格） -->
+      <view class="otp-field {{importKeyFocus ? 'is-focused' : ''}}" bindtap="focusOtp">
+        <block wx:for="{{otpCells}}" wx:key="id">
+          <view wx:if="{{item.sep}}" class="otp-dash">-</view>
+          <view wx:else class="otp-cell {{item.filled ? 'is-filled' : ''}} {{item.active && importKeyFocus ? 'is-active' : ''}}">
+            <text wx:if="{{item.char}}" class="otp-cell-char">{{item.char}}</text>
+            <view wx:if="{{item.active && importKeyFocus && !item.char}}" class="otp-caret"></view>
+          </view>
+        </block>
+        <input class="otp-input" type="text" maxlength="11" value="{{importKeyInput}}"
+               focus="{{importKeyFocus}}" cursor="{{importKeyInput.length}}" confirm-type="done" hold-keyboard="{{true}}"
+               adjust-position="{{false}}"
+               bindinput="onImportKeyInput" bindfocus="onOtpFocus" bindblur="onOtpBlur" />
+      </view>
+      <view class="otp-hint">8 位字母 / 数字，如 ABCD-2345</view>
+      <input type="text" class="elevation-input-single import-name-input" placeholder="波束名称（可选，默认取快照名）" value="{{importBeamName}}" bindinput="onImportNameInput" />
+      <view class="coverage-actions">
+        <view class="coverage-btn coverage-btn-cancel" bindtap="hideImportPanel">取消</view>
+        <view class="coverage-btn coverage-btn-confirm {{importing ? 'disabled' : ''}}" bindtap="confirmImport">{{importing ? '导入中...' : '导入'}}</view>
+      </view>
+    </view>
+  </view>
+  <view class="coverage-popup-mask {{showImportPopup ? 'show' : ''}}" wx:if="{{showImportPopup}}" bindtap="hideImportPanel"></view>
+
+  <!-- 波束重命名改为「长按波束标签 → 操作菜单」，旧批量编辑弹窗已移除 -->
+
   <!-- 加载状态 -->
   <view class="loading-mask" wx:if="{{loading}}">
     <view class="loading-content">
