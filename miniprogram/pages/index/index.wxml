@@ -49,7 +49,7 @@
   <!-- 可视化功能选择面板 -->
   <view class="visual-popup {{showVisualPopup ? 'show' : ''}}" wx:if="{{showVisualPopup}}" catchtouchmove="preventTouchMove">
     <view class="visual-popup-header">
-      <text class="visual-popup-title">可视化工具</text>
+      <text class="visual-popup-title">工具栏</text>
       <text class="visual-popup-close" bindtap="hideVisualPanel">✕</text>
     </view>
     <view class="visual-popup-body">
@@ -110,6 +110,26 @@
         <view class="visual-option-content">
           <text class="visual-option-title">日凌计算</text>
           <text class="visual-option-desc">计算太阳干扰中断时间窗口</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
+      <view class="visual-option" bindtap="goToFreqPlan">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-freq-plan"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">频率计划</text>
+          <text class="visual-option-desc">查看从仿真平台导入的转发器频率计划</text>
+        </view>
+        <view class="visual-option-arrow">›</view>
+      </view>
+      <view class="visual-option" bindtap="goToSettings">
+        <view class="visual-option-icon">
+          <view class="option-icon icon-satsim-bind"></view>
+        </view>
+        <view class="visual-option-content">
+          <text class="visual-option-title">仿真平台绑定</text>
+          <text class="visual-option-desc">绑定电脑上的仿真平台，发来的内容自动同步</text>
         </view>
         <view class="visual-option-arrow">›</view>
       </view>
@@ -571,7 +591,7 @@
       </view>
     </view>
     <view class="collapse-content show">
-      <!-- 第一行：卫星选择 + 卫星名称 + 轨道位置（GEO）；卫星名称 + ISL单跳C/N + ISL跳数（NGSO） -->
+      <!-- 第一行：卫星选择 + 卫星名称 + 轨道位置（GEO）；卫星名称 + 轨道倾角（NGSO） -->
       <view class="grid-3" wx:if="{{orbitType !== 'NGSO'}}">
         <view class="form-group">
           <text class="form-label">选择卫星</text>
@@ -609,8 +629,8 @@
         </view>
       </view>
 
-      <!-- NGSO 首行：卫星名称 + 轨道倾角 + ISL跳数 -->
-      <view class="grid-3" wx:if="{{orbitType === 'NGSO'}}">
+      <!-- NGSO 首行：卫星名称 + 轨道倾角 -->
+      <view class="grid-2" wx:if="{{orbitType === 'NGSO'}}">
         <view class="form-group">
           <view class="form-label-row">
             <text class="form-label">卫星名称<text class="required-mark"> *</text></text>
@@ -636,123 +656,6 @@
                  bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
         </view>
 
-        <view class="form-group">
-          <view class="form-label-row">
-            <text class="form-label">ISL跳数</text>
-          </view>
-          <input class="form-input {{focusedField === 'islHops' ? 'input-focused' : ''}}"
-                 type="text"
-                 placeholder="0"
-                 value="{{satelliteParams.islHops}}"
-                 data-field="islHops"
-                 adjust-position="{{isNotIOS ? '' : false}}"
-                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-
-      </view>
-
-      <!-- NGSO 星间链路 ISL：计算模式 + 对应参数（经验值 / 微波链路 / 激光链路） -->
-      <view class="form-group" wx:if="{{orbitType === 'NGSO'}}">
-        <view class="form-label-row">
-          <text class="form-label">ISL 计算模式</text>
-        </view>
-        <view class="orbit-seg orbit-seg-full">
-          <view class="orbit-seg-item {{(satelliteParams.islMode || 'manual') === 'manual' ? 'active' : ''}}" data-mode="manual" bindtap="onIslModeChange">经验值</view>
-          <view class="orbit-seg-item {{satelliteParams.islMode === 'rf' ? 'active' : ''}}" data-mode="rf" bindtap="onIslModeChange">微波链路</view>
-          <view class="orbit-seg-item {{satelliteParams.islMode === 'optical' ? 'active' : ''}}" data-mode="optical" bindtap="onIslModeChange">激光链路</view>
-        </view>
-      </view>
-
-      <!-- 经验值模式：直接输入 ISL SNR / C·N₀ -->
-      <view class="grid-2" wx:if="{{orbitType === 'NGSO' && (satelliteParams.islMode || 'manual') === 'manual'}}">
-        <view class="form-group">
-          <view class="form-label-row">
-            <text class="form-label">{{islInputMode === 'cno' ? 'ISL C/N₀' : 'ISL SNR'}}<text class="form-label-unit">{{islInputMode === 'cno' ? '(dBHz)' : '(dB)'}}</text></text>
-            <view class="unit-toggle" bindtap="toggleIslInputMode"><view class="unit-toggle-icon"></view></view>
-          </view>
-          <input class="form-input {{focusedField === 'cIslDisplay' ? 'input-focused' : ''}}" type="text" placeholder="{{islInputMode === 'cno' ? '105.56' : '30'}}"
-                 value="{{satelliteParams.cIslDisplay}}" data-field="cIslDisplay"
-                 adjust-position="{{isNotIOS ? '' : false}}"
-                 bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-      </view>
-
-      <!-- 射频模式：EIRP / G/T / 频率 / 单跳距离 / 其他损耗 -->
-      <view class="grid-3" wx:if="{{orbitType === 'NGSO' && satelliteParams.islMode === 'rf'}}">
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">ISL EIRP<text class="form-label-unit">(dBW)</text></text></view>
-          <input class="form-input {{focusedField === 'islEirp' ? 'input-focused' : ''}}" type="text" placeholder="45" value="{{satelliteParams.islEirp}}" data-field="islEirp"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">ISL G/T<text class="form-label-unit">(dB/K)</text></text></view>
-          <input class="form-input {{focusedField === 'islGT' ? 'input-focused' : ''}}" type="text" placeholder="12" value="{{satelliteParams.islGT}}" data-field="islGT"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">ISL 频率<text class="form-label-unit">(GHz)</text></text></view>
-          <input class="form-input {{focusedField === 'islFreq' ? 'input-focused' : ''}}" type="digit" placeholder="23" value="{{satelliteParams.islFreq}}" data-field="islFreq"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">单跳距离<text class="form-label-unit">(km)</text></text></view>
-          <input class="form-input {{focusedField === 'islHopDistance' ? 'input-focused' : ''}}" type="digit" placeholder="2000" value="{{satelliteParams.islHopDistance}}" data-field="islHopDistance"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">其他损耗<text class="form-label-unit">(dB)</text></text></view>
-          <input class="form-input {{focusedField === 'islMiscLoss' ? 'input-focused' : ''}}" type="digit" placeholder="1" value="{{satelliteParams.islMiscLoss}}" data-field="islMiscLoss"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-      </view>
-
-      <!-- 光学模式：发射光功率 / 收发口径 / 波长 / 指向损耗 / 单跳距离 / 噪声 PSD -->
-      <view class="grid-3" wx:if="{{orbitType === 'NGSO' && satelliteParams.islMode === 'optical'}}">
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">发射光功率<text class="form-label-unit">(dBm)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptTxPower' ? 'input-focused' : ''}}" type="text" placeholder="20" value="{{satelliteParams.islOptTxPower}}" data-field="islOptTxPower"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">发射口径<text class="form-label-unit">(m)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptTxAperture' ? 'input-focused' : ''}}" type="digit" placeholder="0.08" value="{{satelliteParams.islOptTxAperture}}" data-field="islOptTxAperture"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">接收口径<text class="form-label-unit">(m)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptRxAperture' ? 'input-focused' : ''}}" type="digit" placeholder="0.08" value="{{satelliteParams.islOptRxAperture}}" data-field="islOptRxAperture"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">波长<text class="form-label-unit">(nm)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptWavelength' ? 'input-focused' : ''}}" type="digit" placeholder="1550" value="{{satelliteParams.islOptWavelength}}" data-field="islOptWavelength"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">指向+光学损耗<text class="form-label-unit">(dB)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptPointingLoss' ? 'input-focused' : ''}}" type="digit" placeholder="3" value="{{satelliteParams.islOptPointingLoss}}" data-field="islOptPointingLoss"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">单跳距离<text class="form-label-unit">(km)</text></text></view>
-          <input class="form-input {{focusedField === 'islHopDistance' ? 'input-focused' : ''}}" type="digit" placeholder="2000" value="{{satelliteParams.islHopDistance}}" data-field="islHopDistance"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">接收灵敏度<text class="form-label-unit">(dBm)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptSensitivity' ? 'input-focused' : ''}}" type="text" placeholder="-30" value="{{satelliteParams.islOptSensitivity}}" data-field="islOptSensitivity"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">灵敏度参考速率<text class="form-label-unit">(Mbps)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptSensRate' ? 'input-focused' : ''}}" type="digit" placeholder="1000" value="{{satelliteParams.islOptSensRate}}" data-field="islOptSensRate"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
-        <view class="form-group">
-          <view class="form-label-row"><text class="form-label">灵敏度 Eb/N₀<text class="form-label-unit">(dB)</text></text></view>
-          <input class="form-input {{focusedField === 'islOptSensEbN0' ? 'input-focused' : ''}}" type="text" placeholder="13" value="{{satelliteParams.islOptSensEbN0}}" data-field="islOptSensEbN0"
-                 adjust-position="{{isNotIOS ? '' : false}}" bindinput="onSatelliteParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
-        </view>
       </view>
 
       <!-- 第二行：频段 + SFD + 转发器带宽 + 转发器IBO -->

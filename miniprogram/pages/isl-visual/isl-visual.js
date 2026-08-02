@@ -21,7 +21,10 @@ const GROUP_LABEL = {
   all: '全部卫星', gps: 'GPS', glonass: 'GLONASS', beidou: '北斗', galileo: 'Galileo',
   o3b: 'O3b', geo: 'GEO', starlink: 'Starlink', oneweb: 'OneWeb', kuiper: 'Kuiper',
   qianfan: '千帆星座', guowang: '中国星网', iridium: '铱星', globalstar: 'Globalstar',
-  stations: '空间站', planet: 'Planet', spire: 'Spire'
+  stations: '空间站', planet: 'Planet', spire: 'Spire',
+  // 「其他」：全部在轨里不属于任何已知星座的星。只经全局搜索命中（不进 GROUP_LIST 浏览项——
+  // 浏览它等于列全部在轨全集）；取数走 active，见 tleStore.loadGroupSats。
+  other: '其他'
 };
 
 // 可选分组浏览（不想打字时点 chip 选一组、组内直接挑星）；首项空 key=回到全局搜索；其余按常用度排

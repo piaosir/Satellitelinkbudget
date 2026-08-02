@@ -26,6 +26,11 @@
       "root": "pages/constellation-map",
       "name": "constellation-map",
       "pages": ["constellation-map"]
+    },
+    {
+      "root": "pages/freq-plan",
+      "name": "freq-plan",
+      "pages": ["freq-plan"]
     }
   ],
   "permission": {

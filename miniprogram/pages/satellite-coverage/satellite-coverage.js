@@ -233,6 +233,10 @@ Page({
     // 加载本地持久化的导入波束（秒开）
     this._loadImportedBeams();
 
+    // 消化仿真平台自动同步过来的覆盖快照（见 utils/satsimBox.js 的待消化队列）。
+    // 必须在 _loadImportedBeams 之后：新波束要追加到已有的那批后面。
+    this._drainSatsimGxt();
+
     // 初始化覆盖数据状态（刷新当前卫星+类型下的波束列表）
     this.updateCoverageDataStatus();
 
@@ -241,6 +245,20 @@ Page({
 
     // 获取用户位置
     this.getUserLocation();
+  },
+
+  // 每次进入本页都拉一次平台投递（force：App.onShow 只在【应用回到前台】时触发，
+  // 在小程序内部从首页点进来是不会触发的 —— 那正是「刚在电脑上发完、马上进来看」的路径）。
+  onShow() {
+    this._syncFromSatsim();
+  },
+
+  async _syncFromSatsim() {
+    let box = null;
+    try { box = require('../../utils/satsimBox'); } catch (e) { return; }
+    if (!box.getCh()) return;                    // 没绑定过，不发任何请求
+    try { await box.syncNow({ force: true }); } catch (e) { /* 没网就用已排队的 */ }
+    this._drainSatsimGxt();
   },
 
   onReady() {
@@ -1415,6 +1433,22 @@ Page({
     } });
     if (res && res._id) beam._cloudId = res._id;
   },
+  // 覆盖式写入：已上云过就更新那一条，没有才新增。
+  // 自动同步会反复投递同一份覆盖（平台改一次重发一次），若一律 add 就会在云端堆一串同名波束。
+  async _cloudPutBeam(beam) {
+    const coll = this._gxtColl();
+    if (!coll || !beam) return;
+    if (!beam._cloudId) return await this._cloudAddBeam(beam);
+    await coll.doc(beam._cloudId).update({ data: {
+      satelliteName: beam.satelliteName,
+      type: beam.type,
+      beamName: beam.beamName || '波束',
+      contours: beam.contours || [],
+      borePoints: beam.borePoints || [],
+      polygons: beam.polygons || [],
+      updatedAt: Date.now()
+    } });
+  },
   // 改名：只更新 beamName 字段（不重传大体量等值线）；未上云过的补传
   async _cloudRenameBeam(beam) {
     const coll = this._gxtColl();
@@ -1475,6 +1509,101 @@ Page({
       (Array.isArray(b.bore) ? b.bore : []).forEach(pt => { if (Array.isArray(pt) && pt.length >= 2) borePoints.push({ pos: [pt[0], pt[1]] }); });
     });
     return { contours, borePoints, polygons: Array.isArray(snap.polygons) ? snap.polygons : [] };
+  },
+
+  // ——— 仿真平台自动同步过来的覆盖快照：消化成波束 ———
+  //
+  // 为什么由本页消化、而不是在 utils/satsimBox.js 里直接落地：合成波束要用
+  // _mergeSnapshotToBeamData / _persistBeam / _cloudAddBeam 这几件，它们依赖页面状态。
+  // 后台同步够不着，而把那段逻辑复制一份到 satsimBox 里就是第二份真相。故那边只排队，这边取走。
+  //
+  // ★ 幂等：按消息 id（srcMid）替换而不是追加 —— 平台改一次覆盖重发一次，这里要覆盖那一份。
+  _drainSatsimGxt() {
+    let queue = [];
+    try { queue = require('../../utils/satsimBox').takeGxtQueue(); } catch (e) { return; }
+    if (!queue.length) return;
+
+    const list = this._importedBeams || [];
+    const eaten = [];
+    let n = 0;
+    for (const q of queue) {
+      if (!q || !q.snap) { eaten.push(q && q.id); continue; }
+      const bd = this._mergeSnapshotToBeamData(q.snap);
+      // 空快照也要吃掉：留在队列里只会每次进页面重试一遍，永远不会变得有内容
+      if (!bd.contours.length && !bd.polygons.length) { eaten.push(q.id); continue; }
+
+      const sb = (q.snap.coverage && Array.isArray(q.snap.coverage.beams)) ? q.snap.coverage.beams : [];
+      // target 是平台发送时人选的目标星（带轨位）。它才是权威 —— 快照里 beams[].satName 是平台侧
+      // 的叫法，未必与本地列表一致。没有 target（老版本平台发的）才退回按星名猜。
+      const tgt = q.snap.target || null;
+      const beam = {
+        id: this._newBeamId(),
+        srcMid: q.id,                                   // 来源消息 id：幂等替换的依据
+        satelliteName: tgt && tgt.satName
+          ? this._ensureSatName(tgt.satName, tgt.satLon)
+          : this._matchSatName(sb.length ? sb[0].satName : ''),
+        type: (sb.length && sb[0].type === 'GT') ? 'GT' : 'EIRP',
+        beamName: q.name || q.snap.name || '平台覆盖',
+        contours: bd.contours,
+        borePoints: bd.borePoints,
+        polygons: bd.polygons
+      };
+
+      const at = list.findIndex((b) => b && b.srcMid === q.id);
+      if (at >= 0) { beam.id = list[at].id; beam._cloudId = list[at]._cloudId; list[at] = beam; }
+      else list.push(beam);
+
+      this._importedBeams = list;
+      this._persistBeam(beam);
+      this._cloudPutBeam(beam).catch((e) => console.warn('平台覆盖上云失败（已存本地）：', (e && e.errMsg) || e));
+      eaten.push(q.id);
+      n++;
+    }
+
+    try { require('../../utils/satsimBox').clearGxtQueue(eaten); } catch (e) { /* 清不掉下次重来，幂等安全 */ }
+    if (n) {
+      this.refreshBeamList();
+      setTimeout(() => wx.showToast({ title: '已同步 ' + n + ' 份平台覆盖', icon: 'none', duration: 2000 }), 600);
+    }
+  },
+
+  // 平台指定的目标星 → 本地列表里的名字。列表里没有就【按送来的轨位登记成自定义卫星】，
+  // 而不是硬塞给当前选中的那颗 —— 波束按 satelliteName 归类显示，塞错了就是挂在别人名下。
+  // 自定义卫星本就是这个页面已有的机制（coverage_custom_satellites），这里只是自动走一遍。
+  _ensureSatName(rawName, rawLon) {
+    const matched = this._matchSatNameStrict(rawName);
+    if (matched) return matched;
+    const name = String(rawName || '').trim();
+    if (!name) { const cur = this.data.currentSatellite; return cur ? cur.name : ''; }
+    const pos = Number(rawLon);
+    const lng = Number.isFinite(pos) ? pos : 0;
+    const merged = [...(this.data.satellites || []), {
+      name: name, position: lng, coverage: { lat: 0, lng: lng, radius: 3000 }, custom: true
+    }];
+    this.setData({ satellites: merged });
+    this._persistCustomSatellites();
+    return name;
+  },
+
+  // 严格匹配（精确 → 忽略空格/连字符大小写）；匹配不上返回空串，由调用方决定怎么办
+  _matchSatNameStrict(raw) {
+    const name = String(raw || '').trim();
+    if (!name) return '';
+    const all = this.data.satellites || [];
+    const exact = all.find((s) => s && s.name === name);
+    if (exact) return exact.name;
+    const key = name.toUpperCase().replace(/[\s-]/g, '');
+    const loose = all.find((s) => s && String(s.name).toUpperCase().replace(/[\s-]/g, '') === key);
+    return loose ? loose.name : '';
+  },
+
+  // 老版本平台发来的快照没有 target，只能按快照里的星名猜；对不上就落到当前选中的那颗
+  // （而不是凭空造一颗——那时没有轨位可用，造出来的自定义星是个空壳）。
+  _matchSatName(raw) {
+    const m = this._matchSatNameStrict(raw);
+    if (m) return m;
+    const cur = this.data.currentSatellite;
+    return cur ? cur.name : String(raw || '').trim();
   },
 
   // 当前卫星 + 类型下的导入波束
@@ -1642,6 +1771,12 @@ Page({
         const r = res && res.result;
         console.log('[导入] 云函数返回：', r);
         if (r && r.success && r.data) {
+          // 云函数自 2026-08 起同时放行仿真平台的多件包（链路配置 / 频率计划）。那类密钥不是覆盖
+          // 快照，喂进 _mergeSnapshotToBeamData 只会得到空等值线、报一句「导入为空」——说清楚该去哪导。
+          if (r.data.kind === 'satsim-pack') {
+            wx.showModal({ title: '密钥用错了地方', content: '这个密钥装的是链路配置 / 频率计划，不是覆盖快照。请到「我的配置 → 导入」或「工具栏 → 频率计划」输入。', showCancel: false });
+            return;
+          }
           // 云函数内联返回快照数据 → 合并为一个波束的数据
           const bd = this._mergeSnapshotToBeamData(r.data);
           if (!bd.contours.length && !bd.polygons.length) { wx.showModal({ title: '导入为空', content: '该密钥的快照没有可用的覆盖等值线或多边形。', showCancel: false }); return; }

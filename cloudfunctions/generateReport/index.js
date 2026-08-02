@@ -74,9 +74,6 @@ const TRANSLATIONS = {
     linkDelay: '链路时延',
     maxDopplerUplink: '上行最大多普勒',
     maxDopplerDownlink: '下行最大多普勒',
-    islCno: 'ISL C/N0',
-    islSnr: 'ISL SNR',
-    islHops: 'ISL跳数',
     fsl: '自由空间损耗',
     rainAtten: '降雨衰减',
     feederLoss: '馈线损耗',
@@ -167,9 +164,6 @@ const TRANSLATIONS = {
     linkDelay: 'Link Delay',
     maxDopplerUplink: 'Max Uplink Doppler',
     maxDopplerDownlink: 'Max Downlink Doppler',
-    islCno: 'ISL C/N0',
-    islSnr: 'ISL SNR',
-    islHops: 'ISL Hops',
     fsl: 'Free Space Loss',
     rainAtten: 'Rain Atten.',
     feederLoss: 'Feeder Loss',
@@ -264,9 +258,6 @@ function _buildCompareSections(records, lang, t) {
     const { config, sat, lp, r } = rec;
     const isNGSO = sat.orbitType === 'NGSO';
     const ngsoClass = sat.ngsoOrbitClass || 'LEO';
-    const islMode = sat.islInputMode || 'cno';
-    const islUnit = islMode === 'cno' ? 'dBHz' : 'dB';
-    const islVal = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
     const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : (isZh ? '自定义' : 'Custom');
     const isForward = lp.calcMode === 'forward';
     const noiseLabel = (config.noiseRatioMode || 'ebno') === 'esno' ? 'Es/N0' : 'Eb/N0';
@@ -278,7 +269,7 @@ function _buildCompareSections(records, lang, t) {
     const eqBWFmt = formatBandwidth(Math.max(parseFloat(r.allocBandwidthResult) || 0, parseFloat(r.PowerBWResult) || 0));
     const upDistVal = (lp.distanceMode || 'altitude') === 'slantRange' ? u(lp.slantRange, 'km') : u(lp.orbitAltitude, 'km');
     const rxDistVal = (lp.rxDistanceMode || 'altitude') === 'slantRange' ? u(lp.rxSlantRange, 'km') : u(lp.rxOrbitAltitude, 'km');
-    return { sat, lp, r, isNGSO, ngsoClass, islUnit, islVal, dvbLabel, isForward, noiseLabel, linkMargin, statusText, availWeather, eqBWFmt, upDistVal, rxDistVal };
+    return { sat, lp, r, isNGSO, ngsoClass, dvbLabel, isForward, noiseLabel, linkMargin, statusText, availWeather, eqBWFmt, upDistVal, rxDistVal };
   });
 
   const anyNGSO = D.some(d => d.isNGSO);
@@ -309,8 +300,6 @@ function _buildCompareSections(records, lang, t) {
       row(isZh ? '转发器IBO' : 'IBO', d => u(d.sat.BOi, 'dB')),
       row(isZh ? '转发器OBO' : 'OBO', d => u(d.sat.BOo, 'dB')),
       ...(anyNGSO ? [
-        row('ISL', ifNGSO(d => u(d.islVal, d.islUnit))),
-        row(isZh ? 'ISL跳数' : 'ISL Hops', ifNGSO(d => u(d.sat.islHops))),
         row(isZh ? '上行最大多普勒' : 'Max Doppler UL', ifNGSO(d => u(d.r.maxDopplerUplinkResult, 'kHz'))),
         row(isZh ? '下行最大多普勒' : 'Max Doppler DL', ifNGSO(d => u(d.r.maxDopplerDownlinkResult, 'kHz'))),
         row(isZh ? '链路时延' : 'Link Delay', ifNGSO(d => u(d.r.linkDelayResult, 'ms'))),
@@ -378,10 +367,6 @@ function _buildCompareSections(records, lang, t) {
       row(isZh ? '参考G/T' : 'Ref. G/T', d => u(d.sat.sfdGtRef || 0, 'dB/K')),
       row(isZh ? '转发器带宽' : 'Xpdr BW', d => u(d.sat.transponderBandwidth, 'MHz')),
       ...(anyGEO ? [row(isZh ? '邻星离轴角' : 'Adj. Sat. Offset', ifGEO(d => u(d.sat.deltaTheta, '°')))] : []),
-      ...(anyNGSO ? [
-        row('ISL', ifNGSO(d => u(d.islVal, d.islUnit))),
-        row(isZh ? 'ISL跳数' : 'ISL Hops', ifNGSO(d => u(d.sat.islHops))),
-      ] : []),
       row(isZh ? '转发器IBO' : 'IBO', d => u(d.sat.BOi, 'dB')),
       row(isZh ? '转发器OBO' : 'OBO', d => u(d.sat.BOo, 'dB')),
     ]},
@@ -471,10 +456,6 @@ function buildRecordResultSections(rec, isZh) {
   const u = _fmtU;
   const isNGSO = sat.orbitType === 'NGSO';
   const ngsoClass = sat.ngsoOrbitClass || 'LEO';
-  const islMode = sat.islInputMode || 'cno';
-  const islLabel = islMode === 'cno' ? (isZh ? 'ISL C/N₀' : 'ISL C/N0') : 'ISL SNR';
-  const islUnit = islMode === 'cno' ? 'dBHz' : 'dB';
-  const islVal = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
   const linkMargin = r.linkmargin || '0';
   const status = getLinkStatus(linkMargin);
   const t = TRANSLATIONS[isZh ? 'zh' : 'en'] || TRANSLATIONS.zh;
@@ -498,7 +479,6 @@ function buildRecordResultSections(rec, isZh) {
   satRows.push(R([isZh ? '卫星EIRP' : 'Sat. EIRP', u(r.EIRPsResult, 'dBW')], [isZh ? '卫星SFD' : 'Sat. SFD', u(r.SFDsResult, 'dBW/m²')]));
   satRows.push(R([isZh ? '转发器IBO' : 'IBO', u(sat.BOi, 'dB')], [isZh ? '转发器OBO' : 'OBO', u(sat.BOo, 'dB')]));
   if (isNGSO) {
-    satRows.push(R([islLabel, u(islVal, islUnit)], [isZh ? 'ISL跳数' : 'ISL Hops', u(sat.islHops)]));
     satRows.push(R([isZh ? '上行最大多普勒' : 'Max Doppler UL', u(r.maxDopplerUplinkResult, 'kHz')], [isZh ? '下行最大多普勒' : 'Max Doppler DL', u(r.maxDopplerDownlinkResult, 'kHz')]));
     satRows.push(R([isZh ? '链路时延' : 'Link Delay', u(r.linkDelayResult, 'ms')]));
   }
@@ -543,10 +523,6 @@ function buildRecordParamSections(rec, isZh) {
   const isNGSO = sat.orbitType === 'NGSO';
   const ngsoClass = sat.ngsoOrbitClass || 'LEO';
   const isForward = lp.calcMode === 'forward';
-  const islMode = sat.islInputMode || 'cno';
-  const islLabel = islMode === 'cno' ? (isZh ? 'ISL C/N₀' : 'ISL C/N0') : 'ISL SNR';
-  const islUnit = islMode === 'cno' ? 'dBHz' : 'dB';
-  const islVal = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
   const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : (isZh ? '自定义' : 'Custom');
   const noiseMode = (config && config.noiseRatioMode) || 'ebno';
   const noiseLabel = noiseMode === 'esno' ? 'Es/N0' : 'Eb/N0';
@@ -557,9 +533,8 @@ function buildRecordParamSections(rec, isZh) {
     satRows.push(R([isZh ? '卫星名称' : 'Satellite', u(sat.satelliteName)], [isZh ? '轨道类型' : 'Orbit Type', `${ngsoClass} / NGSO`]));
     satRows.push(R([isZh ? '工作频段' : 'Band', u(sat.frequencyBand)], ['SFD', u(sat.sfdRef, 'dBW/m²')]));
     satRows.push(R([isZh ? '参考G/T' : 'Ref. G/T', u(sat.sfdGtRef || 0, 'dB/K')]));
-    satRows.push(R([isZh ? '转发器带宽' : 'Xpdr BW', u(sat.transponderBandwidth, 'MHz')], [islLabel, u(islVal, islUnit)]));
+    satRows.push(R([isZh ? '转发器带宽' : 'Xpdr BW', u(sat.transponderBandwidth, 'MHz')]));
     satRows.push(R([isZh ? '转发器IBO' : 'IBO', u(sat.BOi, 'dB')], [isZh ? '转发器OBO' : 'OBO', u(sat.BOo, 'dB')]));
-    satRows.push(R([isZh ? 'ISL跳数' : 'ISL Hops', u(sat.islHops)]));
   } else {
     satRows.push(R([isZh ? '卫星名称' : 'Satellite', u(sat.satelliteName)], [isZh ? '轨道位置' : 'Orbit', u(sat.orbitPosition, '°E')]));
     satRows.push(R([isZh ? '工作频段' : 'Band', u(sat.frequencyBand)], ['SFD', u(sat.sfdRef, 'dBW/m²')]));
@@ -679,11 +654,6 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
       const orbitTag = isNGSO ? `[${ngsoClass_r}/NGSO]` : '[GEO]';
       const configTitle = `${config.configName || 'Unknown'} | ${sat.satelliteName || ''} ${orbitTag} | ${sat.frequencyBand || ''}${t.frequencyBandSuffix}`;
 
-      const islMode_r = sat.islInputMode || 'cno';
-      const islLabel_r = islMode_r === 'cno' ? (isZh ? 'ISL C/N₀' : 'ISL C/N0') : 'ISL SNR';
-      const islUnit_r = islMode_r === 'cno' ? 'dBHz' : 'dB';
-      const islDisplayVal_r = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
-
       // 4列配对行：[type, label1, val1, label2?, val2?]
       const rows = [
         [S, isZh ? '卫星参数' : 'Satellite Parameters'],
@@ -698,7 +668,6 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
         [D, isZh ? '卫星EIRP' : 'Sat. EIRP', u(r.EIRPsResult, 'dBW'), isZh ? '卫星SFD' : 'Sat. SFD', u(r.SFDsResult, 'dBW/m²')],
         [D, isZh ? '转发器IBO' : 'BOi', u(sat.BOi, 'dB'), isZh ? '转发器OBO' : 'BOo', u(sat.BOo, 'dB')],
         ...(isNGSO ? [
-          [D, islLabel_r, u(islDisplayVal_r, islUnit_r), isZh ? 'ISL跳数' : 'ISL Hops', u(sat.islHops)],
           [D, isZh ? '上行最大多普勒' : 'Max Doppler UL', u(r.maxDopplerUplinkResult, 'kHz'), isZh ? '下行最大多普勒' : 'Max Doppler DL', u(r.maxDopplerDownlinkResult, 'kHz')],
           [D, isZh ? '链路时延' : 'Link Delay', u(r.linkDelayResult, 'ms')],
         ] : []),

@@ -4,6 +4,7 @@
 const app = getApp();
 const { formatDateTime } = require('../../utils/formatter');
 const { buildWaterfallSegments, buildLinkSummary } = require('../../utils/waterfallBuilder');
+const satsimPack = require('../../utils/satsimPack');   // 仿真平台密钥导入（与频率计划页共用同一条通道）
 
 // 翻译文本（用于导出报告 - 云函数版本已内置翻译，此处仅保留UI显示用）
 const exportTranslations = {
@@ -243,6 +244,21 @@ Page({
     // 每次显示页面时刷新列表
     if (this.data.configs.length > 0) {
       this.loadConfigs();
+    }
+    this._syncFromSatsim();
+  },
+
+  // 进本页就拉一次平台投递（App.onShow 只在应用回到前台时触发，小程序内部翻页不会 ——
+  // 而「刚在电脑上发完、马上进来看」恰恰走的是内部翻页）。拉到新配置就重刷列表。
+  async _syncFromSatsim() {
+    let box = null;
+    try { box = require('../../utils/satsimBox'); } catch (e) { return; }
+    if (!box.getCh()) return;
+    let r = null;
+    try { r = await box.syncNow({ force: true }); } catch (e) { return; }
+    if (r && r.cfg) {
+      this.loadConfigs();
+      wx.showToast({ title: '已同步 ' + r.cfg + ' 份配置', icon: 'none' });
     }
   },
 
@@ -1885,10 +1901,6 @@ Page({
     // NGSO 适配
     const isNGSO = sat.orbitType === 'NGSO';
     const ngsoClass = sat.ngsoOrbitClass || 'LEO';
-    const islMode = sat.islInputMode || 'cno';
-    const islLabel = islMode === 'cno' ? 'ISL C/N₀' : 'ISL SNR';
-    const islUnit = islMode === 'cno' ? 'dBHz' : 'dB';
-    const islDisplayVal = (sat.cIslDisplay !== undefined && sat.cIslDisplay !== '' && sat.cIslDisplay !== null) ? sat.cIslDisplay : sat.cIsl;
     // 上行站距离（NGSO）
     const upDistMode = lp.distanceMode || 'altitude';
     const upDistLabel = upDistMode === 'slantRange' ? '星地斜距' : '轨道高度';
@@ -1903,9 +1915,8 @@ Page({
       ['卫星名称', v(sat.satelliteName), '轨道类型', `${ngsoClass} / NGSO`],
       ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
       ['参考G/T', v(sat.sfdGtRef || 0) + 'dB/K'],
-      ['转发器带宽', v(sat.transponderBandwidth) + 'MHz', islLabel, v(islDisplayVal) + islUnit],
+      ['转发器带宽', v(sat.transponderBandwidth) + 'MHz'],
       ['转发器IBO', v(sat.BOi) + 'dB', '转发器OBO', v(sat.BOo) + 'dB'],
-      ['ISL跳数', v(sat.islHops)],
     ] : [
       ['卫星名称', v(sat.satelliteName), '轨道位置', v(sat.orbitPosition) + '°E'],
       ['工作频段', v(sat.frequencyBand), 'SFD', v(sat.sfdRef) + 'dBW/m²'],
@@ -2100,14 +2111,79 @@ Page({
   // 导入配置
   importConfig() {
     wx.showActionSheet({
-      itemList: ['输入分享码', '扫描二维码'],
+      itemList: ['输入分享码', '扫描二维码', '仿真平台密钥'],
       success: (res) => {
         if (res.tapIndex === 0) {
           this.inputShareCode();
         } else if (res.tapIndex === 1) {
           this.scanQRCode();
+        } else if (res.tapIndex === 2) {
+          this.inputPlatformKey();
         }
       }
+    });
+  },
+
+  // 仿真平台密钥导入：一个密钥 = 一个包，包里可能同时有链路配置与频率计划
+  // （频率计划落到「工具栏 → 频率计划」，那边也能用同一个密钥导，见 utils/satsimPack.js）
+  inputPlatformKey() {
+    wx.showModal({
+      title: '仿真平台密钥',
+      editable: true,
+      placeholderText: '8 位密钥',
+      content: '',
+      success: (res) => { if (res.confirm) this.importFromPlatformKey(res.content); }
+    });
+  },
+
+  async importFromPlatformKey(rawKey) {
+    let got;
+    wx.showLoading({ title: '拉取中...', mask: true });
+    try {
+      got = await satsimPack.fetchPack(rawKey);
+    } catch (e) {
+      wx.hideLoading();
+      wx.showModal({ title: '导入失败', content: (e && e.message) || '未知错误', showCancel: false });
+      return;
+    }
+    wx.hideLoading();
+
+    // 先出包内清单再落盘：别人的包会往本机塞东西，得先看一眼（与平台侧分享弹窗同口径）
+    const pack = got.pack;
+    const ok = await new Promise((resolve) => {
+      wx.showModal({
+        title: pack.name || '仿真平台数据',
+        content: satsimPack.describePack(pack) + '\n' + satsimPack.listPack(pack),
+        confirmText: '导入',
+        success: (r) => resolve(!!r.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!ok) return;
+
+    wx.showLoading({ title: '导入中...', mask: true });
+    let cr = { total: 0, cloud: 0, local: 0 };
+    let pr = { total: 0, added: 0, replaced: 0 };
+    try {
+      cr = await satsimPack.importConfigs(pack);
+      pr = satsimPack.importPlans(pack);
+    } catch (e) {
+      wx.hideLoading();
+      wx.showModal({ title: '导入失败', content: (e && e.message) || '未知错误', showCancel: false });
+      return;
+    }
+    wx.hideLoading();
+
+    const parts = [];
+    if (cr.total) parts.push('配置 ' + cr.total + ' 份' + (cr.local ? '（' + cr.local + ' 份存本地）' : ''));
+    if (pr.total) parts.push('频率计划 ' + pr.total + ' 份' + (pr.replaced ? '（覆盖 ' + pr.replaced + '）' : ''));
+    wx.showModal({
+      title: '已导入',
+      content: (parts.join('，') || '包里没有可导入的内容')
+        + (pr.total ? '\n频率计划在「工具栏 → 频率计划」查看。' : '')
+        + (cr.total ? '\n配置里的计算结果为平台计算值' + (pack.from ? '（' + pack.from + '）' : '') + '，本地重算后会覆盖。' : ''),
+      showCancel: false,
+      success: () => this.loadConfigs()
     });
   },
 
@@ -2454,7 +2530,6 @@ Page({
       app.globalData.linkParams = config.linkParams;
       app.globalData.calculationResults = config.calculationResults;
       app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
-      app.globalData.islInputMode = (config.satelliteParams && config.satelliteParams.islInputMode) || 'cno';
       app.globalData.markedParams = config.markedParams || [];
       
       wx.hideLoading();

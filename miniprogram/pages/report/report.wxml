@@ -71,8 +71,6 @@
             <view class="param-entry"><text class="p-label">{{t.orbitAltitude}}</text><text class="p-value">{{results.orbitAltitudeResult}}<text class="p-unit"> km</text></text></view>
             <view class="param-entry"><text class="p-label">{{t.maxDopplerUplink}}</text><text class="p-value">±{{results.maxDopplerUplinkResult}}<text class="p-unit"> kHz</text></text></view>
             <view class="param-entry"><text class="p-label">{{t.maxDopplerDownlink}}</text><text class="p-value">±{{results.maxDopplerDownlinkResult}}<text class="p-unit"> kHz</text></text></view>
-            <view class="param-entry"><text class="p-label">{{islInputMode === 'cno' ? t.islCno : t.islSnr}}</text><text class="p-value">{{satelliteParams.cIslDisplay || satelliteParams.cIsl}}<text class="p-unit"> {{islInputMode === 'cno' ? 'dBHz' : 'dB'}}</text></text></view>
-            <view class="param-entry"><text class="p-label">{{t.islHops}}</text><text class="p-value">{{satelliteParams.islHops || 0}}</text></view>
             <view class="param-entry"><text class="p-label">{{t.linkDelay}}</text><text class="p-value">{{results.linkDelayResult}}<text class="p-unit"> ms</text></text></view>
             <view class="param-entry"><text class="p-label">{{t.orbitVelocity}}</text><text class="p-value">{{results.orbitVelocityResult}}<text class="p-unit"> km/s</text></text></view>
           </block>

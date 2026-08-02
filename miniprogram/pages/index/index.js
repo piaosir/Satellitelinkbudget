@@ -118,9 +118,6 @@ Page({
     // 帧效率/频谱效率切换模式
     rsCodeMode: 'spectral', // 'fraction' (帧效率) 或 'spectral' (频谱效率 bps/Hz)
 
-    // ISL 输入模式：'cno' 输入 C/N₀(dBHz) | 'snr' 输入 SNR(dB)
-    islInputMode: 'cno',
-    
     // 余量相关
     marginValue: '3.00', // 当前余量值
     marginMode: 'manual', // 'manual' 手动设置 或 'balanced' 功带平衡
@@ -454,13 +451,6 @@ Page({
         });
       }
 
-      // 从全局数据恢复 ISL 输入模式
-      if (app.globalData.islInputMode) {
-        this.setData({
-          islInputMode: app.globalData.islInputMode
-        });
-      }
-      
       // 从全局数据恢复参数
       if (app.globalData.satelliteParams) {
         this.setData({
@@ -510,17 +500,20 @@ Page({
             this.setData({ frequencyBandIndex: bandIndex });
           }
         }
-
-        // 同步 ISL 显示值（根据 islInputMode 计算 cIslDisplay）
-        this.syncCIslDisplay();
       }
       
-      if (app.globalData.linkParams && app.globalData.linkParams[this.data.currentLinkNum]) {
-        const linkParams = app.globalData.linkParams[this.data.currentLinkNum];
+      // 载入的配置可能只有 1 号槽（仿真平台送来的配置一律只有一条链路；分享码导入亦然）。
+      // 当前停在 3 号槽时原先直接跳过这一段 —— 界面还显示着上一份配置第 3 条的参数，而全局里
+      // 那一槽已经不存在了，屏上与将要参与计算的数不是同一份。故落回 1 号槽（并把选中项一起挪过去）。
+      const _lp = app.globalData.linkParams || {};
+      const _slot = _lp[this.data.currentLinkNum] ? this.data.currentLinkNum : 1;
+      if (_lp[_slot]) {
+        const linkParams = _lp[_slot];
+        if (_slot !== this.data.currentLinkNum) this.setData({ currentLinkNum: _slot });
         this.setData({
           linkParams: linkParams
         });
-        
+
         // 同步更新DVB标准选择器索引和ModCod列表
         {
           const dvbStandard = linkParams.dvbStandard || 'custom';
@@ -600,7 +593,7 @@ Page({
           'realtimeParams.carrierBandwidth': (linkParams.carrierBandwidth !== undefined && linkParams.carrierBandwidth !== '' && linkParams.carrierBandwidth !== '--') ? linkParams.carrierBandwidth : '--'
         });
       }
-      
+
       // 从全局数据恢复计算结果
       if (app.globalData.calculationResults && app.globalData.calculationResults[this.data.currentLinkNum]) {
         const results = app.globalData.calculationResults[this.data.currentLinkNum];
@@ -710,10 +703,12 @@ Page({
     // 保存当前链路参数
     this.saveLinkParams();
     
-    // 切换到新链路
+    // 切换到新链路。★ 必须兜底：载入配置是【整块替换】 app.globalData.linkParams = config.linkParams，
+    // 而配置里可以只有 1 号槽（分享码导入本就够得着；仿真平台送来的配置一律只写 1 号槽——
+    // 那边一份配置就是一条链路）。取不到时置 undefined，界面绑定全断成白屏。
     this.setData({
       currentLinkNum: linkNum,
-      linkParams: app.globalData.linkParams[linkNum],
+      linkParams: app.globalData.linkParams[linkNum] || app.getDefaultLinkParams(),
       hasResults: false
     });
 
@@ -794,7 +789,6 @@ Page({
         if (bandIndex !== -1) update.frequencyBandIndex = bandIndex;
       }
       this.setData(update);
-      this.syncCIslDisplay();
       return;
     }
 
@@ -846,24 +840,6 @@ Page({
         update['linkParams.distanceMode'] = 'altitude';
         update['linkParams.rxDistanceMode'] = 'altitude';
       }
-
-      // 星间链路 ISL：默认「激光链路」模式，并把光学链路预算默认值实际填入输入框（用户可改）
-      const islDefaults = {
-        islMode: 'optical',
-        islHopDistance: '2000',     // 单跳距离 (km)
-        islOptTxPower: '20',        // 发射光功率 (dBm，=0.1 W)
-        islOptTxAperture: '0.08',   // 发射口径 (m)
-        islOptRxAperture: '0.08',   // 接收口径 (m)
-        islOptWavelength: '1550',   // 波长 (nm)
-        islOptPointingLoss: '3',    // 指向+光学损耗 (dB)
-        islOptSensitivity: '-30',   // 接收灵敏度 (dBm)
-        islOptSensRate: '1000',     // 灵敏度参考速率 (Mbps)
-        islOptSensEbN0: '13'        // 灵敏度点所需 Eb/N₀ (dB)
-      };
-      Object.keys(islDefaults).forEach((k) => {
-        update['satelliteParams.' + k] = islDefaults[k];
-        if (app.globalData.satelliteParams) app.globalData.satelliteParams[k] = islDefaults[k];
-      });
     }
     this.setData(update);
   },
@@ -967,29 +943,6 @@ Page({
     this.disarmSelectAll();
     const field = e.currentTarget.dataset.field;
     const value = e.detail.value;
-
-    // cIslDisplay 是 ISL 输入模式下的显示字段，需特殊处理：
-    // 同时将实际 SNR(dB) 写入 cIsl 供计算器使用
-    if (field === 'cIslDisplay') {
-      const displayVal = parseFloat(value);
-      const bwMHz = pickNum(this.data.satelliteParams.transponderBandwidth, 36);
-      const bwHz = bwMHz * 1e6;
-      let cIslSnr;
-      if (!isNaN(displayVal)) {
-        cIslSnr = this.data.islInputMode === 'cno'
-          ? String((displayVal - 10 * Math.log10(bwHz)).toFixed(4))
-          : value;
-      } else {
-        cIslSnr = '';
-      }
-      this.setData({
-        'satelliteParams.cIslDisplay': value,
-        'satelliteParams.cIsl': cIslSnr
-      });
-      this.updateRealtimeParams();
-      app.globalData.satelliteParams = this.data.satelliteParams;
-      return;
-    }
 
     this.setData({
       [`satelliteParams.${field}`]: value
@@ -1615,45 +1568,6 @@ Page({
     wx.vibrateShort({
       type: 'light'
     });
-  },
-
-  // 同步 ISL 显示值：根据 islInputMode 和 cIsl(SNR) 计算 cIslDisplay
-  syncCIslDisplay() {
-    const cIslSnr = parseFloat(this.data.satelliteParams.cIsl);
-    const bwMHz = pickNum(this.data.satelliteParams.transponderBandwidth, 36);
-    const bwHz = bwMHz * 1e6;
-    let display;
-    if (!isNaN(cIslSnr)) {
-      display = this.data.islInputMode === 'cno'
-        ? String((cIslSnr + 10 * Math.log10(bwHz)).toFixed(2))
-        : String(cIslSnr);
-    } else {
-      // cIsl 未填时，显示默认值
-      display = this.data.islInputMode === 'cno'
-        ? String((30 + 10 * Math.log10(bwHz)).toFixed(2))
-        : '';
-    }
-    this.setData({ 'satelliteParams.cIslDisplay': display });
-  },
-
-  // 切换 ISL 输入模式：C/N₀(dBHz) ↔ SNR(dB)
-  toggleIslInputMode() {
-    const newMode = this.data.islInputMode === 'cno' ? 'snr' : 'cno';
-    this.setData({ islInputMode: newMode }, () => {
-      this.syncCIslDisplay();
-    });
-    app.globalData.islInputMode = newMode;
-    wx.vibrateShort({ type: 'light' });
-  },
-
-  // 切换 ISL 计算模式：manual（直接给 SNR/C·N₀）/ rf（射频链路预算）/ optical（光学链路预算）
-  onIslModeChange(e) {
-    const mode = e.currentTarget.dataset.mode;
-    if (!mode || mode === this.data.satelliteParams.islMode) return;
-    this.setData({ 'satelliteParams.islMode': mode });
-    this.updateRealtimeParams();
-    app.globalData.satelliteParams = this.data.satelliteParams;
-    wx.vibrateShort({ type: 'light' });
   },
 
   // ============ 城市选择相关方法 ============
@@ -2359,6 +2273,24 @@ Page({
     });
   },
 
+  // 跳转到频率计划页面（只读；内容一律从仿真平台按密钥导入，本地不新建不编辑）
+  goToFreqPlan() {
+    this.setData({ showVisualPopup: false });
+    wx.navigateTo({
+      url: '/pages/freq-plan/freq-plan'
+    });
+  },
+
+  // 仿真平台绑定（认证码 / 已连接的平台 / 立即同步）。
+  // ★ pages/settings 此前在 app.json 里注册着、却没有任何一处导航到它 —— 是个够不着的孤儿页。
+  //   绑定卡放在它最上面，这里是它唯一的入口。
+  goToSettings() {
+    this.setData({ showVisualPopup: false });
+    wx.navigateTo({
+      url: '/pages/settings/settings'
+    });
+  },
+
   // 显示方位仰角工具面板
   showAzElToolPanel() {
     const defaultLat = this.data.linkParams.latitude || '';
@@ -2729,8 +2661,6 @@ Page({
       orbitType: this.data.orbitType || 'GEO',
       ngsoOrbitClass: this.data.orbitType === 'NGSO' ? (this.data.ngsoOrbitClass || 'LEO') : ''
     };
-    app.globalData.islInputMode = this.data.islInputMode || 'cno';
-    
     // 在后台执行一次计算，确保生成报告时使用最新的计算结果
     const results = this.performBackgroundCalculation();
     if (!results) {

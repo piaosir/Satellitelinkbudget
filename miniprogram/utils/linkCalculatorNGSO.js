@@ -8,7 +8,7 @@ const { getRhoWs } = require('../data/waterVaporGrid.js'); // ITU-R P.836-6 地�
 // 2. 根据用户选择使用 “轨道高度” 或 “星地斜距” 计算链路距离
 //    - 轨道高度模式采用球形地球模型下的精确公式：
 //      d = -Re·sin(el) + sqrt(Re²·sin²(el) + h² + 2·Re·h)
-// 3. 在最后合并上下行得到总 C/T 时引入星间链路 (ISL)
+// 3. 链路模型为「地面站—卫星—地面站」透明弯管，不含星间链路(ISL)
 // 4. 星地经度差在 NGSO 链路计算中的作用说明：详见文件末尾分析注释
 
 const validator = require('./validator.js');
@@ -458,43 +458,6 @@ function performCalculations(satParams, inputs) {
   const orbitInclination = (satParams.orbitInclination !== undefined && satParams.orbitInclination !== '' && satParams.orbitInclination !== null)
     ? parseFloat(satParams.orbitInclination) : 50; // 度，默认 50°
 
-  // ============ NGSO 专属：星间链路(ISL) 参数 ============
-  // cIsl: ISL SNR (dB，解调带宽内，用户输入）；计算时内部转换为 C/T (dBW/K)
-  // islHops: 星间链路跳数（0 表示无 ISL）
-  // islDistance: 每跳星间链路距离，取 1500 km（LEO 典型值；基于 2(R_E+h)sin(π/N) 几何估算，
-  //              550 km/22颗/面 ≈ 1960 km，1200 km/18颗/面 ≈ 2630 km，取保守代表值）
-  const ISL_HOP_DISTANCE_KM = 2000; // km/跳，代表性 LEO 星间链路单跳距离
-  const cIsl = (satParams.cIsl !== undefined && satParams.cIsl !== '' && satParams.cIsl !== null)
-    ? parseFloat(satParams.cIsl) : 30;
-  const islHopsRaw = (satParams.islHops !== undefined && satParams.islHops !== '' && satParams.islHops !== null)
-    ? parseFloat(satParams.islHops) : 0;
-  const islHops = (isFinite(islHopsRaw) && islHopsRaw >= 0) ? Math.floor(islHopsRaw) : 0;
-  // ISL 计算模式：'manual'（直接给 SNR/C·N₀，默认，兼容旧配置）/ 'rf'（射频链路预算）/ 'optical'（光学链路预算）
-  const islMode = (satParams.islMode === 'rf' || satParams.islMode === 'optical') ? satParams.islMode : 'manual';
-  // ISL 参数读取助手：取数，缺省回退 def
-  const islNum = (key, def) => {
-    const v = satParams[key];
-    if (v === undefined || v === '' || v === null) return def;
-    const n = parseFloat(v);
-    return (isFinite(n)) ? n : def;
-  };
-  // 单跳 ISL 距离（km）：用户可覆盖，否则用代表值
-  const islHopDistanceKm = islNum('islHopDistance', ISL_HOP_DISTANCE_KM);
-  // —— RF ISL 参数（默认取代表性高增益定向星间终端：Ka/V 频段，~45 dBW EIRP、~12 dB/K G/T）——
-  const islRfEirp = islNum('islEirp', 45);        // ISL 发射 EIRP (dBW)
-  const islRfGT = islNum('islGT', 12);            // ISL 接收 G/T (dB/K)
-  const islRfFreq = islNum('islFreq', 23);        // ISL 频率 (GHz，典型 Ka/V 频段星间)
-  const islRfMiscLoss = islNum('islMiscLoss', 1); // ISL 其他损耗 (dB)
-  // —— 光学 ISL 参数（接收灵敏度法）——
-  const islOptTxPower = islNum('islOptTxPower', 20);      // 发射光功率 (dBm，厂商手册口径；默认 20 dBm = 0.1 W)
-  const islOptTxAperture = islNum('islOptTxAperture', 0.08); // 发射望远镜口径 (m)
-  const islOptRxAperture = islNum('islOptRxAperture', 0.08); // 接收望远镜口径 (m)
-  const islOptWavelengthNm = islNum('islOptWavelength', 1550); // 工作波长 (nm)
-  const islOptPointingLoss = islNum('islOptPointingLoss', 3);  // 指向 + 光学损耗 (dB)
-  // 接收灵敏度三参数：在参考速率、目标 BER 下的最小接收功率 P_req（单位 dBm，对齐厂商手册），及该点所需 Eb/N₀
-  const islOptSensitivity = islNum('islOptSensitivity', -30); // 接收灵敏度 P_req (dBm，厂商手册值，如 -36 dBm)
-  const islOptSensRate = islNum('islOptSensRate', 1000);      // 灵敏度参考速率 (Mbps)
-  const islOptSensEbN0 = islNum('islOptSensEbN0', 13);        // 灵敏度点所需 Eb/N₀ (dB，由 BER+调制格式查得，用户自查填入)
   const aciUplinkFactor = satParams.aciUplinkFactor !== undefined && satParams.aciUplinkFactor !== '' && satParams.aciUplinkFactor !== null
     ? parseFloat(satParams.aciUplinkFactor) 
     : 30; // dB
@@ -802,54 +765,6 @@ function performCalculations(satParams, inputs) {
   const noiseBW = symbolRate * 1; // kHz
   const RXnoiseBW = 10 * Math.log10(noiseBW * 1000); // dBHz
 
-  // ============ ISL 单跳 C/T (dBW/K) ============
-  // 三种模式：
-  //  manual：用户直接给 SNR/C·N₀（解调带宽内）→ C/T = SNR + 10·lgB + k（B 取转发器带宽，与旧版兼容）
-  //  rf    ：射频链路预算 C/T = EIRP − FSL(d,f) + G/T − 其他损耗
-  //  optical：光学链路预算 C/N₀ = P_tx + G_tx − FSL_opt − 指向损耗 + G_rx − N₀；C/T = C/N₀ + k
-  let cIsl_CT;
-  // 按链路类型捕获中间量，供瀑布表「ISL 性能评估」段按 islMode 分链路展示（逐行可算通）
-  const islBudgetDetail = {};
-  if (islMode === 'rf') {
-    // FSL：与上下行同式（d 取单跳 ISL 距离，单位 m；f 单位 GHz）
-    const islFsl = 20 * (Math.log10(islRfFreq) + Math.log10(islHopDistanceKm * 1000)) +
-                   20 * Math.log10((4 * CONSTANTS.PI) / 0.299792458);
-    cIsl_CT = islRfEirp - islFsl + islRfGT - islRfMiscLoss;
-    islBudgetDetail.rf = {
-      eirp: islRfEirp, freq: islRfFreq, dist: islHopDistanceKm,
-      fsl: islFsl, gt: islRfGT, miscLoss: islRfMiscLoss
-    };
-  } else if (islMode === 'optical') {
-    // 几何（严格）：望远镜增益 G = 20·log10(π·D/λ)（衍射极限孔径增益）；FSL = 20·log10(4π·d/λ)
-    const lambdaM = islOptWavelengthNm * 1e-9;        // 波长 (m)
-    const dM = islHopDistanceKm * 1000;               // 单跳距离 (m)
-    const gTxOpt = 20 * Math.log10(CONSTANTS.PI * islOptTxAperture / lambdaM);
-    const gRxOpt = 20 * Math.log10(CONSTANTS.PI * islOptRxAperture / lambdaM);
-    const fslOpt = 20 * Math.log10(4 * CONSTANTS.PI * dM / lambdaM);
-    // 接收光功率（截断/波前等真实劣化并入「指向+光学损耗」）
-    // 发射光功率以 dBm 输入（厂商手册口径），此处 −30 换算到 dBW 再参与计算
-    const pRxOpt = (islOptTxPower - 30) + gTxOpt - fslOpt - islOptPointingLoss + gRxOpt; // dBW
-    // 接收灵敏度法：由灵敏度反推接收机等效噪声谱密度 N₀ = P_req − 10·lg(R_ref) − (Eb/N₀)_req
-    // 灵敏度以 dBm 输入（厂商手册口径），此处 −30 换算到 dBW 再参与计算
-    const n0Opt = (islOptSensitivity - 30) - 10 * Math.log10(islOptSensRate * 1e6) - islOptSensEbN0; // dBW/Hz
-    const cn0Opt = pRxOpt - n0Opt;                    // C/N₀ (dBHz)
-    cIsl_CT = cn0Opt + CONSTANTS.BOLTZMANN;           // C/T = C/N₀ + k
-    // 展示统一用 dBm 口径（与发射功率/灵敏度输入一致，逐行算得通）：pRx、N₀ 各 +30 转 dBm
-    islBudgetDetail.opt = {
-      txPowerDbm: islOptTxPower, txAperture: islOptTxAperture, rxAperture: islOptRxAperture,
-      wavelengthNm: islOptWavelengthNm, dist: islHopDistanceKm,
-      gTx: gTxOpt, fsl: fslOpt, pointLoss: islOptPointingLoss, gRx: gRxOpt,
-      pRxDbm: pRxOpt + 30, n0Dbm: n0Opt + 30, cn0: cn0Opt,
-      sensDbm: islOptSensitivity, sensRate: islOptSensRate, sensEbN0: islOptSensEbN0
-    };
-  } else {
-    // manual（默认，兼容旧配置）：SNR → C/T = SNR + 10·lgB + k
-    cIsl_CT = cIsl + 10 * Math.log10(transponderBandwidth * 1e6) + CONSTANTS.BOLTZMANN;
-    islBudgetDetail.manual = {
-      inputSnr: cIsl, refBandwidthMHz: transponderBandwidth
-    };
-  }
-  
   // 载波门限值C/T
   const carrierThreshold = ebno + CONSTANTS.BOLTZMANN + 10 * Math.log10(infoRate * 1000);
   
@@ -929,13 +844,9 @@ function performCalculations(satParams, inputs) {
   );
   const downlinkTotalCT = 10 * Math.log10(downlinkTotalCTLinear);
   
-  // 最后合并上下行得到总C/T
-  // NGSO 专属：在此处引入星间链路 (ISL) 贡献
-  //   用户输入单跳 C/N，已在上方转换为 C/T（cIsl_CT），多跳按线性倒数累加
-  //   islHops = 0 时不引入任何项（保持兼容 GEO 行为）
+  // 最后合并上下行得到总C/T（透明弯管：仅上行 ⊕ 下行，无星间链路项）
   const invTotalCT = Math.pow(10, -uplinkTotalCT / 10)
-                   + Math.pow(10, -downlinkTotalCT / 10)
-                   + (islHops > 0 ? islHops * Math.pow(10, -cIsl_CT / 10) : 0);
+                   + Math.pow(10, -downlinkTotalCT / 10);
   const totalCTLinear = 1 / invTotalCT;
   const totalCT = 10 * Math.log10(totalCTLinear);
   
@@ -998,11 +909,10 @@ function performCalculations(satParams, inputs) {
   );
   const rainDownlinkTotalCT = 10 * Math.log10(rainDownlinkTotalCTLinear);
   
-  // 合并上下行得到下行雨卫星总C/T（含ISL，与晴天 totalCT 保持一致）
+  // 合并上下行得到下行雨卫星总C/T（口径与晴天 totalCT 保持一致）
   const totalInterferenceLinear = 1 / (
     Math.pow(10, -rainUplinkTotalCT / 10) +
-    Math.pow(10, -rainDownlinkTotalCT / 10) +
-    (islHops > 0 ? islHops * Math.pow(10, -cIsl_CT / 10) : 0)
+    Math.pow(10, -rainDownlinkTotalCT / 10)
   );
   
   // 下行雨卫星总C/T
@@ -1107,28 +1017,10 @@ function performCalculations(satParams, inputs) {
   const rxAntennaUnitAreaGain = 10 * Math.log10(4 * CONSTANTS.PI / (rxWavelength ** 2));
   const arrivalPFDAtGround = cLevelAtGround + rxAntennaUnitAreaGain;
   const downlinkThermalCN = cLevelAtGround + gOverTe - downlinkGtDegEff - CONSTANTS.BOLTZMANN - RXnoiseBW;
-  // ISL（星间链路）折算到载波噪声带宽的等效 C/N（原始：ISL 链路自身性能，供 ISL 性能段展示）
-  // 单跳 C/N = 单跳 C/T − k − 10·lgB（B 为载波噪声带宽 RXnoiseBW）；多跳噪声并联（线性倒数相加）
-  const islPerHopCN = islHops > 0 ? (cIsl_CT - CONSTANTS.BOLTZMANN - RXnoiseBW) : null;
-  const islCNlinearSum = islHops > 0 ? islHops * Math.pow(10, -islPerHopCN / 10) : 0;
-  // ISL 总等效 C/N（islHops 跳并联后）
-  const islTotalCN = islHops > 0 ? -10 * Math.log10(islCNlinearSum) : null;
-  // ── ISL 并入「上行侧」（口径统一到 totalCT）──
-  // ISL 已计入工作区饱和总 C/T（invTotalCT 含 ISL 项）。为使瀑布里 ISL 的影响 ＝ 它在 totalCT 的影响，
-  // 不直接用 ISL 自身工作点 C/N（islTotalCN，会过度惩罚、致下行反解为负→300、合成>上行），
-  // 而是取 ISL 在饱和总 C/T 中的噪声份额 f_isl = (islHops·10^(-cIsl_CT/10)) / invTotalCT，
-  // 折算到工作点：ISL 等效 C/N = carrierTotalCN − 10·lg(f_isl)，即级联噪声份额 = f_isl·10^(-carrierTotalCN/10)。
-  // 这样 ISL 对合计的代价与它对 totalCT 的代价一致（小），上行(含ISL) 恒 > 合计，反解下行恒为正。
-  const islFraction = islHops > 0 ? (islHops * Math.pow(10, -cIsl_CT / 10)) / invTotalCT : 0;
-  const islCascadeLin = islFraction * Math.pow(10, -carrierTotalCN / 10);
-  const uplinkWithIslCN = -10 * Math.log10(Math.pow(10, -uplinkCN / 10) + islCascadeLin);
-  // 下行 C/N 反算：有效上行(含 ISL) ⊕ 下行 = 合计，故由合计扣除有效上行反算下行
-  // islHops=0 时 islCascadeLin=0、uplinkWithIslCN=uplinkCN，退化为原逻辑，保持兼容
+  // 下行 C/N 反算：上行 ⊕ 下行 = 合计（噪声并联），故由合计扣除上行反算下行
   const downlinkCN = -10 * Math.log10(
-    Math.max(Math.pow(10, -carrierTotalCN / 10) - Math.pow(10, -uplinkWithIslCN / 10), 1e-30)
+    Math.max(Math.pow(10, -carrierTotalCN / 10) - Math.pow(10, -uplinkCN / 10), 1e-30)
   );
-  // ISL 对上行侧的代价（dB，≥0）：上行(纯) − 上行(含 ISL)，与 totalCT 口径一致
-  const islImpact = islHops > 0 ? (uplinkCN - uplinkWithIslCN) : null;
   // 下行干扰等效 C/I（仅展示，由热噪声与反算 C/N 反推）
   const downlinkInterferenceCN = -10 * Math.log10(
     Math.max(Math.pow(10, -downlinkCN / 10) - Math.pow(10, -downlinkThermalCN / 10), 1e-30)
@@ -1668,8 +1560,6 @@ function performCalculations(satParams, inputs) {
   results.uplinkScintillationResult = uplinkScintillation.toFixed(2); // 上行闪烁衰减 AS(p) (dB)
   results.uplinkTotalAttenuationResult = uplinkTotalAttenuation.toFixed(2); // 上行总衰减 AT(p) ITU-R P.618-14 §2.5
   results.uplinkCN = uplinkCN.toFixed(2);
-  // 有效上行 C/N（已并入 ISL；无 ISL 时等于上行 C/N）。NGSO 瀑布「合成」行用它与下行合成，使 上行(含ISL)⊕下行=合计
-  results.uplinkWithIslCN = uplinkWithIslCN.toFixed(2);
   results.uplinkThermalCN = uplinkThermalCN.toFixed(2); // 上行热噪声 C/N
   results.uplinkInterferenceCN = uplinkInterferenceCN.toFixed(2); // 上行干扰 C/I（表达为 C/N）
   results.uplinkRainDominant = uplinkRainDominant; // 上行降雨是否占主导
@@ -1712,49 +1602,6 @@ function performCalculations(satParams, inputs) {
   results.downlinkCN = downlinkCN.toFixed(2);
   results.downlinkThermalCN = downlinkThermalCN.toFixed(2); // 下行热噪声 C/N
   results.downlinkInterferenceCN = downlinkInterferenceCN.toFixed(2); // 下行干扰 C/I（表达为 C/N）
-  // ============ ISL（星间链路）结果（仅 islHops > 0 时输出，供 NGSO 瀑布表 ISL 段使用）============
-  results.islHopsResult = islHops;
-  if (islHops > 0) {
-    results.islPerHopCTResult = cIsl_CT.toFixed(2);                 // 单跳 ISL C/T (dBW/K)
-    results.islPerHopCNResult = islPerHopCN.toFixed(2);             // 单跳 ISL 折算到载波噪声带宽的 C/N (dB)
-    results.islTotalCTResult = (cIsl_CT - 10 * Math.log10(islHops)).toFixed(2); // 多跳并联后等效 C/T (dBW/K)
-    results.islTotalCNResult = islTotalCN.toFixed(2);               // 多跳并联后等效 C/N (dB，ISL 链路自身)
-    results.islImpactResult = islImpact.toFixed(2);                 // ISL 对合计 C/N 的代价 (dB)
-    // 级联折算 C/N（口径同 totalCT）：使 上行C/N ⊕ 该值 = 上行C/N(含ISL)，瀑布逐行算得通
-    results.islCascadeCNResult = (-10 * Math.log10(islCascadeLin)).toFixed(2);
-    // ISL 计算模式 + 各模式链路预算中间量（供瀑布「ISL 性能评估」段按链路类型分别展示）
-    results.islModeResult = islMode; // 'manual' | 'rf' | 'optical'
-    if (islMode === 'rf' && islBudgetDetail.rf) {
-      const b = islBudgetDetail.rf;
-      results.islRfEirpResult = b.eirp.toFixed(2);        // ISL EIRP (dBW)
-      results.islRfFreqResult = b.freq.toFixed(2);        // ISL 频率 (GHz)
-      results.islRfDistResult = b.dist.toFixed(0);        // 单跳距离 (km)
-      results.islRfFslResult = b.fsl.toFixed(2);          // ISL 自由空间损耗 (dB)
-      results.islRfGtResult = b.gt.toFixed(2);            // ISL G/T (dB/K)
-      results.islRfMiscLossResult = b.miscLoss.toFixed(2); // 其他损耗 (dB)
-    } else if (islMode === 'optical' && islBudgetDetail.opt) {
-      const b = islBudgetDetail.opt;
-      results.islOptTxPowerResult = b.txPowerDbm.toFixed(2);   // 发射光功率 (dBm)
-      results.islOptTxApertureResult = b.txAperture.toFixed(3); // 发射口径 (m)
-      results.islOptRxApertureResult = b.rxAperture.toFixed(3); // 接收口径 (m)
-      results.islOptWavelengthResult = b.wavelengthNm.toFixed(0); // 波长 (nm)
-      results.islOptDistResult = b.dist.toFixed(0);            // 单跳距离 (km)
-      results.islOptGTxResult = b.gTx.toFixed(2);              // 发射望远镜增益 (dBi)
-      results.islOptFslResult = b.fsl.toFixed(2);              // 光学自由空间损耗 (dB)
-      results.islOptPointLossResult = b.pointLoss.toFixed(2);  // 指向+光学损耗 (dB)
-      results.islOptGRxResult = b.gRx.toFixed(2);              // 接收望远镜增益 (dBi)
-      results.islOptPRxResult = b.pRxDbm.toFixed(2);           // 接收光功率 (dBm)
-      results.islOptN0Result = b.n0Dbm.toFixed(2);             // 等效噪声谱密度 N₀ (dBm/Hz)
-      results.islOptCN0Result = b.cn0.toFixed(2);              // 单跳 C/N₀ (dBHz)
-      results.islOptSensResult = b.sensDbm.toFixed(2);         // 接收灵敏度 (dBm)
-      results.islOptSensRateResult = b.sensRate.toFixed(0);    // 灵敏度参考速率 (Mbps)
-      results.islOptSensEbN0Result = b.sensEbN0.toFixed(2);    // 灵敏度点 Eb/N₀ (dB)
-    } else if (islMode === 'manual' && islBudgetDetail.manual) {
-      const b = islBudgetDetail.manual;
-      results.islManualSnrResult = b.inputSnr.toFixed(2);          // 输入 SNR (dB)
-      results.islManualRefBwResult = b.refBandwidthMHz.toFixed(2); // 参考带宽 (MHz)
-    }
-  }
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
   results.actualDownlinkCN0 = (actualDownlinkCT + 228.6).toFixed(2); // 载波下行C/N₀
   results.satellitePFD = satellitePFD.toFixed(2);
@@ -1783,11 +1630,10 @@ function performCalculations(satParams, inputs) {
   results.BOoResult = BOo;
   results.antennaGainResult = antennaGain.toFixed(2);
   results.transponderBandwidthResult = transponderBandwidth;
-  // 链路时延（NGSO单程端到端传播时延，含ISL跳数）
-  // τ = (d_up + d_ISL + d_down) / c
-  // d_up/d_down: 上/下行星地斜距(km)；d_ISL = islHops × islDistance (km)；c = 299792.458 km/s
-  const islTotalDistance = islHops * ISL_HOP_DISTANCE_KM; // ISL段总距离 (km)
-  const linkDelay = (slantRange + islTotalDistance + rxSlantRange) / 299792.458 * 1000; // ms
+  // 链路时延（NGSO单程端到端传播时延：地面站→卫星→地面站）
+  // τ = (d_up + d_down) / c
+  // d_up/d_down: 上/下行星地斜距(km)；c = 299792.458 km/s
+  const linkDelay = (slantRange + rxSlantRange) / 299792.458 * 1000; // ms
   results.linkDelayResult = linkDelay.toFixed(1);
   // 上/下行单程传播时延（分列展示，上下行星地斜距不同 → 时延可不同）
   results.linkDelayUpResult = (slantRange / 299792.458 * 1000).toFixed(1);     // ms，上行段传播时延
@@ -1878,7 +1724,7 @@ function performCalculations(satParams, inputs) {
   results.berResult = `1×10${superscriptExp}`;
   results.ebnoResult = ebno.toFixed(2);
   results.esnoResult = esno.toFixed(2);
-  // 实际 Eb/N₀ / Es/N₀：由实际合成 C/N 折算（门限值 + 链路余量，ISL 已按份额并入合成 C/N）
+  // 实际 Eb/N₀ / Es/N₀：由实际合成 C/N 折算（门限值 + 链路余量）
   results.ebnoActualResult = (ebno + linkmargin).toFixed(2);
   results.esnoActualResult = (esno + linkmargin).toFixed(2);
   // 帧效率显示：保持原始输入格式（分数或小数）

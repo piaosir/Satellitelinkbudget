@@ -152,40 +152,6 @@ const WF_DICT = {
   '卫星参数': 'Satellite Parameters',
   '卫星参数（上行 / 下行）': 'Satellite Parameters (Up / Down)',
   '最大多普勒': 'Max Doppler Shift',
-  '星间链路 ISL（性能评估）': 'Inter-Satellite Link ISL (Performance)',
-  'ISL 跳数': 'ISL Hops',
-  'ISL 单跳 C/T': 'ISL C/T per Hop',
-  'ISL 单跳 C/N': 'ISL C/N per Hop',
-  'ISL 等效 C/T（并联）': 'ISL Equivalent C/T (Combined)',
-  'ISL 等效 C/N（并联）': 'ISL Equivalent C/N (Combined)',
-  'ISL 等效 C/N（计入总C/T）': 'ISL Equivalent C/N (into Total C/T)',
-  'ISL 对上行 C/N 代价': 'ISL Cost to Uplink C/N',
-  '上行 C/N（含 ISL）': 'Uplink C/N (incl. ISL)',
-  '跳': 'hops',
-  // —— ISL 分链路展示（按 islMode）——
-  '星间链路 ISL（经验值）': 'Inter-Satellite Link ISL (Empirical)',
-  '星间链路 ISL（微波链路）': 'Inter-Satellite Link ISL (Microwave)',
-  '星间链路 ISL（激光链路）': 'Inter-Satellite Link ISL (Laser)',
-  'ISL 频率': 'ISL Frequency',
-  '单跳距离': 'Per-Hop Distance',
-  'ISL EIRP': 'ISL EIRP',
-  'ISL 自由空间损耗': 'ISL Free Space Loss',
-  'ISL G/T': 'ISL G/T',
-  '发射口径': 'Tx Aperture',
-  '接收口径': 'Rx Aperture',
-  '发射光功率': 'Tx Optical Power',
-  '发射望远镜增益': 'Tx Telescope Gain',
-  '光学自由空间损耗': 'Optical Free Space Loss',
-  '指向+光学损耗': 'Pointing + Optical Loss',
-  '接收望远镜增益': 'Rx Telescope Gain',
-  '接收光功率': 'Rx Optical Power',
-  '接收灵敏度': 'Rx Sensitivity',
-  '灵敏度参考速率': 'Sensitivity Ref. Rate',
-  '灵敏度 Eb/N₀': 'Sensitivity Eb/N₀',
-  '等效噪声谱密度 N₀': 'Equiv. Noise PSD N₀',
-  '单跳 C/N₀': 'C/N₀ per Hop',
-  '输入 SNR': 'Input SNR',
-  '参考带宽': 'Reference Bandwidth',
   // —— 可见性几何 / NGSO 干扰适配 ——
   '可见性几何': 'Visibility Geometry',
   '轨道周期': 'Orbital Period',
@@ -516,14 +482,13 @@ function createBuilder(ctx) {
     return segs;
   };
 
-  // ============ NGSO 链路瀑布（透明弯管 + 星间链路 ISL 模型） ============
-  // 与 GEO 构建器完全独立：卫星段改为「卫星参数」（无轨道位置）、级联引入 ISL、
-  // 合成为 上行 ⊕ ISL ⊕ 下行，并新增 ISL 性能评估段。改动本函数不影响 GEO。
+  // ============ NGSO 链路瀑布（透明弯管模型） ============
+  // 与 GEO 构建器完全独立：卫星段改为「卫星参数」（无轨道位置），
+  // 合成为 上行 ⊕ 下行（噪声并联）。改动本函数不影响 GEO。
   b.buildNGSO = function () {
     const r = results;
     if (r.linkmargin === undefined) return [];
     const segs = [];
-    const hasIsl = b._num(r.islHopsResult) > 0;
 
     // ① 载波与调制参数（链路级，单列）
     segs.push(b._refSeg('载波与调制参数', [
@@ -629,9 +594,8 @@ function createBuilder(ctx) {
       ['系统噪声温度(dB)', 'systemNoiseTempDbResult', 'dBK']
     ]));
 
-    // ⑥ 链路预算级联（上行 / 下行 / ISL / 合计 三列）
-    // NGSO 合成：上行 C/N ⊕ ISL 等效 C/N ⊕ 下行 C/N（噪声并联）= 合计 C/N。
-    // ISL 段折算到载波噪声带宽后并入合成，使整表「逐行可算通」。
+    // ⑥ 链路预算级联（上行 / 下行 / 合计 三列）
+    // NGSO 合成：上行 C/N ⊕ 下行 C/N（噪声并联）= 合计 C/N，整表「逐行可算通」。
     const C = b._cRow;
     const T = b._cTri;
     const num = (k) => b._num(r[k]);
@@ -696,78 +660,13 @@ function createBuilder(ctx) {
       C('loss', '下行干扰损失 ACI/ASI/XPI/IM', dnIntfLoss, 'dB', 'down'),
       C('sub', '下行 C/N', null, 'dB', 'down')
     ];
-    // —— 星间链路 ISL 并入「上行侧」：弯管端到端落地前噪声逐段累加，上行 C/N ⊕ ISL = 有效上行 C/N ——
-    // 插在「上行 C/N」之后、下行段之前，得到「上行 C/N（含 ISL）」，使合成 上行(含ISL)⊕下行=合计 逐行算得通
-    if (hasIsl) {
-      const islUpRows = [
-        C('ref', 'ISL 跳数', 'islHopsResult', '跳', 'up'),
-        C('ref', 'ISL 单跳 C/T', 'islPerHopCTResult', 'dBW/K', 'up'),
-        // 折算入总 C/T 的 ISL 等效 C/N：上行 C/N ⊕ 该值 = 上行 C/N（含 ISL），逐行算得通
-        C('ref', 'ISL 等效 C/N（计入总C/T）', 'islCascadeCNResult', 'dB', 'up'),
-        C('sub', '上行 C/N（含 ISL）', 'uplinkWithIslCN', 'dB', 'up')
-      ];
-      const idx = cascadeRows.findIndex((row) => row.key === 'up·上行 C/N');
-      if (idx >= 0) cascadeRows.splice(idx + 1, 0, ...islUpRows);
-      else cascadeRows.push(...islUpRows);
-    }
-    // —— 合成与余量：有效上行（含 ISL）⊕ 下行（噪声并联）= 合计 ——
+    // —— 合成与余量：上行 ⊕ 下行（噪声并联）= 合计 ——
     cascadeRows.push(
-      T('kpi', 'C/N（合成）', hasIsl ? 'uplinkWithIslCN' : 'uplinkCN', 'downlinkCN', 'carrierTotalCN', 'dB'),
+      T('kpi', 'C/N（合成）', 'uplinkCN', 'downlinkCN', 'carrierTotalCN', 'dB'),
       T('ref', '门限 C/N', null, null, 'thresholdCN', 'dB'),
       T('margin', '链路余量', null, null, 'linkmargin', 'dB')
     );
     segs.push(b._cascadeTriSeg('链路预算级联（上行 / 下行 / 合计）', cascadeRows));
-
-    // ⑥-b 星间链路 ISL（性能评估，单列；按 islMode 分链路展示，逐行可算通）
-    // 经验值(manual)：仅展示输入 SNR → 折算单跳 C/T；
-    // 微波(rf)：EIRP − FSL(频率/距离) + G/T − 其他损耗 = 单跳 C/T；
-    // 激光(optical)：发射光功率 + 发射增益 − 光学FSL − 指向损耗 + 接收增益 = 接收光功率，−N₀ = C/N₀，+k = 单跳 C/T。
-    if (hasIsl) {
-      const islMode = r.islModeResult || 'manual';
-      const islRows = [['ISL 跳数', 'islHopsResult', '跳']];
-      if (islMode === 'rf') {
-        islRows.push(
-          ['ISL 频率', 'islRfFreqResult', 'GHz'],
-          ['单跳距离', 'islRfDistResult', 'km'],
-          ['ISL EIRP', 'islRfEirpResult', 'dBW'],
-          ['ISL 自由空间损耗', 'islRfFslResult', 'dB'],
-          ['ISL G/T', 'islRfGtResult', 'dB/K'],
-          ['其他损耗', 'islRfMiscLossResult', 'dB']
-        );
-      } else if (islMode === 'optical') {
-        islRows.push(
-          ['波长', 'islOptWavelengthResult', 'nm'],
-          ['发射口径', 'islOptTxApertureResult', 'm'],
-          ['接收口径', 'islOptRxApertureResult', 'm'],
-          ['单跳距离', 'islOptDistResult', 'km'],
-          ['发射光功率', 'islOptTxPowerResult', 'dBm'],
-          ['发射望远镜增益', 'islOptGTxResult', 'dBi'],
-          ['光学自由空间损耗', 'islOptFslResult', 'dB'],
-          ['指向+光学损耗', 'islOptPointLossResult', 'dB'],
-          ['接收望远镜增益', 'islOptGRxResult', 'dBi'],
-          ['接收光功率', 'islOptPRxResult', 'dBm'],
-          ['接收灵敏度', 'islOptSensResult', 'dBm'],
-          ['灵敏度参考速率', 'islOptSensRateResult', 'Mbps'],
-          ['灵敏度 Eb/N₀', 'islOptSensEbN0Result', 'dB'],
-          ['等效噪声谱密度 N₀', 'islOptN0Result', 'dBm/Hz'],
-          ['单跳 C/N₀', 'islOptCN0Result', 'dBHz']
-        );
-      } else {
-        islRows.push(
-          ['输入 SNR', 'islManualSnrResult', 'dB'],
-          ['参考带宽', 'islManualRefBwResult', 'MHz']
-        );
-      }
-      islRows.push(
-        ['ISL 单跳 C/T', 'islPerHopCTResult', 'dBW/K'],
-        ['ISL 单跳 C/N', 'islPerHopCNResult', 'dB'],
-        ['ISL 等效 C/T（并联）', 'islTotalCTResult', 'dBW/K'],
-        ['ISL 等效 C/N（并联）', 'islTotalCNResult', 'dB'],
-        ['ISL 对上行 C/N 代价', 'islImpactResult', 'dB']
-      );
-      const modeLabel = islMode === 'rf' ? '微波链路' : (islMode === 'optical' ? '激光链路' : '经验值');
-      segs.push(b._refSeg('星间链路 ISL（' + modeLabel + '）', islRows));
-    }
 
     // ⑦ 可用度与资源（计算结果，单列）
     segs.push(b._refSeg('可用度与资源', [
@@ -804,9 +703,6 @@ function buildLinkSummary(results, meta) {
   const r = results || {};
   const m = meta || {};
   const d = (v) => (v === undefined || v === null || v === '' || v === '-') ? '—' : ('' + v);
-  // NGSO 含 ISL 时，上行侧口径取「上行 C/N（含 ISL）」，与级联表合成行一致
-  const hasIsl = parseFloat(r.islHopsResult) > 0;
-  const upCN = (hasIsl && r.uplinkWithIslCN !== undefined) ? r.uplinkWithIslCN : r.uplinkCN;
   return {
     satellite: d(m.satelliteName),
     orbit: d(m.orbitLabel),
@@ -816,7 +712,7 @@ function buildLinkSummary(results, meta) {
     fec: d(r.fecResult),
     carrierBW: d(r.allocBandwidthResult),
     powerBW: d(r.PowerBWResult),
-    upCN: d(upCN),
+    upCN: d(r.uplinkCN),
     downCN: d(r.downlinkCN),
     totalCN: d(r.carrierTotalCN),
     thresholdCN: d(r.thresholdCN),

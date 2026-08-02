@@ -45,6 +45,10 @@ App({
       } catch (e) {
         console.warn('TLE 后台刷新启动失败：', e);
       }
+
+      // 仿真平台绑定：后台自动同步（见 utils/satsimBox.js）。
+      // 没绑定过就直接返回，不产生任何网络调用。
+      this.satsimSync();
     }
 
     this.globalData = {
@@ -386,11 +390,7 @@ App({
       aciDownlinkFactor: 30,
       adjDownlinkFactor: 25,
       xpolDownlinkFactor: 26,
-      xpdrIntermodFactor: 21,
-
-      // NGSO 专属参数
-      cIsl: 30,
-      islHops: 0
+      xpdrIntermodFactor: 21
     };
   },
 
@@ -462,6 +462,33 @@ App({
       rateCalcMode: 'infoRate',
       symbolRate: '--'
     };
+  },
+
+  // 回到前台也同步一次：用户常常是「在电脑上发完，立刻掏出手机看」，
+  // 这时小程序多半已经在后台开着，只有 onShow 会触发。satsimBox 自带 60s 节流，不怕频繁。
+  onShow: function () { this.satsimSync(); },
+
+  // 后台静默同步。全程吞异常：这是个背景任务，没绑定 / 没网 / 云函数没部署都不该打扰用户。
+  satsimSync: function () {
+    try {
+      const box = require('./utils/satsimBox');
+      if (!box.getCh()) return;                 // 没绑定过，不发任何请求
+      box.syncNow().then((r) => {
+        if (!r || !r.ok || !r.n) return;
+        this.globalData = this.globalData || {};
+        this.globalData.satsimLastSync = r;
+        // 全自动同步下用户不知道发生了什么，给一句。延迟让首屏先渲染完，免得和页面自己的 loading 打架。
+        const parts = [];
+        if (r.cfg) parts.push(r.cfg + ' 份配置');
+        if (r.plan) parts.push(r.plan + ' 份频率计划');
+        if (r.gxt) parts.push(r.gxt + ' 份覆盖');
+        setTimeout(() => {
+          wx.showToast({ title: '已同步 ' + parts.join(' · '), icon: 'none', duration: 2400 });
+        }, 1200);
+      }).catch((e) => console.warn('[satsim] 自动同步失败：', e));
+    } catch (e) {
+      console.warn('[satsim] 自动同步启动失败：', e);
+    }
   },
 
   globalData: {

@@ -68,9 +68,6 @@ const translations = {
     linkDelay: '链路时延',
     maxDopplerUplink: '上行最大多普勒',
     maxDopplerDownlink: '下行最大多普勒',
-    islCno: 'ISL C/N₀',
-    islSnr: 'ISL SNR',
-    islHops: 'ISL跳数',
     fsl: '自由空间损耗',
     rainAtten: '降雨衰减',
     feederLoss: '馈线损耗',
@@ -163,9 +160,6 @@ const translations = {
     linkDelay: 'Link Delay',
     maxDopplerUplink: 'Max Uplink Doppler',
     maxDopplerDownlink: 'Max Downlink Doppler',
-    islCno: 'ISL C/N₀',
-    islSnr: 'ISL SNR',
-    islHops: 'ISL Hops',
     fsl: 'Free Space Loss',
     rainAtten: 'Rain Atten.',
     feederLoss: 'Feeder Loss',
@@ -207,7 +201,6 @@ Page({
     noiseRatioLabel: 'Eb/N₀', // 默认显示Eb/N0
     isNGSO: false,
     reportOrbitMeta: '',
-    islInputMode: 'cno',
     lang: 'zh', // 当前语言
     t: translations.zh, // 当前翻译文本
     elevationWarningInfo: { tx: null, rx: null }
@@ -221,8 +214,7 @@ Page({
     const orbitType = satelliteParams.orbitType || app.globalData.orbitType || 'GEO';
     const isNGSO = orbitType === 'NGSO';
     const reportOrbitMeta = this.getReportOrbitMeta(satelliteParams, isNGSO);
-    const islInputMode = satelliteParams.islInputMode || app.globalData.islInputMode || 'cno';
-    
+
     if (!results) {
       wx.showModal({
         title: '提示',
@@ -258,7 +250,6 @@ Page({
       noiseRatioLabel: noiseRatioLabel,
       isNGSO,
       reportOrbitMeta,
-      islInputMode,
       lang: savedLang,
       t: t
     });
@@ -326,7 +317,7 @@ Page({
 
   // 导出Excel参数文档（与配置管理-分享中"参数文档(Excel)"一致）
   async exportExcel() {
-    const { satelliteParams, linkParams, results, lang, linkNum, islInputMode } = this.data;
+    const { satelliteParams, linkParams, results, lang, linkNum } = this.data;
 
     wx.showLoading({
       title: lang === 'zh' ? '生成Excel参数文档...' : 'Generating Excel...',
@@ -337,8 +328,7 @@ Page({
       const configData = {
         configName: `${satelliteParams.satelliteName}_${satelliteParams.frequencyBand}`,
         satelliteParams: {
-          ...satelliteParams,
-          islInputMode
+          ...satelliteParams
         },
         linkParams: {
           [linkNum]: linkParams
@@ -411,7 +401,7 @@ Page({
 
   // 分享报告 - 生成PDF并分享
   async shareReport() {
-    const { satelliteParams, linkParams, results, lang, linkNum, islInputMode } = this.data;
+    const { satelliteParams, linkParams, results, lang, linkNum } = this.data;
     const t = this.data.t;
     
     // 显示加载中
@@ -425,8 +415,7 @@ Page({
       const configData = {
         configName: `${satelliteParams.satelliteName}_${satelliteParams.frequencyBand}`,
         satelliteParams: {
-          ...satelliteParams,
-          islInputMode
+          ...satelliteParams
         },
         linkParams: {
           [linkNum]: linkParams
@@ -693,10 +682,8 @@ Page({
 
   // 生成报告文本（专业咨询风格的自然语言描述）
   generateReportText() {
-    const { satelliteParams, linkParams, results, linkPerformance, lang, isNGSO, reportOrbitMeta, islInputMode } = this.data;
-    const islLabel = islInputMode === 'cno' ? 'C/N₀' : 'SNR';
-    const islUnit = islInputMode === 'cno' ? 'dBHz' : 'dB';
-    
+    const { satelliteParams, linkParams, results, linkPerformance, lang, isNGSO, reportOrbitMeta } = this.data;
+
     if (lang === 'zh') {
       if (isNGSO) {
         let text = `基于${satelliteParams.satelliteName}卫星（${reportOrbitMeta}）${satelliteParams.frequencyBand}频段的NGSO链路预算分析，`;
@@ -704,7 +691,6 @@ Page({
         text += `链路采用${results.modulationResult}+${results.fecResult}编码体制，信息速率${results.infoRateResult}kbps，符号速率${results.symbolRateResult}ksps，占用带宽${results.allocBandwidthResult}kHz。`;
         text += `几何条件方面，上行最低仰角${results.elevationResult}°、星地斜距${results.slantRangeResult}km，下行最低仰角${results.rxElevationResult}°、星地斜距${results.rxSlantRangeResult}km，参考轨道高度${results.orbitAltitudeResult}km。`;
         text += `动态特性方面，单程链路时延${results.linkDelayResult}ms，上行/下行最大多普勒频移分别约±${results.maxDopplerUplinkResult}kHz和±${results.maxDopplerDownlinkResult}kHz。`;
-        text += `星间链路配置为${satelliteParams.islHops || 0}跳，单跳ISL ${islLabel}为${satelliteParams.cIslDisplay || satelliteParams.cIsl || '--'}${islUnit}。`;
         text += `上行段（${linkParams.earthStationLocation}）配置${results.earthAntennaDiameterResult}m天线、${results.selectedPowerWResult}W功放，上行C/N达${results.uplinkCN}dB；`;
         text += `下行段（${linkParams.rxEarthStationLocation}）采用${results.rxAntennaDiameterResult}m天线，G/T值${results.gOverTeResult}dB/K，下行C/N达${results.downlinkCN}dB。`;
         text += `综合载噪比${results.carrierTotalCN}dB，较门限${results.thresholdCN}dB具备${results.linkmargin}dB余量，建议功放配置${results.paRecommendation}W。`;
@@ -727,7 +713,6 @@ Page({
         text += `The link employs ${results.modulationResult}+${results.fecResult} coding at ${results.infoRateResult}kbps information rate, ${results.symbolRateResult}ksps symbol rate, occupying ${results.allocBandwidthResult}kHz bandwidth. `;
         text += `For geometry, uplink minimum elevation is ${results.elevationResult}° with ${results.slantRangeResult}km slant range, while downlink minimum elevation is ${results.rxElevationResult}° with ${results.rxSlantRangeResult}km slant range; reference orbit altitude is ${results.orbitAltitudeResult}km. `;
         text += `Dynamic characteristics include ${results.linkDelayResult}ms one-way delay and maximum Doppler shifts of approximately ±${results.maxDopplerUplinkResult}kHz uplink / ±${results.maxDopplerDownlinkResult}kHz downlink. `;
-        text += `The ISL configuration uses ${satelliteParams.islHops || 0} hop(s), with per-hop ISL ${islLabel} of ${satelliteParams.cIslDisplay || satelliteParams.cIsl || '--'}${islUnit}. `;
         text += `The uplink segment (${linkParams.earthStationLocation}) is configured with ${results.earthAntennaDiameterResult}m antenna and ${results.selectedPowerWResult}W HPA, achieving uplink C/N of ${results.uplinkCN}dB; `;
         text += `the downlink segment (${linkParams.rxEarthStationLocation}) uses ${results.rxAntennaDiameterResult}m antenna with G/T of ${results.gOverTeResult}dB/K, achieving downlink C/N of ${results.downlinkCN}dB. `;
         text += `The total C/N of ${results.carrierTotalCN}dB provides ${results.linkmargin}dB margin over the ${results.thresholdCN}dB threshold, with recommended HPA capacity of ${results.paRecommendation}W.`;

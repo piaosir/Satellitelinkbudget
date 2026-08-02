@@ -35,9 +35,15 @@ const GROUP_QUERY = {
   globalstar: 'GROUP=globalstar',
   stations:   'GROUP=stations',
   planet:     'GROUP=planet',
-  spire:      'GROUP=spire'
+  spire:      'GROUP=spire',
+  // 「全部在轨」全集（~13k 颗 / 明文 ~5MB）。与仿真平台 electron/services/omm.js 的 GROUP_QUERY 同口径：
+  // 星座地图「全部卫星」= 各已知星座组并集 ∪ active；其中不属于任何已知星座的那部分即「其他」分组。
+  active:     'GROUP=active'
 };
-const ALL_KEYS = Object.keys(GROUP_QUERY);
+// 已知星座组（不含 active）：启动时的众包全量刷新只跑这些。active 明文 ~5MB，不该压进
+// 「每设备每日后台直连 + 回传云存储」的例行开销；它改由星座地图在用户真正打开
+// 「全部卫星 / 其他」时按需取（loadGroupSats('active')），拿到后同样写当天本地缓存 + 回传云存储。
+const ALL_KEYS = Object.keys(GROUP_QUERY).filter((k) => k !== 'active');
 
 let _refreshing = false; // 本会话内防重入
 
@@ -84,16 +90,28 @@ function readLocalCache(key) {
     return data;
   } catch (e) { return null; }
 }
-// 用当天本地各组缓存重建跨分组搜索索引，写入本地 '_index'（搜索零 CDN）
+// 用当天本地各组缓存重建跨分组搜索索引，写入本地 '_index'（搜索零 CDN）。
+// 归类口径与星座地图 _loadUniverse / 仿真平台 loadUniverse 一致：已知星座组按 ALL_KEYS 次序先到先认领
+// （同一颗星只进索引一次），再把「全部在轨」里没被认领的并进来记为 'other'（=「其他」分组）。
+// active 是按需缓存，没拉过就跳过，索引自动退化为已知组并集。
 function buildLocalIndex() {
   try {
-    const sats = [];
+    const sats = [], seen = Object.create(null);
+    const claim = (arr, group) => {
+      for (let j = 0; j < arr.length; j++) {
+        const id = arr[j].noradId;
+        if (seen[id]) continue;
+        seen[id] = 1;
+        sats.push({ name: arr[j].name, noradId: id, group });
+      }
+    };
     for (let i = 0; i < ALL_KEYS.length; i++) {
       const key = ALL_KEYS[i];
       const c = readLocalCache(key);
-      const arr = (c && c.sats) || [];
-      for (let j = 0; j < arr.length; j++) sats.push({ name: arr[j].name, noradId: arr[j].noradId, group: key });
+      claim((c && c.sats) || [], key);
     }
+    const act = readLocalCache('active');
+    claim((act && act.sats) || [], 'other');
     writeLocalCache('_index', { sats });
   } catch (e) { /* 索引为锦上添花，失败时搜索退回云端 _index.json */ }
 }
@@ -260,14 +278,31 @@ function updateManifest(entries) {
   });
 }
 
-// 用各组名单重建跨分组搜索索引 _index.json
+// 用各组名单重建跨分组搜索索引 _index.json。
+// 归类口径与 buildLocalIndex / 云函数 rebuildIndex 一致：已知组先到先认领，再把本机 active 缓存里
+// 没被认领的并进来记为 'other'。带上 active 这步很关键——否则本次上传会把云函数建好的（含「其他」）
+// 那份索引覆盖成只有已知组的版本，「其他」的星就搜不到了。本机没 active 缓存时保留云端已有的 'other' 条目。
 function uploadIndex(namesByKey) {
-  const sats = [];
-  Object.keys(namesByKey).forEach((k) => {
-    const arr = namesByKey[k] || [];
-    for (let i = 0; i < arr.length; i++) sats.push({ name: arr[i].name, noradId: arr[i].noradId, group: k });
-  });
-  return uploadJSON(`${OMM_PREFIX}_index.json`, { builtAt: new Date().toISOString(), count: sats.length, sats });
+  const sats = [], seen = Object.create(null);
+  const claim = (arr, group) => {
+    for (let i = 0; i < arr.length; i++) {
+      const id = arr[i].noradId;
+      if (seen[id]) continue;
+      seen[id] = 1;
+      sats.push({ name: arr[i].name, noradId: id, group });
+    }
+  };
+  Object.keys(namesByKey).forEach((k) => claim(namesByKey[k] || [], k));
+  const act = readLocalCache('active');
+  if (act && act.sats && act.sats.length) claim(act.sats, 'other');
+  const merge = (act && act.sats && act.sats.length)
+    ? Promise.resolve(sats)
+    : downloadJSON(`${OMM_PREFIX}_index.json`).then(
+      (old) => { claim(((old && old.sats) || []).filter((s) => s.group === 'other'), 'other'); return sats; },
+      () => sats
+    );
+  return merge.then((list) =>
+    uploadJSON(`${OMM_PREFIX}_index.json`, { builtAt: new Date().toISOString(), count: list.length, sats: list }));
 }
 
 // 启动时调用：每设备「每过本地 0 点」跑一次。串行直连 CelesTrak 拉取全部分组，每组：
@@ -362,7 +397,10 @@ function ensureSearchIndex() {
 }
 
 // 取某分组全量 sats（[{name,noradId,...OMM根数}]）：当天本地缓存 -> 云端(<key>.json 的 CSV 信封) -> 直连兜底
+// 'other'（其他）不是独立星历源，它是「全部在轨」里未被任何已知星座认领的子集 —— 取数直接落到 active。
+// 返回的是 active 全集（含已知星座的星），调用方按 noradId 取目标星即可（星间链路 _pick 就这么用）。
 function loadGroupSats(key) {
+  if (key === 'other') key = 'active';
   const cached = readLocalCache(key);
   if (cached && cached.sats && cached.sats.length) {
     return Promise.resolve({ sats: cached.sats, fetchedAt: cached.fetchedAt });

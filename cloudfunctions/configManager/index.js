@@ -75,6 +75,45 @@ async function ensureUniqueShareCode() {
   return generateShareCode() + Date.now().toString(36).slice(-4);
 }
 
+// ============================================================================
+// 仿真平台绑定：认证码的云端备份（按 openid 一人一条）
+// ============================================================================
+// 认证码是这个账号的【长期收件地址】，平台侧记着它往里投。若只存在小程序本地 storage，
+// 用户换台手机、或点一下设置页的「清除缓存」，绑定就没了 —— 而平台侧【毫无察觉】，
+// 照样投递成功，只是再没人来取。所以必须有云端这一份。
+//
+// ★ 集合首次使用时自动创建（db.createCollection），不需要去云开发控制台建表。
+//   已存在时会抛「collection already exists」，吞掉即可。
+const BIND_COLL = 'satsim_bindings';
+
+async function ensureBindColl() {
+  try { await db.createCollection(BIND_COLL); } catch (e) { /* 已存在 */ }
+}
+
+async function loadBinding(openid) {
+  await ensureBindColl();
+  const r = await db.collection(BIND_COLL).where({ _openid: openid }).limit(1).get();
+  const row = r.data && r.data[0];
+  return { success: true, data: row ? { ch: row.ch || '', createdAt: row.createdAt || 0, resetAt: row.resetAt || 0 } : null };
+}
+
+async function saveBinding(openid, data) {
+  await ensureBindColl();
+  const ch = String((data && data.ch) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!/^[A-Z0-9]{12}$/.test(ch)) return { success: false, error: '认证码格式不正确' };
+  const now = Date.now();
+  const r = await db.collection(BIND_COLL).where({ _openid: openid }).limit(1).get();
+  const row = r.data && r.data[0];
+  if (row) {
+    // 换码 = 重置：把旧码作废的时刻记下来，便于用户回看「我什么时候重置过」
+    const patch = row.ch === ch ? { ch } : { ch, resetAt: now };
+    await db.collection(BIND_COLL).doc(row._id).update({ data: patch });
+  } else {
+    await db.collection(BIND_COLL).add({ data: { ch, createdAt: now, resetAt: 0 } });
+  }
+  return { success: true, data: { ch } };
+}
+
 exports.main = async (event, context) => {
   const wxContext = cloud.getWXContext();
   const openid = wxContext.OPENID;
@@ -103,6 +142,12 @@ exports.main = async (event, context) => {
         return await batchShareConfigs(openid, data);
       case 'getBatchShared':
         return await getBatchSharedConfigs(data);
+      case 'loadBinding':
+        return await loadBinding(openid);
+      case 'saveBinding':
+        return await saveBinding(openid, data);
+      case 'syncSave':
+        return await syncSaveConfig(openid, data);
       default:
         return {
           success: false,
@@ -118,18 +163,49 @@ exports.main = async (event, context) => {
   }
 };
 
+// 仿真平台自动同步：按 srcId 覆盖式保存（有则更新、无则新增）
+//
+// srcId = 这一条链路在平台侧的稳定身份「<体制>:<配置id>:<行下标>」（平台 shared/lbMiniExport.js 出）。
+// 没有它就只能靠「新增」，于是平台每同步一次就在手机上多堆一份同名配置 —— 自动同步就成了灾难。
+// ★ 刻意不用 configName 当身份：名字里带着发信站→收信站，改个站名就变成另一份，
+//   而改站名恰恰是「同一条链路被改了」最常见的形态。srcId 缺失时【退回新增】，不猜。
+async function syncSaveConfig(openid, data) {
+  const srcId = String((data && data.srcId) || '');
+  if (!srcId) return await saveConfig(openid, data);
+
+  const r = await db.collection('user_configs').where({ openid, srcId }).limit(1).get();
+  const row = r.data && r.data[0];
+  if (!row) return await saveConfig(openid, data);
+
+  await db.collection('user_configs').doc(row._id).update({
+    data: {
+      configName: data.configName || row.configName,
+      satelliteParams: data.satelliteParams || {},
+      linkParams: data.linkParams || {},
+      calculationResults: data.calculationResults || {},
+      noiseRatioMode: data.noiseRatioMode || 'ebno',
+      markedParams: data.markedParams || [],
+      highlightedRows: data.highlightedRows || [],
+      updateTime: db.serverDate()
+    }
+  });
+  return { success: true, configId: row._id, replaced: true, message: '配置已更新' };
+}
+
 // 保存配置到云端
 async function saveConfig(openid, data) {
-  const { configName, satelliteParams, linkParams, calculationResults, noiseRatioMode, markedParams, highlightedRows } = data;
-  
+  const { configName, satelliteParams, linkParams, calculationResults, noiseRatioMode, markedParams, highlightedRows, srcId } = data;
+
   if (!configName) {
     throw new Error('配置名称不能为空');
   }
-  
+
   const now = db.serverDate();
-  
+
   const configDoc = {
     openid,
+    // 平台自动同步的身份（用户自建的配置没有这个字段）；见 syncSaveConfig
+    srcId: String(srcId || ''),
     configName,
     satelliteParams: satelliteParams || {},
     linkParams: linkParams || {},

@@ -1,0 +1,268 @@
+<!-- 转发器频率计划（只读，从仿真平台导入） -->
+<view class="page">
+
+  <!-- ============ 计划列表 ============ -->
+  <block wx:if="{{view === 'list'}}">
+    <view class="topbar">
+      <text class="topbar-t">频率计划</text>
+      <view class="btn primary" bindtap="onImportTap">密钥导入</view>
+    </view>
+
+    <scroll-view class="body" scroll-y>
+      <view wx:if="{{!plans.length}}" class="empty">还没有频率计划。</view>
+      <view wx:for="{{plans}}" wx:key="id" class="card plan" data-id="{{item.id}}"
+            bindtap="onPlanTap" bindlongpress="onPlanLongPress">
+        <view class="plan-hd">
+          <text class="plan-nm">{{item.name}}</text>
+          <text class="plan-arrow">›</text>
+        </view>
+        <view class="plan-meta">
+          <text wx:if="{{item.satName}}" class="chip">{{item.satName}}</text>
+          <text wx:if="{{item.band}}" class="chip">{{item.band}}</text>
+          <text class="dim">{{item.summary}}</text>
+        </view>
+      </view>
+    </scroll-view>
+
+    <!-- 密钥导入：8 位分格输入，与「卫星覆盖」的密钥导入同款。
+         真实 <input> 移出可视区（真机上它是画在 webview 之上的原生控件，字与系统光标 CSS 压不住），
+         格子里的字符与光标全由 .otp-cell-char / .otp-caret 自绘。 -->
+    <view class="kmask" wx:if="{{showKey}}" bindtap="hideKeyPanel"></view>
+    <view class="kpop" wx:if="{{showKey}}">
+      <view class="kpop-hd">
+        <text class="kpop-t">导入频率计划</text>
+        <text class="kpop-x" bindtap="hideKeyPanel">✕</text>
+      </view>
+      <view class="kpop-bd">
+        <view class="otp-field" bindtap="focusOtp">
+          <block wx:for="{{otpCells}}" wx:key="id">
+            <view wx:if="{{item.sep}}" class="otp-dash">-</view>
+            <view wx:else class="otp-cell {{item.filled ? 'is-filled' : ''}} {{item.active && keyFocus ? 'is-active' : ''}}">
+              <text wx:if="{{item.char}}" class="otp-cell-char">{{item.char}}</text>
+              <view wx:if="{{item.active && keyFocus && !item.char}}" class="otp-caret"></view>
+            </view>
+          </block>
+          <input class="otp-input" type="text" maxlength="11" value="{{keyInput}}"
+                 focus="{{keyFocus}}" cursor="{{keyInput.length}}" confirm-type="done" hold-keyboard="{{true}}"
+                 adjust-position="{{false}}"
+                 bindinput="onKeyInput" bindfocus="onOtpFocus" bindblur="onOtpBlur"
+                 bindconfirm="confirmKeyImport" />
+        </view>
+        <view class="otp-hint">8 位字母 / 数字，如 ABCD-2345</view>
+        <view class="kpop-acts">
+          <view class="kbtn" bindtap="hideKeyPanel">取消</view>
+          <view class="kbtn confirm {{importing ? 'disabled' : ''}}" bindtap="confirmKeyImport">{{importing ? '导入中…' : '导入'}}</view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- ============ 计划详情 ============ -->
+  <block wx:else>
+    <view class="topbar">
+      <view class="back" bindtap="backToList">‹</view>
+      <text class="topbar-t ell">{{cur.name}}</text>
+      <view class="btn" bindtap="onExportTap">导出</view>
+    </view>
+
+    <!-- 出图用的离屏画布：与整幅【等大】，摆到可视区外。
+         ★ 位图尺寸（js 里的 cv.width）与这里的 CSS 尺寸取同一个数 —— 两者不等时导出的图会被拉伸。
+         用完即摘（exp 置空），几百万像素的位图不该一直挂在视图树上。
+         ★★ 尺寸带着 px 从 js 出来（exp.wpx）：行内样式里一条声明必须以 mustache 收尾，
+            「{{exp.w}}px」那种在 }} 后面还跟单位的写法会被编辑器的 CSS 解析器判成语法错误。 -->
+    <canvas wx:if="{{exp}}" id="fpx" type="2d" class="expcv"
+            style="width:{{exp.wpx}};height:{{exp.hpx}}"></canvas>
+
+    <view class="sumline">
+      <text wx:if="{{meta.satName}}" class="chip">{{meta.satName}}</text>
+      <text wx:if="{{meta.band}}" class="chip">{{meta.band}}</text>
+      <text class="dim">{{meta.summary}}</text>
+    </view>
+
+    <view class="tabs">
+      <view class="tab {{tab === 'chart' ? 'on' : ''}}" data-tab="chart" bindtap="onTabTap">频率计划</view>
+      <view class="tab {{tab === 'list' ? 'on' : ''}}" data-tab="list" bindtap="onTabTap">转发器 {{rows.length}}</view>
+      <view class="tab {{tab === 'alloc' ? 'on' : ''}}" data-tab="alloc" bindtap="onTabTap">分配表<text wx:if="{{allocGroups.length}}"> {{allocGroups.length}}</text></view>
+    </view>
+
+    <!-- ---- 频率计划（图） ---- -->
+    <view wx:if="{{tab === 'chart'}}" class="chartwrap">
+      <scroll-view wx:if="{{beams.length}}" class="beambar" scroll-x>
+        <view wx:for="{{beams}}" wx:key="id" class="bchip {{item.on ? 'on' : ''}}" data-id="{{item.id}}" bindtap="onBeamTap">
+          <view class="bdot" style="background:{{item.color}}"></view>
+          <text>{{item.label}}</text>
+        </view>
+      </scroll-view>
+
+      <view class="canvasbox">
+        <canvas id="fpc" type="2d" class="cv"
+                bindtouchstart="onTouchStart" bindtouchmove="onTouchMove" bindtouchend="onTouchEnd"></canvas>
+        <view class="zoombox">
+          <text class="zoomv">{{zoomText}}</text>
+          <view class="btn tiny" bindtap="onResetTap">复位</view>
+        </view>
+
+        <!-- 点中的那条转发器。★ 浮在画布【上面】，不是画布的兄弟节点 —— 当兄弟时它一弹出来，
+             flex 就把画布这一格压矮，而 canvas 的位图尺寸（cv.width/height）不会跟着变，
+             CSS 直接把 480px 高的位图塞进 250px 的框里：整张图纵向压扁，就是那个「畸变」。 -->
+        <view wx:if="{{pick}}" class="pick">
+          <view class="pick-hd">
+            <text class="pick-no">{{pick.no}}</text>
+            <text class="pick-kind">{{pick.kind}}</text>
+            <text class="pick-x" bindtap="onPickClose">✕</text>
+          </view>
+          <view wx:if="{{pick.up}}" class="pick-row">
+            <text class="pick-k">上行</text>
+            <text class="pick-v">{{pick.up.fc}} · {{pick.up.pol}}<text wx:if="{{pick.up.band}}"> · {{pick.up.band}}</text><text wx:if="{{!pick.mark}}"> · 带宽 {{pick.up.bw}}</text></text>
+          </view>
+          <view wx:if="{{pick.dn}}" class="pick-row">
+            <text class="pick-k">下行</text>
+            <text class="pick-v">{{pick.dn.fc}} · {{pick.dn.pol}}<text wx:if="{{pick.dn.band}}"> · {{pick.dn.band}}</text><text wx:if="{{!pick.mark}}"> · 带宽 {{pick.dn.bw}}</text></text>
+          </view>
+          <view wx:if="{{pick.lo}}" class="pick-row"><text class="pick-k">LO</text><text class="pick-v">{{pick.lo}}</text></view>
+          <view wx:if="{{pick.beamsUp.length}}" class="pick-row">
+            <text class="pick-k">波束</text>
+            <view class="pick-v">
+              <text wx:for="{{pick.beamsUp}}" wx:for-item="b" wx:key="name" class="bmini"><text class="bdot sm" style="background:{{b.color}}"></text>{{b.name}}</text>
+            </view>
+          </view>
+          <view wx:if="{{pick.lb}}" class="pick-row"><text class="pick-k">参数</text><text class="pick-v">{{pick.lb}}</text></view>
+          <view wx:if="{{pick.note}}" class="pick-row"><text class="pick-k">备注</text><text class="pick-v">{{pick.note}}</text></view>
+        </view>
+      </view>
+    </view>
+
+    <!-- ---- 转发器清单 ---- -->
+    <scroll-view wx:elif="{{tab === 'list'}}" class="body" scroll-y>
+      <view class="tb">
+        <view class="tr th">
+          <text class="td c-no">编号</text>
+          <text class="td c-f">上行</text>
+          <text class="td c-p">极化</text>
+          <text class="td c-f">下行</text>
+          <text class="td c-p">极化</text>
+          <text class="td c-bw">带宽</text>
+        </view>
+        <view wx:for="{{rows}}" wx:key="id" class="tr" data-id="{{item.id}}" bindtap="onRowTap">
+          <view class="td c-no">
+            <text wx:if="{{item.color}}" class="bdot sm" style="background:{{item.color}}"></text>
+            <text>{{item.no}}</text>
+          </view>
+          <text class="td c-f">{{item.upFc}}</text>
+          <text class="td c-p">{{item.upPol}}</text>
+          <text class="td c-f {{item.derived ? 'derived' : ''}}">{{item.dnFc}}</text>
+          <text class="td c-p">{{item.dnPol}}</text>
+          <text class="td c-bw">{{item.upBw}}</text>
+        </view>
+      </view>
+      <view class="unitfoot">单位：{{meta.u.label}}</view>
+    </scroll-view>
+
+    <!-- ---- 频率分配表 ---- -->
+    <scroll-view wx:else class="body" scroll-y>
+      <view wx:if="{{!allocGroups.length && !allocUnassigned.length}}" class="empty">这份计划没有频率分配表。</view>
+
+      <view wx:if="{{allocSummary}}" class="card sum">
+        <view class="sum-g">
+          <view class="sum-i"><text class="sum-k">转发器</text><text class="sum-v">{{allocSummary.tp}}</text></view>
+          <view class="sum-i"><text class="sum-k">载波</text><text class="sum-v">{{allocSummary.carriers}}</text></view>
+          <view class="sum-i"><text class="sum-k">总带宽</text><text class="sum-v">{{allocSummary.totalBw}} {{allocSummary.unit}}</text></view>
+          <view class="sum-i"><text class="sum-k">带宽占用</text><text class="sum-v">{{allocSummary.occ}}（{{allocSummary.bwUtil}}）</text></view>
+          <view class="sum-i"><text class="sum-k">功率占用</text><text class="sum-v">{{allocSummary.pwr}}（{{allocSummary.pwrUtil}}）</text></view>
+          <view class="sum-i"><text class="sum-k">合计速率</text><text class="sum-v">{{allocSummary.rate}} Mbps</text></view>
+          <view class="sum-i"><text class="sum-k">频谱效率</text><text class="sum-v">{{allocSummary.eff}} bps/Hz</text></view>
+        </view>
+      </view>
+
+      <!-- 一条转发器 = 一段频带被切给了哪几条载波。收起时只给一眼（缩略占用条），
+           点开是那一条的频带条 + 载波明细 —— 与平台那一页同一条条（几何是平台随包给的百分比）。 -->
+      <view wx:for="{{allocGroups}}" wx:key="channelId" wx:for-index="gi" class="card grp">
+        <view class="grp-hd" data-i="{{gi}}" bindtap="onAllocToggle">
+          <text class="grp-no">{{item.no}}</text>
+          <text class="grp-band">↓ {{item.band}}<text wx:if="{{item.pol}}" class="grp-pol">{{item.pol}}</text></text>
+          <!-- 缩略条只在收起时出现：点开之后正下方就是那条大的，两条同一件事。
+               几何量都带着单位（见 js 的 buildMini）—— 行内样式里一条声明以 mustache 收尾 -->
+          <view wx:if="{{!item.open && item.mini}}" class="mini-bar">
+            <view wx:for="{{item.mini.segs}}" wx:for-item="ms" wx:key="index" class="mseg"
+                  style="left:{{ms.left}};width:{{ms.width}};background-color:{{ms.color}};background-image:{{ms.bgImg}}"></view>
+            <view class="mpwr" style="width:{{item.mini.pwr}}"></view>
+          </view>
+          <text class="grp-n">{{item.count}}</text>
+          <text class="grp-ar">{{item.open ? '˅' : '›'}}</text>
+        </view>
+        <view class="grp-util">
+          <text class="u-k">带宽</text><text class="u-v {{item.bwCls}}">{{item.occ}} / {{item.bw}}（{{item.bwUtil}}）</text>
+          <text class="u-k">功率</text><text class="u-v {{item.pwrCls}}">{{item.pwr}} / {{item.bw}}（{{item.pwrUtil}}）</text>
+        </view>
+
+        <view wx:if="{{item.open}}" class="grp-bd">
+          <!-- ── 频带条 ──
+               band = 转发器频带（视域比它宽一点，越界的载波必须看得见）
+               seg  = 波束占段，条顶一道色带；同频叠放的各错开一层
+               blk  = 载波块，按所属波束着色，跨切点的按段分色（渐变由平台算好）
+               pwr  = 功率带宽底衬，从块的左沿起画 —— 探出块宽即功率限 -->
+          <view wx:if="{{item.strip}}" class="stripwrap">
+            <view class="strip">
+              <view class="band" style="left:{{item.strip.band.left}};width:{{item.strip.band.width}}"></view>
+              <view wx:for="{{item.strip.segs}}" wx:for-item="sg" wx:key="index" class="seg"
+                    style="left:{{sg.left}};width:{{sg.width}};top:{{sg.top}};height:{{sg.h}};background:{{sg.color}}"></view>
+              <block wx:for="{{item.strip.bars}}" wx:for-item="b" wx:key="id">
+                <view wx:if="{{b.pwr}}" class="pwr" style="left:{{b.left}};width:{{b.pwr}}"></view>
+                <view class="blk {{b.placed ? '' : 'float'}} {{b.bad ? 'bad' : ''}} {{allocSel && b.id === allocSel ? 'on' : ''}}"
+                      style="left:{{b.left}};width:{{b.width}};background-color:{{b.color}};background-image:{{b.bgImg}};color:{{b.ink}}"
+                      data-id="{{b.id}}" bindtap="onCarTap">
+                  <text wx:if="{{b.showNm}}" class="bn">{{b.name}}</text>
+                  <text wx:if="{{b.showBw}}" class="bbw">{{b.bw}}</text>
+                </view>
+              </block>
+            </view>
+            <!-- 轴：起 · 中 · 止（照运营装载表的写法，转发器身份就写这三个数） -->
+            <view class="axis">
+              <text wx:for="{{item.strip.axis}}" wx:for-item="ax" wx:key="index" class="ax" style="left:{{ax.left}}">{{ax.t}}</text>
+            </view>
+          </view>
+          <view wx:else class="stripnone">{{item.legacy ? '这份计划是更早的版本导入的 —— 在仿真平台上重新发送一次，就能看到频带条。' : '这条转发器没有下行频带（缺一侧频率、且未挂 LO）—— 画不出频带条。'}}</view>
+
+          <view class="grp-sub">
+            <text wx:if="{{item.upBand}}" class="gs-i">↑ {{item.upBand}} {{item.upPol}}</text>
+            <text class="gs-i">带宽 {{item.bw}} {{meta.u.label}}</text>
+            <text wx:if="{{item.free !== '—'}}" class="gs-i">剩余 {{item.free}}</text>
+            <text wx:if="{{item.rate !== '—'}}" class="gs-i">速率 {{item.rate}} Mbps</text>
+            <view wx:if="{{item.beams.length}}" class="gs-bm">
+              <text wx:for="{{item.beams}}" wx:for-item="bm" wx:key="id" class="bmini"><text class="bdot sm" style="background:{{bm.color}}"></text>{{bm.name}}</text>
+            </view>
+          </view>
+
+          <!-- ★ 选中判据必须带上 allocSel 非空这一条：更早版本导入的计划，行上没有 id（全是空串），
+               只比 r.id === allocSel 的话一开始整组都会亮着 -->
+          <view wx:for="{{item.rows}}" wx:for-item="r" wx:key="idx" class="car {{allocSel && r.id === allocSel ? 'on' : ''}} {{r.bad ? 'bad' : ''}}"
+                data-id="{{r.id}}" bindtap="onCarTap">
+            <view class="car-hd">
+              <text class="car-i">{{r.idx}}</text>
+              <text class="car-nm">{{r.name}}</text>
+              <text wx:if="{{!r.placed}}" class="car-tag">未定频</text>
+              <text wx:if="{{r.beam}}" class="car-bm"><text class="bdot sm" style="background:{{r.beamColor}}"></text>{{r.beam}}</text>
+            </view>
+            <view class="car-row"><text class="car-k">下行</text><text class="car-v">{{r.dn}}（中心 {{r.dnFc}}）</text></view>
+            <view class="car-row"><text class="car-k">上行</text><text class="car-v">{{r.up}}（中心 {{r.upFc}}）</text></view>
+            <view class="car-row"><text class="car-k">占用</text><text class="car-v">带宽 {{r.occ}} · 功率 {{r.pwr}} · {{r.rate}} kbps · {{r.modcod}} · {{r.pol}}</text></view>
+            <view wx:if="{{r.note}}" class="car-row"><text class="car-k">备注</text><text class="car-v">{{r.note}}</text></view>
+          </view>
+          <view wx:for="{{item.issues}}" wx:for-item="msg" wx:key="*this" class="issue">{{msg}}</view>
+        </view>
+      </view>
+
+      <view wx:if="{{allocUnassigned.length}}" class="card grp">
+        <view class="grp-hd"><text class="grp-no">未归属转发器</text><text class="grp-n">{{allocUnassigned.length}}</text></view>
+        <view class="grp-bd">
+          <view wx:for="{{allocUnassigned}}" wx:for-item="r" wx:key="idx" class="car">
+            <view class="car-hd"><text class="car-i">{{r.idx}}</text><text class="car-nm">{{r.name}}</text></view>
+            <view class="car-row"><text class="car-k">占用</text><text class="car-v">带宽 {{r.occ}} · 功率 {{r.pwr}} · {{r.rate}} kbps</text></view>
+          </view>
+        </view>
+      </view>
+
+      <view class="unitfoot">单位：{{meta.u.label}}</view>
+    </scroll-view>
+  </block>
+</view>

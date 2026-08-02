@@ -1,0 +1,197 @@
+/* 频率计划（只读）。视觉语言跟随主程序：白卡 + 浅灰底 + 细分隔线。
+   ★ 字体：TNR + 宋体衬线栈 —— 与仿真平台全软件的报表排版同一套（图上画的也是它，见平台
+   freqPlanRender 的 SERIF_STACK）。这一页的表与图并排看的是同一批数，两处不该是两种字。
+   canvas 里的字另在 freq-plan.js 的 draw() 里写死同一串（画布不继承 CSS 字体）。 */
+
+page { background: #f6f6f6; }
+.page {
+  display: flex; flex-direction: column; height: 100vh; box-sizing: border-box;
+  font-family: 'Times New Roman', 'Nimbus Roman', 'Liberation Serif', '宋体', SimSun, serif;
+}
+
+/* —— 顶栏 —— */
+.topbar { display: flex; align-items: center; gap: 16rpx; padding: 20rpx 24rpx; background: #fff; border-bottom: 1rpx solid #e8e8e8; }
+.topbar-t { font-size: 32rpx; font-weight: 600; color: #1a1a1a; }
+.topbar-t.ell { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.back { width: 56rpx; height: 56rpx; line-height: 50rpx; text-align: center; font-size: 44rpx; color: #555; }
+.btn { margin-left: auto; padding: 12rpx 28rpx; font-size: 26rpx; border-radius: 8rpx; background: #f2f2f2; color: #333; }
+.btn.primary { background: #1a73e8; color: #fff; }
+.btn.tiny { margin-left: 0; padding: 6rpx 16rpx; font-size: 22rpx; }
+
+/* —— 摘要 / 页签 —— */
+.sumline { display: flex; align-items: center; flex-wrap: wrap; gap: 10rpx; padding: 14rpx 24rpx; background: #fff; border-bottom: 1rpx solid #f0f0f0; }
+.chip { font-size: 22rpx; color: #444; background: #f0f3f7; border-radius: 6rpx; padding: 4rpx 12rpx; }
+.dim { font-size: 23rpx; color: #8a8a8a; }
+.tabs { display: flex; background: #fff; border-bottom: 1rpx solid #e8e8e8; }
+.tab { flex: 1; text-align: center; padding: 20rpx 0; font-size: 27rpx; color: #666; }
+.tab.on { color: #1a73e8; font-weight: 600; box-shadow: inset 0 -4rpx 0 #1a73e8; }
+
+/* —— 列表 —— */
+.body { flex: 1; min-height: 0; }
+.empty { padding: 80rpx 24rpx; text-align: center; font-size: 26rpx; color: #999; }
+.card { margin: 18rpx 20rpx; padding: 22rpx 24rpx; background: #fff; border-radius: 12rpx; box-shadow: 0 2rpx 8rpx rgba(0,0,0,.04); }
+.plan-hd { display: flex; align-items: center; }
+.plan-nm { flex: 1; min-width: 0; font-size: 30rpx; font-weight: 600; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plan-arrow { color: #bbb; font-size: 34rpx; }
+.plan-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 10rpx; margin-top: 12rpx; }
+
+/* —— 密钥导入弹窗（分格输入）——
+   数值与配色照搬「卫星覆盖」那一处：同一条通道、同一种密钥，手感不该有两套。
+   ★ 分格里的字用等宽体，不随本页的衬线栈 —— 8 个格子要等宽对齐，衬线体的字宽不一。 */
+.kmask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 1000; }
+.kpop {
+  position: fixed; top: 30%; left: 16rpx; right: 16rpx; z-index: 1001;
+  background: #fff; border-radius: 8rpx; overflow: hidden;
+  box-shadow: 0 20rpx 60rpx rgba(0,0,0,.15), 0 4rpx 16rpx rgba(0,0,0,.08);
+}
+.kpop-hd { display: flex; align-items: center; padding: 24rpx 28rpx; border-bottom: 1rpx solid #f0f0f0; }
+.kpop-t { flex: 1; font-size: 30rpx; font-weight: 600; color: #1f2937; }
+.kpop-x { font-size: 32rpx; color: #9ca3af; padding: 0 8rpx; }
+.kpop-bd { padding: 28rpx; }
+.otp-field { position: relative; display: flex; align-items: center; gap: 12rpx; margin-bottom: 12rpx; }
+.otp-cell {
+  position: relative; flex: 1 1 0; min-width: 0; height: 88rpx;
+  display: flex; align-items: center; justify-content: center;
+  border: 1rpx solid #e5e7eb; border-radius: 12rpx; background: #f9fafb;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.otp-cell.is-filled { background: #fff; border-color: #cbd5e1; }
+.otp-cell.is-active { border-color: #2563eb; background: #fff; box-shadow: 0 0 0 4rpx rgba(37,99,235,.15); }
+.otp-cell-char { font-size: 40rpx; font-weight: 600; line-height: 1; color: #1f2937; font-family: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace; }
+.otp-dash { flex: 0 0 auto; padding: 0 4rpx; font-size: 40rpx; font-weight: 600; color: #9ca3af; }
+.otp-caret { width: 4rpx; height: 44rpx; background: #2563eb; border-radius: 2rpx; animation: otpBlink 1.06s steps(1) infinite; }
+@keyframes otpBlink { 0%, 49.99% { opacity: 1; } 50%, 100% { opacity: 0; } }
+/* 隐形真实 input：移出可视区而不是盖在分格上（真机 <input> 是原生层控件，文字与系统光标压不住） */
+.otp-input { position: absolute; left: -9999rpx; top: 0; width: 200rpx; height: 88rpx; opacity: 0; }
+.otp-hint { font-size: 22rpx; color: #9ca3af; margin-bottom: 24rpx; }
+.kpop-acts { display: flex; gap: 16rpx; }
+.kbtn { flex: 1; text-align: center; padding: 20rpx 0; font-size: 28rpx; border-radius: 8rpx; background: #f2f4f7; color: #444; }
+.kbtn.confirm { background: #1a73e8; color: #fff; }
+.kbtn.disabled { opacity: .5; }
+
+/* —— 频率计划（图） —— */
+.chartwrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.beambar { white-space: nowrap; padding: 14rpx 20rpx; background: #fff; border-bottom: 1rpx solid #f0f0f0; }
+.bchip { display: inline-flex; align-items: center; gap: 8rpx; margin-right: 14rpx; padding: 8rpx 16rpx; font-size: 23rpx; color: #444; background: #f4f5f7; border: 1rpx solid transparent; border-radius: 30rpx; }
+.bchip.on { border-color: #1a73e8; color: #1a73e8; background: #eaf1fd; }
+.bdot { width: 20rpx; height: 20rpx; border-radius: 4rpx; flex: none; }
+.bdot.sm { display: inline-block; width: 14rpx; height: 14rpx; margin-right: 6rpx; vertical-align: middle; }
+.canvasbox { flex: 1; min-height: 0; position: relative; background: #fff; }
+.cv { width: 100%; height: 100%; display: block; }
+.zoombox { position: absolute; right: 16rpx; bottom: 16rpx; display: flex; align-items: center; gap: 10rpx; padding: 8rpx 12rpx; background: rgba(255,255,255,.9); border: 1rpx solid #e2e2e2; border-radius: 8rpx; }
+.zoomv { font-size: 22rpx; color: #666; }
+
+/* 点中的那条转发器 —— ★ 绝对定位浮在画布上，不占 flex 的高度。
+   当兄弟节点时它一弹出画布就被压矮，而 canvas 的位图尺寸不会跟着变，CSS 把高位图塞进矮框里
+   整张图纵向压扁（那就是「聚焦时画面畸变」）。浮起来之后画布的框恒定，位图与框永远等比。 */
+.pick {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 3;
+  max-height: 62%; overflow-y: auto; padding: 18rpx 24rpx 28rpx;
+  background: #fff; border-top: 1rpx solid #e2e2e2; box-shadow: 0 -4rpx 14rpx rgba(0,0,0,.10);
+}
+.pick-hd { display: flex; align-items: center; gap: 14rpx; padding-bottom: 12rpx; border-bottom: 1rpx solid #f0f0f0; }
+.pick-no { font-size: 32rpx; font-weight: 600; color: #1a1a1a; }
+.pick-kind { font-size: 22rpx; color: #888; background: #f2f2f2; border-radius: 6rpx; padding: 4rpx 12rpx; }
+.pick-x { margin-left: auto; font-size: 30rpx; color: #999; padding: 0 10rpx; }
+.pick-row { display: flex; gap: 16rpx; padding: 10rpx 0; font-size: 25rpx; line-height: 1.5; }
+.pick-k { flex: none; width: 74rpx; color: #999; }
+.pick-v { flex: 1; min-width: 0; color: #222; word-break: break-all; }
+.bmini { margin-right: 16rpx; }
+
+/* —— 转发器清单 —— */
+.tb { background: #fff; }
+.tr { display: flex; align-items: center; padding: 0 16rpx; border-bottom: 1rpx solid #f2f2f2; }
+.tr.th { background: #fafbfc; border-bottom: 1rpx solid #dcdcdc; }
+.td { padding: 18rpx 6rpx; font-size: 24rpx; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr.th .td { font-size: 22rpx; color: #888; }
+.c-no { flex: 0 0 150rpx; display: flex; align-items: center; }
+.c-f { flex: 1; text-align: right; }
+.c-p { flex: 0 0 66rpx; text-align: center; color: #666; }
+.c-bw { flex: 0 0 116rpx; text-align: right; color: #666; }
+/* 下行由 LO 推算出来的（不是显式填的）：灰一档，与平台图上那圈虚线同义 */
+.derived { color: #7a7a7a; }
+.unitfoot { padding: 20rpx 24rpx 40rpx; font-size: 22rpx; color: #999; text-align: right; }
+
+/* —— 频率分配表 —— */
+.sum-g { display: flex; flex-wrap: wrap; }
+.sum-i { width: 50%; padding: 10rpx 0; display: flex; align-items: baseline; gap: 10rpx; }
+.sum-k { font-size: 22rpx; color: #999; }
+.sum-v { font-size: 25rpx; color: #1a1a1a; }
+.grp { padding: 0; overflow: hidden; }
+.grp-hd { display: flex; align-items: center; gap: 14rpx; padding: 20rpx 24rpx; }
+.grp-no { font-size: 28rpx; font-weight: 600; color: #1a1a1a; }
+.grp-band { flex: 1; min-width: 0; font-size: 23rpx; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.grp-n { font-size: 22rpx; color: #666; background: #f0f3f7; border-radius: 20rpx; padding: 2rpx 14rpx; }
+.grp-ar { color: #bbb; font-size: 26rpx; }
+.grp-util { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8rpx 12rpx; padding: 0 24rpx 18rpx; }
+.u-k { font-size: 21rpx; color: #999; }
+.u-v { font-size: 23rpx; color: #333; margin-right: 12rpx; }
+/* 占用率只上色，不写「达标 / 受限」这类文字判定（平台既定口径） */
+.u-v.near { color: #b26a00; }
+.u-v.over { color: #c62828; font-weight: 600; }
+.grp-pol { margin-left: 10rpx; color: #999; }
+.grp-bd { border-top: 1rpx solid #f0f0f0; background: #fbfbfc; }
+
+/* 收起行里那条缩略占用条：一眼看清这条转发器装到什么程度。
+   overflow 必须裁 —— 越界的载波算出来就是负 left / 111% 宽（同平台 .mini-bar）。 */
+.mini-bar { position: relative; flex: none; width: 200rpx; height: 18rpx; background: #fff; border: 1rpx solid #e2e5e9; overflow: hidden; }
+/* 未定频那几段的斜纹在行内给（见 js 的 STRIPE_SM）：行内的 background-image 压得过类规则，
+   两处都写的话类规则永远不生效 */
+.mseg { position: absolute; top: 2rpx; height: 10rpx; }
+.mpwr { position: absolute; left: 0; bottom: 0; height: 4rpx; background: #d99000; opacity: .85; }
+
+/* —— 频带条（展开后的那一条）——
+   几何全部是平台随包送来的百分比（见 fpMiniExport 的 stripGeom）：这边一个数都不算。 */
+.stripwrap { padding: 22rpx 24rpx 0; }
+.strip { position: relative; height: 100rpx; }
+/* 转发器频带：条上那一段实底 + 两端的强边线（边沿在哪儿必须一眼看得见） */
+.band { position: absolute; top: 0; bottom: 0; background: #fff; border-left: 3rpx solid #9aa1aa; border-right: 3rpx solid #9aa1aa; }
+/* 波束占段：条顶一道色带（top / height 由 buildStrip 按层数现给），不压任何东西 */
+.seg { position: absolute; opacity: .9; }
+/* 载波块：底色跟着波束走，跨切点的按段分色（渐变由平台算好，这边照贴） */
+.blk {
+  position: absolute; top: 20rpx; height: 68rpx; box-sizing: border-box;
+  border: 1rpx solid rgba(0,0,0,.3); overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.15;
+}
+/* 未定频的：斜纹 + 虚边，顺次铺在频带起点之后（平台上拖一下即落定，这边只是照实画）。
+   斜纹本身在行内给（见 js 的 STRIPE），这里只留虚边 —— 行内的 background-image 压得过类规则 */
+.blk.float { border-style: dashed; }
+.blk.bad { border-color: #c62828; border-width: 2rpx; }
+.blk.on { border-color: #1a1a1a; border-width: 3rpx; }
+.blk .bn, .blk .bbw { max-width: 100%; padding: 0 6rpx; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: inherit; }
+.blk .bn { font-size: 21rpx; }
+.blk .bbw { font-size: 19rpx; opacity: .92; }
+/* 功率带宽底衬：从块的左沿起画，与占用带宽同轴上下对照 —— 探出块宽即功率限 */
+.pwr { position: absolute; bottom: 2rpx; height: 6rpx; background: #d99000; opacity: .9; }
+.axis { position: relative; height: 34rpx; margin-top: 4rpx; border-top: 1rpx solid #9aa1aa; }
+.ax { position: absolute; top: 4rpx; transform: translateX(-50%); font-size: 20rpx; color: #888; white-space: nowrap; }
+/* 起 / 止 两个读数【贴着自己那一端对齐】，不居中：手机上条两侧只有 24rpx 余量，
+   居中的话 12291.25 这样的长读数有一半会被裁掉（平台上靠 48px 的侧边距躲开了这件事）。 */
+.ax:first-child { transform: none; }
+.ax:last-child { transform: translateX(-100%); }
+.stripnone { padding: 22rpx 24rpx 0; font-size: 22rpx; color: #999; }
+
+/* 条下面那一行读数：上行频带 / 带宽 / 剩余 / 速率 / 波束 */
+.grp-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 8rpx 18rpx; padding: 16rpx 24rpx; font-size: 22rpx; color: #777; }
+.gs-i { white-space: nowrap; }
+.gs-bm { display: flex; flex-wrap: wrap; gap: 4rpx 14rpx; }
+
+.car { padding: 18rpx 24rpx; border-bottom: 1rpx solid #f0f0f0; border-left: 6rpx solid transparent; }
+.car:last-child { border-bottom: 0; }
+/* 条上点中的那一块 = 这里的这一行（两处是同一条载波） */
+.car.on { background: #eef4fd; border-left-color: #1a73e8; }
+.car.bad { border-left-color: #c62828; }
+.car-hd { display: flex; align-items: center; gap: 12rpx; margin-bottom: 8rpx; }
+.car-i { font-size: 21rpx; color: #fff; background: #b8bec6; border-radius: 50%; width: 32rpx; height: 32rpx; line-height: 32rpx; text-align: center; flex: none; }
+.car-nm { flex: 1; min-width: 0; font-size: 26rpx; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.car-tag { flex: none; font-size: 20rpx; color: #8a6d1f; background: #fdf6e3; border-radius: 4rpx; padding: 2rpx 10rpx; }
+.car-bm { font-size: 21rpx; color: #666; }
+.car-row { display: flex; gap: 12rpx; padding: 4rpx 0; font-size: 23rpx; }
+.car-k { flex: none; width: 60rpx; color: #999; }
+.car-v { flex: 1; min-width: 0; color: #333; word-break: break-all; }
+.issue { padding: 12rpx 24rpx; font-size: 22rpx; color: #b26a00; background: #fff8ec; border-top: 1rpx solid #f4e6cc; }
+
+/* 出图用的离屏画布：整幅等大（几千像素宽），故必须彻底移出可视区 —— 一旦参与布局，
+   这一页的横向滚动就被它撑开了。position:fixed 不占文档流，left 负得足够远。 */
+.expcv { position: fixed; left: -20000rpx; top: 0; z-index: -1; }

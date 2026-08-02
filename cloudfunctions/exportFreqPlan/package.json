@@ -1,0 +1,12 @@
+{
+  "name": "export-freq-plan",
+  "version": "1.0.0",
+  "description": "转发器频率计划数据表导出（xlsx）——把仿真平台随包送来的表模型刷成工作簿",
+  "main": "index.js",
+  "dependencies": {
+    "wx-server-sdk": "~2.6.3",
+    "exceljs": "^4.4.0"
+  },
+  "author": "",
+  "license": "MIT"
+}

@@ -40,8 +40,13 @@ const GROUPS = [
   { key: 'globalstar', label: 'Globalstar' },
   { key: 'stations', label: '空间站' },
   { key: 'planet', label: 'Planet' },
-  { key: 'spire', label: 'Spire' }
+  { key: 'spire', label: 'Spire' },
+  // 「其他」：全部在轨(active)里不属于以上任何已知星座的星。与仿真平台 ConstellationMap3D 的
+  // GROUPS/loadOther 同口径；它没有独立星历源，取数走 active 后按归类过滤（见 _loadUniverse）。
+  { key: 'other', label: '其他' }
 ];
+// 非真实星历源的“合成分组”：由 active 全集派生，_loadUniverse 归类时要排除自身
+const DERIVED_KEYS = ['all', 'other'];
 // 默认选中“中国星网”（China SatNet）
 const DEFAULT_GROUP_INDEX = Math.max(0, GROUPS.findIndex((g) => g.key === 'guowang'));
 
@@ -440,6 +445,7 @@ Page({
     this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null; this._selPos = null;
 
     if (g.key === 'all') { this._loadAll(); return; }
+    if (g.key === 'other') { this._loadOther(); return; }
 
     // 当天本地缓存命中 -> 直接用，零 CDN（分块数据走旧路径不缓存）
     const cached = this._readCache(g.key);
@@ -459,36 +465,108 @@ Page({
       .catch(() => this._fetchGroupLive(g, null)); // 下载失败 -> 现场直连兜底
   },
 
-  // “全部卫星”：各组优先用当天本地缓存（零 CDN），未命中才下载；合并后统一入库（每颗带所属分组）
-  _loadAll() {
-    const keys = GROUPS.filter((g) => g.key !== 'all').map((g) => g.key);
+  // 全集：各已知星座组并集 ∪「全部在轨」(active)，按 NORAD 去重后归类——在已知组里的标该组，
+  // 其余标 'other'（=「其他」分组）。与仿真平台 ConstellationMap3D 的 loadUniverse 同口径。
+  // 各已知组优先用当天本地缓存（零 CDN），未命中才下载；active 走 _loadActive（缓存→云端→直连兜底）。
+  // active 拿不到时自动退化为已知组并集（此时「其他」为空），与平台一致。
+  // 返回 Promise<{sats, fetchedAt}>；sats 每颗带 _group。label 仅用于进度文案（「全部卫星」/「其他」共用本函数）。
+  _loadUniverse(label) {
+    const keys = GROUPS.filter((g) => DERIVED_KEYS.indexOf(g.key) < 0).map((g) => g.key);
+    const total = keys.length + 1; // +1 = 全部在轨(active)
     let done = 0;
-    this.setData({ loading: true, statusText: `加载全部卫星 0/${keys.length} …` });
-    const bump = () => { done++; this.setData({ statusText: `加载全部卫星 ${done}/${keys.length} …` }); };
-    const tag = (sats, key) => { for (let i = 0; i < sats.length; i++) sats[i]._group = key; return sats; };
+    this.setData({ loading: true, statusText: `加载${label} 0/${total} …` });
+    const bump = () => { done++; this.setData({ statusText: `加载${label} ${done}/${total} …` }); };
+    const fetchedAts = []; // 各组实际下载时间 -> 合并视图取最新一份作为 OMM 显示时间
+    const stamp = (data) => { if (data && data.fetchedAt) fetchedAts.push(data.fetchedAt); };
+
     const tasks = keys.map((key) => {
       // 当天本地缓存命中 -> 直接用，零 CDN（与单组视图共享同一份缓存）
       const cached = this._readCache(key);
-      if (cached && cached.sats && !cached.chunked) { bump(); return Promise.resolve(tag(cached.sats, key)); }
+      if (cached && cached.sats && !cached.chunked) { bump(); stamp(cached); return Promise.resolve(cached.sats); }
       return this._downloadJSON(this._fileID(`${key}.json`))
         .then((data) => {
           bump();
           if (data && data.chunked) return []; // 分块（旧路径）：本视图按空处理（单组视图仍可加载）
           data = this._omm(data); // OMM 信封 -> 解析出 sats
           if (!data || !data.sats) return []; // 缺失：本视图按空处理
-          this._writeCache(key, data); // 写缓存（标记 _group 前，保持缓存干净）
-          return tag(data.sats, key);
+          this._writeCache(key, data);
+          stamp(data);
+          return data.sats;
         })
         .catch(() => { bump(); return []; });
     });
-    Promise.all(tasks).then((arrs) => {
-      const sats = [];
+
+    return Promise.all(tasks).then((arrs) => {
+      // 已知组按 GROUPS 次序先到先认领（同一颗星只留一份）
+      const universe = [], groupOf = Object.create(null);
       for (let i = 0; i < arrs.length; i++) {
-        for (let j = 0; j < arrs[i].length; j++) sats.push(arrs[i][j]);
+        const key = keys[i], a = arrs[i];
+        for (let j = 0; j < a.length; j++) {
+          const s = a[j];
+          if (groupOf[s.noradId]) continue;
+          groupOf[s.noradId] = key;
+          s._group = key;
+          universe.push(s);
+        }
       }
-      if (!sats.length) { this._fail('暂无卫星数据（云端尚未生成）'); return; }
-      this._ingest({ group: 'all', label: '全部卫星', fetchedAt: new Date().toISOString(), count: sats.length, sats });
+      // 再并入「全部在轨」中未被认领的 -> 「其他」
+      return this._loadActive().then((act) => {
+        bump();
+        stamp(act);
+        const asats = (act && act.sats) || [];
+        for (let j = 0; j < asats.length; j++) {
+          const s = asats[j];
+          if (groupOf[s.noradId]) continue;
+          groupOf[s.noradId] = 'other';
+          s._group = 'other';
+          universe.push(s);
+        }
+        const latest = fetchedAts.length ? fetchedAts.reduce((a, b) => (b > a ? b : a)) : null;
+        return { sats: universe, fetchedAt: latest || new Date().toISOString() };
+      });
     });
+  },
+
+  // 「全部在轨」(active)：当天本地缓存 -> 云存储 -> 本机直连 CelesTrak 兜底（并回传云存储惠及后续用户）。
+  // 明文约 5MB，故不进启动时的众包全量刷新（见 utils/tleStore 的 ALL_KEYS），只在用户真正打开
+  // 「全部卫星 / 其他」时按需取一次，之后当天走本地缓存。四路都拿不到时返回 null（全集退化为已知组并集）。
+  _loadActive() {
+    const cached = this._readCache('active');
+    if (cached && cached.sats && cached.sats.length) return Promise.resolve(cached);
+    const live = () => {
+      this.setData({ statusText: '从 CelesTrak 获取全部在轨（约 5MB，首次较慢）…' });
+      return tleStore.fetchGroupLiveOrSup('active').then((payload) => {
+        this._writeCache('active', payload);
+        tleStore.uploadGroupPayload('active', payload); // 后台回传云存储，后续用户走 CDN
+        return payload;
+      }).catch(() => null); // 直连也失败 -> 退化为已知组并集
+    };
+    return this._downloadJSON(this._fileID('active.json'))
+      .then((data) => {
+        data = this._omm(data);
+        if (!data || !data.sats || !data.sats.length) return null;
+        this._writeCache('active', data);
+        return data;
+      })
+      .catch(() => null)
+      .then((data) => data || live()); // 云端缺失才直连，且只试一次
+  },
+
+  // “全部卫星”：全集（已知组并集 ∪ 全部在轨）
+  _loadAll() {
+    this._loadUniverse('全部卫星').then(({ sats, fetchedAt }) => {
+      if (!sats.length) { this._fail('暂无卫星数据（云端尚未生成）'); return; }
+      this._ingest({ group: 'all', label: '全部卫星', fetchedAt, count: sats.length, sats });
+    }).catch(() => this._fail('全部卫星获取失败，请检查网络'));
+  },
+
+  // “其他”：全集中不属于任何已知星座的星
+  _loadOther() {
+    this._loadUniverse('其他').then(({ sats, fetchedAt }) => {
+      const others = sats.filter((s) => s._group === 'other');
+      if (!others.length) { this._fail('暂无“其他”卫星（全部在轨星历未加载成功）'); return; }
+      this._ingest({ group: 'other', label: '其他', fetchedAt, count: others.length, sats: others });
+    }).catch(() => this._fail('“其他”获取失败，请检查网络'));
   },
 
   // 兜底：本机直连 CelesTrak 拉取某组（云端缺失/下载失败时），立即展示并回传云存储惠及后续用户

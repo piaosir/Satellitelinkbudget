@@ -473,16 +473,6 @@ page {
   gap: 4rpx;
 }
 
-/* ISL 计算模式：分段切换器三等分撑满整行（不影响卡片标题用的 .orbit-seg） */
-.orbit-seg-full {
-  width: 100%;
-}
-
-.orbit-seg-full .orbit-seg-item {
-  flex: 1;
-  min-width: 0;
-}
-
 .form-label-row .form-label {
   margin-bottom: 0;
   flex: 4;
@@ -2346,6 +2336,21 @@ page {
 
 .icon-sun-outage {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='4' stroke='%231f2937' stroke-width='1.5'/%3E%3Cpath d='M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round'/%3E%3Cpath d='M6 17L18 7' stroke='%23dc2626' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E");
+}
+
+/* 频率计划：频率轴上两个宽窄不一的转发器块 —— 那张图的字面缩影。
+   ★ 线稿、三笔：与这一列其余图标（日凌 / 星座 / 星间链路…）同一族的 1.5 描边、无填充。
+     从前是四五个实心色块 + 一条轴，24px 上挤成一团墨，缩到列表里连宽窄都分不出来。
+   ★★ 两个块画成【闭合矩形】而不是开口朝下的「凵」：后者的竖笔收在轴线上，round 的笔帽会
+     探出轴线半个笔宽；闭合矩形没有笔端，底边与轴线同色同宽地重合成一条，看着就是块坐在轴上。 */
+.icon-freq-plan {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 18h18'/%3E%3Crect x='5.5' y='7.5' width='6.5' height='10.5'/%3E%3Crect x='15' y='11.5' width='4' height='6.5'/%3E%3C/svg%3E");
+}
+
+/* 仿真平台绑定：显示器 + 手机 —— 字面就是这个功能做的事（把电脑上的平台绑到这台手机上）。
+   与同排图标同款：24×24、1.5 描边、#1f2937，故在一排里不跳。 */
+.icon-satsim-bind {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%231f2937' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='12' height='8.5' rx='1'/%3E%3Cpath d='M8 12.5v3'/%3E%3Cpath d='M5.5 15.5h5'/%3E%3Crect x='16' y='8' width='6' height='12' rx='1.5'/%3E%3Cpath d='M19 17.6h.01'/%3E%3C/svg%3E");
 }
 
 /* ====== 键盘弹出时的底部占位 ====== */

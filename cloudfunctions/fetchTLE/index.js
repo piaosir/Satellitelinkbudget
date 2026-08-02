@@ -43,11 +43,14 @@ const GROUPS = {
   globalstar: { query: 'GROUP=globalstar',   label: 'Globalstar' },   // Globalstar（LEO 通信）
   stations:   { query: 'GROUP=stations',     label: '空间站' },       // ISS/天宫 等空间站
   planet:     { query: 'GROUP=planet',       label: 'Planet' },       // Planet Labs Flock/SkySat（对地遥感）
-  spire:      { query: 'GROUP=spire',        label: 'Spire' }         // Spire Lemur（气象/AIS/ADS-B 遥感）
+  spire:      { query: 'GROUP=spire',        label: 'Spire' },        // Spire Lemur（气象/AIS/ADS-B 遥感）
+  active:     { query: 'GROUP=active',       label: '全部在轨' }      // 全部在轨编目（~13k 颗 / 明文 ~5MB）
 };
 
 const CELESTRAK_HOST = 'celestrak.org';
-const MAIN_KEYS = Object.keys(GROUPS).filter((k) => k !== 'starlink'); // 主集合：除 starlink 外全部
+// 主集合：除 starlink、active 外全部。这两组体积大（1.8MB / 5MB），单独用 {group:'xxx'} 单跑，
+// 避免一次调用叠加超时。active 供星座地图「全部卫星 / 其他」用，播种后各端走 CDN，不必手机直连。
+const MAIN_KEYS = Object.keys(GROUPS).filter((k) => k !== 'starlink' && k !== 'active');
 
 // 部分大 LEO 组在 CelesTrak 有「运营商补充星历」端点(sup-gp.php)，限流与主端点(gp.php)互相独立。
 // 主端点 403「未更新」/失败时转打此端点，让手动播种即使在服务器 IP 已被限流时仍能成功。值=FILE 参数。
@@ -222,15 +225,25 @@ async function downloadJSON(path) {
 
 // 从所有已保存的 _names_<group>.json 重建跨分组索引 _index.json，并同步刷新 manifest.json
 // （manifest 供前端众包 ensureTLEFresh 判断各组新鲜度，~1KB）。
+// 归类口径与小程序 tleStore.buildLocalIndex / 星座地图 _loadUniverse 一致：已知星座组按 GROUPS 次序
+// 先到先认领（同一颗星只进索引一次），最后把 active 里没被认领的记为 'other'（=「其他」分组）。
 async function rebuildIndex() {
-  const keys = Object.keys(GROUPS);
+  const known = Object.keys(GROUPS).filter((k) => k !== 'active');
+  const keys = known.concat('active'); // active 排最后，认领优先级最低
   const datas = await Promise.all(keys.map((k) => downloadJSON(`celestrak/omm/_names_${k}.json`)));
   const index = [];
   const groups = {};
+  const seen = Object.create(null);
   keys.forEach((k, i) => {
     const d = datas[i];
     if (!d || !d.names) return;
-    for (let j = 0; j < d.names.length; j++) index.push({ name: d.names[j].name, noradId: d.names[j].noradId, group: k });
+    const group = (k === 'active') ? 'other' : k;
+    for (let j = 0; j < d.names.length; j++) {
+      const id = d.names[j].noradId;
+      if (seen[id]) continue;
+      seen[id] = 1;
+      index.push({ name: d.names[j].name, noradId: id, group });
+    }
     groups[k] = { fetchedAt: d.fetchedAt, count: d.names.length };
   });
   await uploadJSON('celestrak/omm/_index.json', { builtAt: new Date().toISOString(), count: index.length, sats: index });

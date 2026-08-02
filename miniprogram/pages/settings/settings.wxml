@@ -1,5 +1,38 @@
 <!--settings.wxml-->
 <view class="container">
+  <!-- 仿真平台绑定：本机的认证码 = 长期收件地址，给电脑上的仿真平台记下来 -->
+  <view class="card">
+    <view class="card-title">仿真平台绑定</view>
+    <view class="bind-code" bindtap="copyCh">
+      <text class="bind-code-t">{{ chFmt || '············' }}</text>
+      <text class="bind-code-copy">点击复制</text>
+    </view>
+    <view class="bind-steps">
+      <text class="bind-step">1. 复制上面的认证码，发到电脑上（微信「文件传输助手」最快）</text>
+      <text class="bind-step">2. 在仿真平台「设置 → 小程序绑定」粘贴，起个备注名</text>
+      <text class="bind-step">3. 之后平台发来的内容，打开本小程序即自动同步</text>
+    </view>
+
+    <view class="bind-plats" wx:if="{{ platforms.length }}">
+      <view class="bind-plat" wx:for="{{ platforms }}" wx:key="pid">
+        <text class="bind-plat-n">{{ item.label || item.pid }}</text>
+        <text class="bind-plat-v">{{ item.app ? 'v' + item.app : '' }}</text>
+      </view>
+    </view>
+
+    <view class="action-list">
+      <view class="action-item" bindtap="syncNow">
+        <text class="action-label">{{ syncing ? '同步中…' : '立即同步' }}</text>
+        <text class="action-icon">→</text>
+      </view>
+      <view class="action-item" bindtap="resetCh">
+        <text class="action-label danger">重置认证码</text>
+        <text class="action-icon">→</text>
+      </view>
+    </view>
+    <view class="bind-msg" wx:if="{{ syncMsg }}">{{ syncMsg }}</view>
+  </view>
+
   <view class="card">
     <view class="card-title">关于系统</view>
     <view class="about-info">
