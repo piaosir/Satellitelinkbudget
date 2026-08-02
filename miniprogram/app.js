@@ -469,26 +469,36 @@ App({
   onShow: function () { this.satsimSync(); },
 
   // 后台静默同步。全程吞异常：这是个背景任务，没绑定 / 没网 / 云函数没部署都不该打扰用户。
+  //
+  // ★ 本地没码 ≠ 没绑过：换了手机、或清过缓存的用户，码在云端（按 openid 存）。这里若只看本地
+  //   就直接返回，那台设备的自动同步等于【永远关着】，而用户完全看不出来 —— 平台照投不误，
+  //   只是没人取。故本地无码时去云端找回一次（recoverCh 自带一天一次的节流，见 satsimBox.js）。
   satsimSync: function () {
     try {
       const box = require('./utils/satsimBox');
-      if (!box.getCh()) return;                 // 没绑定过，不发任何请求
-      box.syncNow().then((r) => {
-        if (!r || !r.ok || !r.n) return;
-        this.globalData = this.globalData || {};
-        this.globalData.satsimLastSync = r;
-        // 全自动同步下用户不知道发生了什么，给一句。延迟让首屏先渲染完，免得和页面自己的 loading 打架。
-        const parts = [];
-        if (r.cfg) parts.push(r.cfg + ' 份配置');
-        if (r.plan) parts.push(r.plan + ' 份频率计划');
-        if (r.gxt) parts.push(r.gxt + ' 份覆盖');
-        setTimeout(() => {
-          wx.showToast({ title: '已同步 ' + parts.join(' · '), icon: 'none', duration: 2400 });
-        }, 1200);
-      }).catch((e) => console.warn('[satsim] 自动同步失败：', e));
+      if (box.getCh()) { this.satsimPull(box); return; }
+      box.recoverCh()
+        .then((ch) => { if (ch) this.satsimPull(box); })
+        .catch((e) => console.warn('[satsim] 认证码找回失败：', e));
     } catch (e) {
       console.warn('[satsim] 自动同步启动失败：', e);
     }
+  },
+
+  satsimPull: function (box) {
+    box.syncNow().then((r) => {
+      if (!r || !r.ok || !r.n) return;
+      this.globalData = this.globalData || {};
+      this.globalData.satsimLastSync = r;
+      // 全自动同步下用户不知道发生了什么，给一句。延迟让首屏先渲染完，免得和页面自己的 loading 打架。
+      const parts = [];
+      if (r.cfg) parts.push(r.cfg + ' 份配置');
+      if (r.plan) parts.push(r.plan + ' 份频率计划');
+      if (r.gxt) parts.push(r.gxt + ' 份覆盖');
+      setTimeout(() => {
+        wx.showToast({ title: '已同步 ' + parts.join(' · '), icon: 'none', duration: 2400 });
+      }, 1200);
+    }).catch((e) => console.warn('[satsim] 自动同步失败：', e));
   },
 
   globalData: {

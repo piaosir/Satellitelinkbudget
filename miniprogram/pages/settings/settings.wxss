@@ -1,6 +1,18 @@
 /* settings.wxss */
 
 /* —— 仿真平台绑定 —— */
+
+/* 整块走期刊衬线（与 app.wxss 的 .card-title 同一份字体栈：西文 Times、中文宋体）。
+   ★ 一条规则连 view 带 text 全盖住，而不是逐个类去写 font-family：卡里的元素还会增减，
+     逐个写的话每加一个就要记得补一条，漏掉就在同一张卡里混出两种字。
+   ★★ 选择器带上元素名（.bind-card view / text）是为了压过 .bind-step、.action-label
+     这些单类选择器 —— 同为一层特指度时靠源码顺序定胜负，太脆。 */
+.bind-card,
+.bind-card view,
+.bind-card text {
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+}
+
 .bind-code {
   display: flex;
   flex-direction: column;
@@ -17,18 +29,18 @@
   background: #f0f0f0;
 }
 
+/* 认证码本身也用衬线。字母表已排除 I L O 0 1，不靠等宽也不会认错；
+   letter-spacing 保留，四位一组的分隔全靠它撑开 */
 .bind-code-t {
   font-size: 40rpx;
   font-weight: 700;
   letter-spacing: 4rpx;
   color: #1a1a1a;
-  font-family: 'Courier New', 'Consolas', monospace;
 }
 
 .bind-code-copy {
   font-size: 20rpx;
   color: #6a6a6a;
-  font-family: 'Courier New', 'Consolas', monospace;
 }
 
 .bind-steps {
@@ -40,9 +52,14 @@
 
 .bind-step {
   font-size: 22rpx;
-  line-height: 1.5;
+  line-height: 1.6;
   color: #6a6a6a;
-  font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.bind-step.link {
+  padding-top: 4rpx;
+  color: #1a1a1a;
+  text-decoration: underline;
 }
 
 .bind-plats {
@@ -62,21 +79,28 @@
 .bind-plat-n {
   font-size: 24rpx;
   color: #1a1a1a;
-  font-family: 'Courier New', 'Consolas', monospace;
 }
 
 .bind-plat-v {
   font-size: 20rpx;
   color: #6a6a6a;
-  font-family: 'Courier New', 'Consolas', monospace;
 }
 
 .bind-msg {
   padding: 12rpx 0 0;
   font-size: 22rpx;
-  line-height: 1.5;
+  line-height: 1.6;
   color: #6a6a6a;
-  font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.bind-warn {
+  margin: 12rpx 0 4rpx;
+  padding: 14rpx 16rpx;
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: #1a1a1a;
+  background: #fafafa;
+  border-left: 3px solid #1a1a1a;
 }
 
 .action-label.danger {
@@ -144,17 +168,3 @@
   color: #6a6a6a;
 }
 
-.system-info {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  text-align: center;
-  padding: 16rpx 0;
-}
-
-.info-text {
-  font-size: 22rpx;
-  color: #6a6a6a;
-  line-height: 1.5;
-  font-family: 'Courier New', 'Consolas', monospace;
-}

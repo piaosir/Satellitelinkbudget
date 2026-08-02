@@ -1,0 +1,80 @@
+<!--help.wxml 使用帮助（页面版）。块类型见 help-data.js 头部注释-->
+<view class="hp">
+
+  <view class="hp-head">
+    <text class="hp-title">使用帮助</text>
+    <text class="hp-sub">卫星链路计算与仿真系统 · v3.8.7</text>
+    <text class="hp-note-src">摘自《软件功能与使用指南》，并补充「仿真平台联动」一章</text>
+  </view>
+
+  <view class="hp-toc">
+    <view class="hp-toc-h">
+      <text class="hp-toc-t">目录</text>
+      <text class="hp-toc-all" bindtap="expandAll">展开 / 收起全部</text>
+    </view>
+    <view class="hp-toc-row" wx:for="{{toc}}" wx:key="no" bindtap="jump" data-i="{{index}}">
+      <text class="hp-toc-no">{{item.no}}</text>
+      <text class="hp-toc-n">{{item.title}}</text>
+      <text class="hp-toc-a">›</text>
+    </view>
+  </view>
+
+  <view class="hp-ch" wx:for="{{chapters}}" wx:key="no" id="ch{{item.no}}">
+    <view class="hp-ch-h" bindtap="toggle" data-i="{{index}}">
+      <text class="hp-ch-no">{{item.no}}</text>
+      <text class="hp-ch-t">{{item.title}}</text>
+      <text class="hp-ch-x">{{item.open ? '−' : '+'}}</text>
+    </view>
+
+    <view class="hp-ch-b" wx:if="{{item.open}}">
+      <block wx:for="{{item.blocks}}" wx:key="index" wx:for-item="b" wx:for-index="bi">
+
+        <text wx:if="{{b.t === 'h'}}" class="hp-h">{{b.v}}</text>
+
+        <text wx:elif="{{b.t === 'p'}}" class="hp-p">{{b.v}}</text>
+
+        <view wx:elif="{{b.t === 'ul'}}" class="hp-list">
+          <view class="hp-li" wx:for="{{b.v}}" wx:key="index" wx:for-item="li">
+            <text class="hp-li-m">●</text>
+            <text class="hp-li-v">{{li}}</text>
+          </view>
+        </view>
+
+        <view wx:elif="{{b.t === 'ol'}}" class="hp-list">
+          <view class="hp-li" wx:for="{{b.v}}" wx:key="index" wx:for-item="li" wx:for-index="oi">
+            <text class="hp-li-m">{{oi + 1}}.</text>
+            <text class="hp-li-v">{{li}}</text>
+          </view>
+        </view>
+
+        <view wx:elif="{{b.t === 'dl'}}" class="hp-dl">
+          <view class="hp-dl-row" wx:for="{{b.v}}" wx:key="index" wx:for-item="d">
+            <text class="hp-dt">{{d[0]}}</text>
+            <text class="hp-dd">{{d[1]}}</text>
+          </view>
+        </view>
+
+        <scroll-view wx:elif="{{b.t === 'tb'}}" class="hp-tb-scroll" scroll-x enable-flex>
+          <view class="hp-tb">
+            <view class="hp-tr hp-tr-h">
+              <text class="hp-td" wx:for="{{b.head}}" wx:key="index" wx:for-item="hd">{{hd}}</text>
+            </view>
+            <view class="hp-tr" wx:for="{{b.rows}}" wx:key="index" wx:for-item="row" wx:for-index="ri">
+              <text class="hp-td" wx:for="{{row}}" wx:key="index" wx:for-item="cell" wx:for-index="ci">{{cell}}</text>
+            </view>
+          </view>
+        </scroll-view>
+
+        <view wx:elif="{{b.t === 'note'}}" class="hp-nt {{b.kind === 'warn' ? 'warn' : ''}}">
+          <text class="hp-nt-t">{{b.kind === 'warn' ? '注意' : '提示'}} · {{b.title}}</text>
+          <text class="hp-nt-v">{{b.v}}</text>
+        </view>
+
+      </block>
+    </view>
+  </view>
+
+  <view class="hp-foot">
+    <text class="hp-foot-t">卫星链路计算与仿真系统 · v3.8.7</text>
+  </view>
+</view>

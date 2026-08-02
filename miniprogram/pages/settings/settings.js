@@ -4,12 +4,13 @@ const satsimBox = require('../../utils/satsimBox.js');
 // 「清除缓存」要保住的键：认证码是【长期收件地址】，平台侧记着它往里投。
 // 一旦被清掉又生成新的，所有已绑定的平台就都成了死地址 —— 而平台侧毫不知情，
 // 照样投递成功，只是再没人来取。所以这里不能再用光秃秃的 wx.clearStorageSync()。
-const KEEP_KEYS = ['satsimCh', 'satsimSeen', 'satsimPlatforms', 'satsimChSynced'];
+const KEEP_KEYS = ['satsimCh', 'satsimSeen', 'satsimPlatforms', 'satsimChSyncedV2', 'satsimChOther', 'satsimChProbe'];
 
 Page({
   data: {
     ch: '',
     chFmt: '',
+    otherFmt: '',        // 云端记着的另一个码（本机与云端分裂时才有）
     platforms: [],       // 已连接的仿真平台（上次同步时看到的）
     syncing: false,
     syncMsg: ''
@@ -21,7 +22,12 @@ Page({
   async refreshBinding() {
     // ensureCh：本地 → 云端 → 现生成。云端那一步保证换手机 / 清过缓存后拿回的是【同一个码】
     const ch = await satsimBox.ensureCh();
-    this.setData({ ch: ch, chFmt: satsimBox.fmtCh(ch), platforms: satsimBox.knownPlatforms() });
+    this.setData({
+      ch: ch,
+      chFmt: satsimBox.fmtCh(ch),
+      otherFmt: satsimBox.fmtCh(satsimBox.otherCh()),
+      platforms: satsimBox.knownPlatforms()
+    });
   },
 
   copyCh() {
@@ -29,6 +35,34 @@ Page({
     wx.setClipboardData({
       data: this.data.chFmt,
       success: () => wx.showToast({ title: '已复制，发到电脑上粘贴即可', icon: 'none', duration: 2200 })
+    });
+  },
+
+  // 换绑：把本机的收件地址改成另一台手机上已有的认证码。
+  // ★ 为什么必须有这条路：认证码只能由本机生成、复制出去。没有「输入一个已有的码」的入口，
+  //   两台手机各自生成过码之后就永远并不到一起 —— 本地有码时 ensureCh 一律本地赢，不会去动它。
+  adoptCh() {
+    wx.showModal({
+      title: '换绑其他认证码',
+      editable: true,
+      placeholderText: '粘贴 12 位认证码',
+      content: this.data.otherFmt || '',
+      confirmText: '换绑',
+      success: async (r) => {
+        if (!r.confirm) return;
+        const res = await satsimBox.adoptCh(r.content);
+        if (!res.ok) { wx.showToast({ title: res.error, icon: 'none', duration: 2600 }); return; }
+        this.setData({
+          ch: res.ch,
+          chFmt: satsimBox.fmtCh(res.ch),
+          otherFmt: satsimBox.fmtCh(satsimBox.otherCh()),
+          platforms: satsimBox.knownPlatforms(),
+          syncMsg: ''
+        });
+        if (res.same) { wx.showToast({ title: '本来就是这个码', icon: 'none' }); return; }
+        wx.showToast({ title: '已换绑，正在同步', icon: 'none' });
+        this.syncNow();     // 新地址里的东西一件都没拉过，立刻拉一轮
+      }
     });
   },
 
@@ -105,13 +139,9 @@ Page({
     });
   },
 
-  // 显示帮助
+  // 使用帮助：整本《软件功能与使用指南》的页面版（含「仿真平台联动」一章），见 pages/help
   showHelp() {
-    wx.showModal({
-      title: '使用帮助',
-      content: '1. 在"链路计算"页面输入参数\n2. 点击"开始计算"进行计算\n3. 计算完成后可保存配置或生成报告\n4. 在"配置管理"页面可加载历史配置',
-      showCancel: false
-    });
+    wx.navigateTo({ url: '/pages/help/help' });
   },
 
   // 意见反馈

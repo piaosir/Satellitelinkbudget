@@ -1,16 +1,16 @@
 <!--settings.wxml-->
 <view class="container">
-  <!-- 仿真平台绑定：本机的认证码 = 长期收件地址，给电脑上的仿真平台记下来 -->
-  <view class="card">
+  <!-- 仿真平台绑定：本机的认证码 = 长期收件地址，给电脑上的仿真平台记下来。
+       bind-card 只为把整块换成衬线字（见 settings.wxss 开头），不带任何布局含义 -->
+  <view class="card bind-card">
     <view class="card-title">仿真平台绑定</view>
     <view class="bind-code" bindtap="copyCh">
       <text class="bind-code-t">{{ chFmt || '············' }}</text>
       <text class="bind-code-copy">点击复制</text>
     </view>
+    <!-- 绑定步骤、多设备/多账号的说明都在「使用帮助 → 仿真平台联动」那一章，这里只留个指路条 -->
     <view class="bind-steps">
-      <text class="bind-step">1. 复制上面的认证码，发到电脑上（微信「文件传输助手」最快）</text>
-      <text class="bind-step">2. 在仿真平台「设置 → 小程序绑定」粘贴，起个备注名</text>
-      <text class="bind-step">3. 之后平台发来的内容，打开本小程序即自动同步</text>
+      <text class="bind-step link" bindtap="showHelp">怎么绑定 · 详见「使用帮助 → 仿真平台联动」›</text>
     </view>
 
     <view class="bind-plats" wx:if="{{ platforms.length }}">
@@ -20,9 +20,17 @@
       </view>
     </view>
 
+    <!-- 本机的码与云端记着的不是同一个：多半是同一个微信号的另一台手机各自生成过。
+         两台要收同一份内容，得在其中一台上换绑到另一台的码。 -->
+    <view class="bind-warn" wx:if="{{ otherFmt }}">云端还记着另一个认证码 {{ otherFmt }}，多半是你另一台手机生成的。两台手机想收同一份内容，在其中一台上「换绑其他认证码」到另一台的码即可（平台侧绑的是哪个，就并到哪个）。</view>
+
     <view class="action-list">
       <view class="action-item" bindtap="syncNow">
         <text class="action-label">{{ syncing ? '同步中…' : '立即同步' }}</text>
+        <text class="action-icon">→</text>
+      </view>
+      <view class="action-item" bindtap="adoptCh">
+        <text class="action-label">换绑其他认证码</text>
         <text class="action-icon">→</text>
       </view>
       <view class="action-item" bindtap="resetCh">
@@ -38,11 +46,11 @@
     <view class="about-info">
       <view class="about-item">
         <text class="label">系统名称</text>
-        <text class="value">卫星链路计算系统</text>
+        <text class="value">卫星链路计算与仿真系统</text>
       </view>
       <view class="about-item">
         <text class="label">版本号</text>
-        <text class="value">v1.0.0</text>
+        <text class="value">v3.8.7</text>
       </view>
       <view class="about-item">
         <text class="label">开发者</text>
@@ -76,14 +84,6 @@
         <text class="action-label">意见反馈</text>
         <text class="action-icon">→</text>
       </view>
-    </view>
-  </view>
-
-  <view class="card">
-    <view class="system-info">
-      <text class="info-text">基于ITU-R标准的卫星链路预算计算工具</text>
-      <text class="info-text">适用于C/Ku/Ka等多个频段</text>
-      <text class="info-text">支持多链路同时计算与对比分析</text>
     </view>
   </view>
 </view>

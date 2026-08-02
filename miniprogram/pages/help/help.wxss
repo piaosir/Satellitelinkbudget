@@ -1,0 +1,289 @@
+/* help.wxss —— 期刊版面口径：黑白灰、衬线正文、细分隔线，无彩色装饰。
+   字体栈与 app.wxss 的 page / .card-title 同一份（西文 Times、中文宋体）。 */
+
+.hp {
+  padding: 24rpx 24rpx 60rpx;
+  background: #ffffff;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+}
+
+/* —— 页头 —— */
+.hp-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  padding: 8rpx 0 24rpx;
+  border-bottom: 2px solid #1a1a1a;
+}
+
+.hp-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: 2rpx;
+}
+
+.hp-sub {
+  font-size: 22rpx;
+  color: #6a6a6a;
+}
+
+.hp-note-src {
+  font-size: 20rpx;
+  color: #9a9a9a;
+}
+
+/* —— 目录 —— */
+.hp-toc {
+  padding: 20rpx 0 8rpx;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.hp-toc-h {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 8rpx;
+}
+
+.hp-toc-t {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: 2rpx;
+}
+
+.hp-toc-all {
+  font-size: 20rpx;
+  color: #6a6a6a;
+  text-decoration: underline;
+}
+
+.hp-toc-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  padding: 12rpx 0;
+  border-bottom: 1px dashed #ececec;
+}
+
+.hp-toc-row:last-child { border-bottom: none; }
+.hp-toc-row:active { background: #fafafa; }
+
+.hp-toc-no {
+  min-width: 34rpx;
+  font-size: 22rpx;
+  color: #9a9a9a;
+}
+
+.hp-toc-n {
+  flex: 1;
+  font-size: 24rpx;
+  color: #1a1a1a;
+}
+
+.hp-toc-a {
+  font-size: 24rpx;
+  color: #9a9a9a;
+}
+
+/* —— 章节 —— */
+.hp-ch {
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.hp-ch-h {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
+  padding: 26rpx 0;
+}
+
+.hp-ch-h:active { background: #fafafa; }
+
+.hp-ch-no {
+  min-width: 34rpx;
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #9a9a9a;
+}
+
+.hp-ch-t {
+  flex: 1;
+  font-size: 28rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: 1rpx;
+}
+
+.hp-ch-x {
+  font-size: 30rpx;
+  color: #6a6a6a;
+  padding-left: 12rpx;
+}
+
+.hp-ch-b {
+  padding: 0 0 28rpx 46rpx;
+}
+
+/* —— 正文块 —— */
+.hp-h {
+  display: block;
+  margin: 22rpx 0 10rpx;
+  padding-left: 14rpx;
+  border-left: 3px solid #1a1a1a;
+  font-size: 25rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.hp-p {
+  display: block;
+  margin: 10rpx 0;
+  font-size: 23rpx;
+  line-height: 1.75;
+  color: #3a3a3a;
+  text-align: justify;
+}
+
+.hp-list {
+  margin: 10rpx 0;
+}
+
+.hp-li {
+  display: flex;
+  gap: 10rpx;
+  padding: 6rpx 0;
+}
+
+.hp-li-m {
+  min-width: 34rpx;
+  font-size: 20rpx;
+  line-height: 1.9;
+  color: #9a9a9a;
+}
+
+.hp-li-v {
+  flex: 1;
+  font-size: 23rpx;
+  line-height: 1.7;
+  color: #3a3a3a;
+}
+
+/* 术语表：术语一行、说明一行。手机上比两列表格好读得多 */
+.hp-dl {
+  margin: 12rpx 0;
+}
+
+.hp-dl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  padding: 12rpx 0;
+  border-bottom: 1px dashed #ececec;
+}
+
+.hp-dl-row:last-child { border-bottom: none; }
+
+.hp-dt {
+  font-size: 23rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.hp-dd {
+  font-size: 22rpx;
+  line-height: 1.65;
+  color: #6a6a6a;
+}
+
+/* 表格：只在真正需要横向对齐时用，超宽可横滑 */
+.hp-tb-scroll {
+  margin: 14rpx 0;
+  width: 100%;
+  border: 1px solid #e0e0e0;
+}
+
+/* ★ 表体宽度必须是 max-content：单元格是定宽的，若表体被压回容器宽度，
+   行内容会溢出而不是把表体撑宽，scroll-x 就滑不动（看起来像被截断）。 */
+.hp-tb {
+  display: flex;
+  flex-direction: column;
+  width: -webkit-max-content;
+  width: max-content;
+  min-width: 100%;
+}
+
+.hp-tr {
+  display: flex;
+  flex-wrap: nowrap;
+  border-bottom: 1px solid #ececec;
+}
+
+.hp-tr:last-child { border-bottom: none; }
+
+.hp-tr-h {
+  background: #fafafa;
+  border-bottom: 1px solid #1a1a1a;
+}
+
+.hp-tr-h .hp-td {
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.hp-td {
+  flex: 0 0 auto;
+  width: 240rpx;
+  padding: 12rpx 14rpx;
+  font-size: 21rpx;
+  line-height: 1.6;
+  color: #3a3a3a;
+  border-right: 1px solid #ececec;
+  word-break: break-word;
+}
+
+.hp-td:first-child {
+  width: 170rpx;
+}
+
+.hp-td:last-child { border-right: none; }
+
+/* 提示 / 注意 */
+.hp-nt {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+  margin: 16rpx 0;
+  padding: 16rpx 18rpx;
+  background: #fafafa;
+  border-left: 3px solid #6a6a6a;
+}
+
+.hp-nt.warn {
+  border-left-color: #1a1a1a;
+}
+
+.hp-nt-t {
+  font-size: 21rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+  letter-spacing: 1rpx;
+}
+
+.hp-nt-v {
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: #4a4a4a;
+}
+
+/* —— 页脚 —— */
+.hp-foot {
+  padding: 36rpx 0 0;
+  text-align: center;
+}
+
+.hp-foot-t {
+  font-size: 20rpx;
+  color: #c0c0c0;
+}

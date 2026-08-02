@@ -4,6 +4,7 @@
     "pages/report/report",
     "pages/configs/configs",
     "pages/settings/settings",
+    "pages/help/help",
     "pages/results-detail/results-detail"
   ],
   "subpackages": [

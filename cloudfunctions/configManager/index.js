@@ -84,6 +84,13 @@ async function ensureUniqueShareCode() {
 //
 // ★ 集合首次使用时自动创建（db.createCollection），不需要去云开发控制台建表。
 //   已存在时会抛「collection already exists」，吞掉即可。
+//
+// ★★ 身份字段用普通的 `openid`，【不是】`_openid`：云函数是管理端身份，从这里 add 写进去的
+//    记录不会自动带 `_openid`（只有小程序端直连数据库写才会自动带）。写不带 `_openid` 的记录、
+//    又按 `_openid` 去查，这张表就成了只写不读 —— 每存一次多一条无主记录，loadBinding 永远
+//    返回 null，于是「换手机 / 清缓存能找回同一个码」这件事【从来没生效过】，而且毫无征兆：
+//    每台设备各自生成各自的码，用着都正常，只有平台绑的那台收得到东西。
+//    与本文件 user_configs 的口径一致（见 saveConfig 的 openid 字段）。
 const BIND_COLL = 'satsim_bindings';
 
 async function ensureBindColl() {
@@ -92,24 +99,26 @@ async function ensureBindColl() {
 
 async function loadBinding(openid) {
   await ensureBindColl();
-  const r = await db.collection(BIND_COLL).where({ _openid: openid }).limit(1).get();
+  const r = await db.collection(BIND_COLL).where({ openid }).limit(1).get();
   const row = r.data && r.data[0];
   return { success: true, data: row ? { ch: row.ch || '', createdAt: row.createdAt || 0, resetAt: row.resetAt || 0 } : null };
 }
 
+// 覆盖式：调用方（小程序 utils/satsimBox.js）在覆盖前已经决定过「该不该覆盖」——
+// 本地有码且与云端不同时它不会调这里，而是提示用户去换绑。这里不再二次判断。
 async function saveBinding(openid, data) {
   await ensureBindColl();
   const ch = String((data && data.ch) || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!/^[A-Z0-9]{12}$/.test(ch)) return { success: false, error: '认证码格式不正确' };
   const now = Date.now();
-  const r = await db.collection(BIND_COLL).where({ _openid: openid }).limit(1).get();
+  const r = await db.collection(BIND_COLL).where({ openid }).limit(1).get();
   const row = r.data && r.data[0];
   if (row) {
     // 换码 = 重置：把旧码作废的时刻记下来，便于用户回看「我什么时候重置过」
     const patch = row.ch === ch ? { ch } : { ch, resetAt: now };
     await db.collection(BIND_COLL).doc(row._id).update({ data: patch });
   } else {
-    await db.collection(BIND_COLL).add({ data: { ch, createdAt: now, resetAt: 0 } });
+    await db.collection(BIND_COLL).add({ data: { openid, ch, createdAt: now, resetAt: 0 } });
   }
   return { success: true, data: { ch } };
 }

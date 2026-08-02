@@ -22,12 +22,21 @@ const KEY_SEEN = 'satsimSeen';         // { <消息id>: 投递时刻 } —— �
 const KEY_GXT = 'satsimGxtInbox';      // 覆盖快照待消化队列（由「卫星覆盖」页取走，见本文件末尾）
 const KEY_LAST = 'satsimLastSync';     // 上次同步时刻（节流）
 const KEY_PLAT = 'satsimPlatforms';    // 上次看到的平台清单（设置页显示「已连接」）
-const KEY_SYNCED = 'satsimChSynced';   // 认证码是否已成功备份到云端（见 ensureCh 的 ★★）
+// 认证码是否已成功备份到云端（见 ensureCh 的 ★★）。
+// ★ 键名带 V2 是【故意的】：老版本云函数按 _openid 存取绑定，而云函数是管理端身份、写入不会
+//   自动带 _openid（见 cloudfunctions/configManager 的 BIND_COLL 段），于是那边存进去的是一条
+//   查不出来的无主记录 —— 老的 satsimChSynced=1 记的是一次【假成功】。沿用旧键的话，已经绑好的
+//   那台永远不会补传，云端一直是空的，换机/清缓存照样找不回，这次修复等于没修。
+//   换个键名 = 所有设备升级后重新校验一次云端，各自补上该补的那一步。
+const KEY_SYNCED = 'satsimChSyncedV2';
+const KEY_OTHER = 'satsimChOther';     // 云端记着的另一个码（本机与云端分裂了，见 ensureCh 的 ★★★）
+const KEY_PROBE = 'satsimChProbe';     // 上次去云端探过码的时刻（见 recoverCh 的节流）
 
 const CH_LEN = 12;
 const CH_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // 去 I L O 0 1，与平台/密钥同源
 const MIN_INTERVAL_MS = 60 * 1000;     // 自动同步最小间隔（手动同步不受限）
 const MAX_PER_ROUND = 12;              // 一轮最多拉几件，剩下的下一轮 —— 避免首次绑定时一次拉几十件
+const PROBE_INTERVAL_MS = 24 * 3600 * 1000;   // 本地无码时，多久去云端探一次
 
 // ============================================================================
 // 认证码
@@ -112,13 +121,23 @@ function loadChCloud() {
  * ★★ 云备份是 best-effort（云函数还没部署 / 没网 / 没登录都会失败），故用 KEY_SYNCED 记一笔，
  *    没成过的每次进来补传一次 —— 否则「首次生成时恰好云函数没部署」会让跨设备找回【永久】失效，
  *    而且毫无征兆：本地一直有码，用着没问题，直到换手机那天才发现找不回来。
+ * ★★★ 补传前必须【先读一眼云端】。读到的码与本地不同时，两边都不动：
+ *    改本地 = 本机那个码多半已经人肉带到平台上绑好了，改掉就再也收不到；
+ *    覆盖云端 = 把另一台（很可能才是平台绑的那台）的码抹掉，往后所有新设备都取到错的那个。
+ *    只把云端那个记进 KEY_OTHER，由设置页提示用户「换绑」—— 谁并到谁是用户的决定，不猜。
  */
 async function ensureCh() {
   const local = getCh();
   if (local) {
     if (!wx.getStorageSync(KEY_SYNCED)) {
-      const okUp = await saveChCloud(local);
-      if (okUp) wx.setStorageSync(KEY_SYNCED, 1);
+      const cloud = await loadChCloud();
+      if (cloud && cloud !== local) {
+        // 分裂了。不标 SYNCED：下次进设置页再探一次，云端那边并过来了就能自愈
+        wx.setStorageSync(KEY_OTHER, cloud);
+      } else if (cloud === local || await saveChCloud(local)) {
+        wx.removeStorageSync(KEY_OTHER);
+        wx.setStorageSync(KEY_SYNCED, 1);
+      }
     }
     return local;
   }
@@ -130,12 +149,56 @@ async function ensureCh() {
   return born;
 }
 
+/**
+ * 启动路径的轻量找回：本地无码时去云端看一眼，有就采纳。
+ * ★ 与 ensureCh 的差别：云端也没有时【不生成】—— 只是开了个小程序的用户不该在云端多一条记录。
+ *   生成留给设置页（用户真要绑定时才会去那儿）。
+ * ★★ 节流一天一次：从没绑过的用户每次冷启都查一次云端是纯浪费；而另一台新生成的码，
+ *    本机最迟一天内自动接上（等不及就进设置页，那条路是立即查的）。
+ */
+async function recoverCh() {
+  const local = getCh();
+  if (local) return local;
+  const last = Number(wx.getStorageSync(KEY_PROBE) || 0);
+  if (Date.now() - last < PROBE_INTERVAL_MS) return '';
+  wx.setStorageSync(KEY_PROBE, Date.now());
+  const cloud = await loadChCloud();
+  if (!cloud) return '';
+  setChLocal(cloud);
+  wx.setStorageSync(KEY_SYNCED, 1);
+  return cloud;
+}
+
+/** 云端记着的另一个码（本机与云端分裂时才有值）。设置页据此提示换绑。 */
+function otherCh() {
+  const v = normalizeCh(wx.getStorageSync(KEY_OTHER));
+  return isCh(v) && v !== getCh() ? v : '';
+}
+
+/**
+ * 换绑：把本机的收件地址改成一个已有的认证码（多半是自己另一台手机上的）。
+ * ★ 必须清 KEY_SEEN：消息 id 是 hash(平台id|内容身份)，【与认证码无关】—— 同一份内容投给两个
+ *   地址是同一个 id。不清的话换绑后会把新地址里那些「id 见过」的内容当成已同步，直接漏掉。
+ */
+async function adoptCh(raw) {
+  const ch = normalizeCh(raw);
+  if (!isCh(ch)) return { ok: false, error: '认证码应为 12 位（在另一台手机的「设置 → 仿真平台绑定」里复制）' };
+  if (ch === getCh()) return { ok: true, ch: ch, same: true };
+  setChLocal(ch);
+  wx.setStorageSync(KEY_SEEN, {});
+  wx.setStorageSync(KEY_PLAT, []);
+  wx.removeStorageSync(KEY_OTHER);
+  wx.setStorageSync(KEY_SYNCED, (await saveChCloud(ch)) ? 1 : '');
+  return { ok: true, ch: ch };
+}
+
 /** 重置：换一个新收件地址。旧码作废，已绑定的平台需要重新绑。 */
 async function resetCh() {
   const born = await genCh();
   setChLocal(born);
   wx.setStorageSync(KEY_SEEN, {});     // 新地址是空的，旧的已同步记录没有意义
   wx.setStorageSync(KEY_PLAT, []);
+  wx.removeStorageSync(KEY_OTHER);     // 云端已被这个新码覆盖，分裂提示不再成立
   wx.setStorageSync(KEY_SYNCED, (await saveChCloud(born)) ? 1 : '');
   return born;
 }
@@ -320,6 +383,9 @@ module.exports = {
   fmtCh: fmtCh,
   getCh: getCh,
   ensureCh: ensureCh,
+  recoverCh: recoverCh,
+  otherCh: otherCh,
+  adoptCh: adoptCh,
   resetCh: resetCh,
   syncNow: syncNow,
   peekNew: peekNew,
