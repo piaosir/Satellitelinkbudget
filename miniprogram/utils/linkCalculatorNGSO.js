@@ -86,19 +86,8 @@ const CONSTANTS = {
   BOLTZMANN: -228.6 // 玻尔兹曼常数 dBW/K/Hz
 };
 
-// 调制因子
-const MODULATION_FACTORS = {
-  'BPSK': 1,
-  'QPSK': 2,
-  '8PSK': 3,
-  '8QAM': 3,
-  '16QAM': 4,
-  '16APSK': 4,
-  '32APSK': 5,
-  '64APSK': 6,
-  '128APSK': 7,
-  '256APSK': 8
-};
+// 调制因子 —— 取 constants.js 那份单一出处（同 linkCalculator.js，引擎不再各抄一份）
+const { MODULATION_FACTORS } = require('./constants.js');
 
 // ITU-R P.838 降雨衰减系数表 (完全按照 index.html)
 const P838_TABLE = {
@@ -449,8 +438,8 @@ function performCalculations(satParams, inputs) {
   
   // 干扰因子 - 从卫星参数中读取 (支持输入0)
   const deltaTheta = satParams.deltaTheta !== undefined && satParams.deltaTheta !== '' && satParams.deltaTheta !== null
-    ? parseFloat(satParams.deltaTheta) 
-    : 3; // 度 - 角度偏差
+    ? parseFloat(satParams.deltaTheta)
+    : 2.5; // 度 - 角度偏差（空回退对齐字段默认 2.5，与平台引擎同口径）
 
   // ============ NGSO 专属：轨道倾角 ============
   // 轨道倾角影响地球自转对多普勒频移的贡献分量：v_E_eff = ω_E·r·cos(i)
@@ -744,13 +733,19 @@ function performCalculations(satParams, inputs) {
   }
 
   // ============ 噪声温度计算 ============
-  // 降雨噪声温度
-  const rainNoiseTemp = 273.15 * (1 - 1 / Math.pow(10, downlinkRainAttenuation / 10));
-  
-  // 接收系统等效噪声温度
+  // 降雨噪声温度（介质辐射温度取 ITU-R P.618-14 §3 推荐值 T_mr = 275 K）
+  const rainNoiseTemp = 275 * (1 - 1 / Math.pow(10, downlinkRainAttenuation / 10));
+
+  // 云噪声温度：云衰减已常态计入下行功率链（downlinkCT），按吸收/辐射自洽（基尔霍夫），
+  // 同一吸收介质的热辐射 ΔT = T_mr·(1−10^(−AC/10)) 须同步计入系统噪温（只扣 C 不抬 T 口径不自洽）。
+  // 雨噪仍按场景单独计入（gOverTdegradation），与云噪不重复。
+  const cloudNoiseTemp = 275 * (1 - 1 / Math.pow(10, downlinkCloudAttenuation / 10));
+
+  // 接收系统等效噪声温度（云噪经馈线折算，与天线噪温同参考面）
   const feederLossLinear = Math.pow(10, rxFeederLoss / 10);
-  const systemNoiseTempK = (antennaNoiseTemp / feederLossLinear) + 
-                           290 * (1 - 1 / feederLossLinear) + 
+  const systemNoiseTempK = (antennaNoiseTemp / feederLossLinear) +
+                           (cloudNoiseTemp / feederLossLinear) +
+                           290 * (1 - 1 / feederLossLinear) +
                            receiverNoiseTemp;
   const systemNoiseTempDb = 10 * Math.log10(systemNoiseTempK);
   
@@ -1087,18 +1082,20 @@ function performCalculations(satParams, inputs) {
     } else {
       ituPsdLimit4kHz = -8;
     }
-  } else if (uplinkFrequency >= 5.85 && uplinkFrequency <= 6.725) {
-    // C频段: 5.850-6.725 GHz (FSS上行)
-    // ITU RR Article 21 Table 21-4A, 参考带宽4kHz
+  } else if (uplinkFrequency >= 5.725 && uplinkFrequency <= 7.075) {
+    // C频段: 5.725-7.075 GHz (FSS上行) —— 区间按 S.524-9 recommends 2 正文，
+    // 原来的 5.850-6.725 把扩展C两端（5.725-5.85、6.725-7.075）挤出建议书覆盖域
+    // 限值常数取 ITU-R S.524-9 recommends 2（32/11/35/−7 dB(W/4kHz)，φ₀=2.5°），参考带宽4kHz
+    // φ<2.5°：建议书只对「偏离主瓣轴 2.5° 及以上」设限，主瓣内不设限，此处按 φ₀ 处的值连续钳住
     ituRefBandwidth = '4kHz';
     if (phi < 2.5) {
-      ituPsdLimit4kHz = 35 - 25 * Math.log10(2.5);
+      ituPsdLimit4kHz = 32 - 25 * Math.log10(2.5);
     } else if (phi < 7) {
-      ituPsdLimit4kHz = 26 - 25 * Math.log10(phi);
+      ituPsdLimit4kHz = 32 - 25 * Math.log10(phi);
     } else if (phi < 9.2) {
-      ituPsdLimit4kHz = 5;
+      ituPsdLimit4kHz = 11;
     } else if (phi < 48) {
-      ituPsdLimit4kHz = 29 - 25 * Math.log10(phi);
+      ituPsdLimit4kHz = 35 - 25 * Math.log10(phi);
     } else {
       ituPsdLimit4kHz = -7;
     }
@@ -1895,8 +1892,9 @@ function calculateScintillationFading(frequencyGHz, elevationDeg, antennaDiamete
 
   // Step 7: a(p)（公式48），p = 超越概率%
   const p = 100 - availability;
-  if (p < 0.01 || p > 50) return 0; // 超出适用范围
-  const logP = Math.log10(p);
+  if (p > 50) return 0;              // p>50% 超出适用范围（可用度过低，闪烁统计无意义）
+  const pEff = Math.max(p, 0.01);    // p<0.01% 钳位到公式(48)有效域下界（而非返 0——避免可用度>99.99% 时闪烁项凭空消失）
+  const logP = Math.log10(pEff);
   const a_p = -0.061 * Math.pow(logP, 3) + 0.072 * Math.pow(logP, 2) - 1.71 * logP + 3.0;
 
   // Step 8: 闪烁衰减（公式49）
@@ -2166,12 +2164,16 @@ function calculateAtmosphericAttenuation(frequencyGHz, elevationDeg, Ps, Ts, rho
     return (Ao + Aw) / Math.sin(elevationDeg * Math.PI / 180);
   }
 
+  // θ < 5°: 球面地球修正 — 均匀厚度 h 大气层的斜路径长 L = 2h/(√(sin²θ+2h/Re)+sinθ)
+  // （与本文件雨衰 Ls 低仰角分支同式；原 h/√(sin²θ+2h/Re) 形式在 θ→0 时恰为几何路径的一半，
+  //   且在 5° 界面产生"仰角降低衰减反而变小"的非物理跳变，已更正）
   const sinEl = Math.sin(elevationDeg * Math.PI / 180);
   const Re = 8500;
   const hoSafe = Math.max(ho, 0.1);
   const hwSafe = Math.max(hw, 0.1);
-  return Ao / Math.sqrt(sinEl * sinEl + 2 * hoSafe / Re) +
-         Aw / Math.sqrt(sinEl * sinEl + 2 * hwSafe / Re);
+  const pathO = 2 * hoSafe / (Math.sqrt(sinEl * sinEl + 2 * hoSafe / Re) + sinEl);
+  const pathW = 2 * hwSafe / (Math.sqrt(sinEl * sinEl + 2 * hwSafe / Re) + sinEl);
+  return gammaO * pathO + gammaW * pathW;
 }
 
 /**
@@ -2375,21 +2377,38 @@ function calculateRainXPD_P618_14(Ap, freq, tauDeg, elevDeg, p) {
   // 无降雨衰减或参数无效 → 不产生雨致去极化
   if (!(Ap > 0) || !(freq > 0) || !(p > 0)) return Infinity;
 
+  // §4.1 频率下界 6 GHz：4~6 GHz 按 §4.2 半经验频率标度 XPD₂ = XPD₁ − 20·lg(f₂/f₁)
+  // 从域内 6 GHz 换算（直接把 f<6 代入 Cf=60·lgf−28.3 属域外使用，C 频段会低估 XPD ~8 dB）；
+  // f<4 GHz 超出 §4.2 标度下界，返回 Infinity（不计雨致去极化）。
+  if (freq < 4) return Infinity;
+  if (freq < 6) {
+    const xpd6 = calculateRainXPD_P618_14(Ap, 6, tauDeg, elevDeg, p);
+    return isFinite(xpd6) ? xpd6 - 20 * Math.log10(freq / 6) : xpd6;
+  }
+
   // 方法有效仰角范围 θ ≤ 60°，超出则限幅到 60°
   const theta = Math.min(Math.max(elevDeg, 0), 60);
   const D2R = CONSTANTS.PI / 180;
 
-  // Step 1: 频率相关项 Cf = 30·log f （6 ≤ f ≤ 55 GHz）
-  const Cf = 30 * Math.log10(freq);
+  // Step 1: 频率相关项 Cf —— ITU-R P.618-14 §4.1 Step 1，按频段分三式
+  //   6 ≤ f < 9 :  60·log f − 28.3
+  //   9 ≤ f < 36:  26·log f + 4.1
+  //   36 ≤ f ≤ 55: 35.9·log f − 11.3
+  let Cf;
+  if (freq < 9)        Cf = 60 * Math.log10(freq) - 28.3;
+  else if (freq < 36)  Cf = 26 * Math.log10(freq) + 4.1;
+  else                 Cf = 35.9 * Math.log10(freq) - 11.3;
 
-  // Step 2: 降雨衰减相关项 CA = V(f)·log(Ap)
-  //   V(f) = 12.8·f^0.19   (6 ≤ f ≤ 9 GHz)
-  //   V(f) = 22.6          (9 < f ≤ 36 GHz)
-  //   V(f) = 13.0·f^0.19   (36 < f ≤ 55 GHz)
+  // Step 2: 降雨衰减相关项 CA = V(f)·log(Ap) —— ITU-R P.618-14 §4.1 Step 2，按频段分四式
+  //   6 ≤ f < 9 :  V = 30.8·f^(−0.21)
+  //   9 ≤ f < 20:  V = 12.8·f^0.19
+  //   20 ≤ f < 40: V = 22.6
+  //   40 ≤ f ≤ 55: V = 13.0·f^0.15
   let Vf;
-  if (freq <= 9)        Vf = 12.8 * Math.pow(freq, 0.19);
-  else if (freq <= 36)  Vf = 22.6;
-  else                  Vf = 13.0 * Math.pow(freq, 0.19);
+  if (freq < 9)        Vf = 30.8 * Math.pow(freq, -0.21);
+  else if (freq < 20)  Vf = 12.8 * Math.pow(freq, 0.19);
+  else if (freq < 40)  Vf = 22.6;
+  else                 Vf = 13.0 * Math.pow(freq, 0.15);
   const CA = Vf * Math.log10(Ap);
 
   // Step 3: 极化改善因子 Cτ = -10·log[1 - 0.484·(1 + cos4τ)]
@@ -2399,10 +2418,13 @@ function calculateRainXPD_P618_14(Ap, freq, tauDeg, elevDeg, p) {
   // Step 4: 仰角相关项 Cθ = -40·log(cosθ) （θ ≤ 60°）
   const Ctheta = -40 * Math.log10(Math.cos(theta * D2R));
 
-  // Step 5: 雨滴倾角分布相关项 Cσ = 0.0053·σ²
-  //   σ 为雨滴倾角分布的有效标准差（度），对 1%/0.1%/0.01%/0.001%
-  //   分别取 0/5/10/15 度，即 σ = -5·log10(p)（p ≥ 1% 时取 0）
-  const sigma = Math.max(0, -5 * Math.log10(p));
+  // Step 5: 雨滴倾角分布相关项 Cσ = 0.0053·σ² —— ITU-R P.618-14 §4.1 Step 5，σ 按时间百分比离散取值
+  //   σ(°)：p≤0.001%→15；p≤0.01%→10；p≤0.1%→5；其余→0（不是连续 −5·log10(p)）
+  let sigma;
+  if (p <= 0.001)      sigma = 15;
+  else if (p <= 0.01)  sigma = 10;
+  else if (p <= 0.1)   sigma = 5;
+  else                 sigma = 0;
   const Csigma = 0.0053 * sigma * sigma;
 
   // Step 6: 降雨去极化 XPDrain = Cf - CA + Cτ + Cθ + Cσ （dB）

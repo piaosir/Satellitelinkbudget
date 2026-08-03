@@ -122,6 +122,17 @@ const exportTranslations = {
   }
 };
 
+// 配置里的 linkParams 是槽位形 { 1:{...}, 2:{...} }。存量里有一批是扁平的单链路参数
+// （历史记录「收藏到配置」漏过槽位包装），整块塞进 globalData 后首页按槽位取到 undefined：
+// 卫星参数已换成新配置、链路参数还是上一份，混血参与计算且不报错。载入前统一归一。
+// 幂等：已是槽位形（键全是数字）原样返回；空对象不动，免得凭空造出一条空链路。
+function normalizeLinkParams(lp) {
+  if (!lp || typeof lp !== 'object') return lp;
+  const keys = Object.keys(lp);
+  if (!keys.length || keys.some(k => /^\d+$/.test(k))) return lp;
+  return { 1: lp };
+}
+
 Page({
   data: {
     configs: [],
@@ -1296,7 +1307,7 @@ Page({
         
         // 更新全局数据
         app.globalData.satelliteParams = config.satelliteParams;
-        app.globalData.linkParams = config.linkParams;
+        app.globalData.linkParams = normalizeLinkParams(config.linkParams);
         app.globalData.calculationResults = config.calculationResults || {};
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
@@ -1348,7 +1359,7 @@ Page({
       
       if (config) {
         app.globalData.satelliteParams = config.satelliteParams;
-        app.globalData.linkParams = config.linkParams;
+        app.globalData.linkParams = normalizeLinkParams(config.linkParams);
         app.globalData.calculationResults = config.calculationResults || {};
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
@@ -1427,7 +1438,7 @@ Page({
         
         // 更新全局数据
         app.globalData.satelliteParams = config.satelliteParams;
-        app.globalData.linkParams = config.linkParams;
+        app.globalData.linkParams = normalizeLinkParams(config.linkParams);
         app.globalData.calculationResults = config.calculationResults || {};
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
@@ -1478,7 +1489,7 @@ Page({
       
       if (config) {
         app.globalData.satelliteParams = config.satelliteParams;
-        app.globalData.linkParams = config.linkParams;
+        app.globalData.linkParams = normalizeLinkParams(config.linkParams);
         app.globalData.calculationResults = config.calculationResults || {};
         app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
         app.globalData.markedParams = config.markedParams || [];
@@ -2527,7 +2538,7 @@ Page({
         orbitType: reportOrbitType,
         ngsoOrbitClass: reportOrbitType === 'NGSO' ? (config.satelliteParams.ngsoOrbitClass || 'LEO') : ''
       };
-      app.globalData.linkParams = config.linkParams;
+      app.globalData.linkParams = normalizeLinkParams(config.linkParams);
       app.globalData.calculationResults = config.calculationResults;
       app.globalData.noiseRatioMode = config.noiseRatioMode || 'ebno';
       app.globalData.markedParams = config.markedParams || [];

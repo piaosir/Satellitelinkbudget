@@ -4,7 +4,12 @@ const satsimBox = require('../../utils/satsimBox.js');
 // 「清除缓存」要保住的键：认证码是【长期收件地址】，平台侧记着它往里投。
 // 一旦被清掉又生成新的，所有已绑定的平台就都成了死地址 —— 而平台侧毫不知情，
 // 照样投递成功，只是再没人来取。所以这里不能再用光秃秃的 wx.clearStorageSync()。
-const KEEP_KEYS = ['satsimCh', 'satsimSeen', 'satsimPlatforms', 'satsimChSyncedV2', 'satsimChOther', 'satsimChProbe'];
+//
+// ★ satsimSeen（已同步记录）【不能】保：频率计划、覆盖快照都是纯本地数据，这一清就没了，
+//   而 seen 里还记着「这几件同步过」—— 往后每一轮都判为不新，客户端拒绝补拉，只报「已是最新」，
+//   除非平台侧重发一次。清掉 seen 让下一轮全量补拉；导入侧按 srcId / 计划 id / 消息 id 幂等覆盖，
+//   重拉不会堆重复。
+const KEEP_KEYS = ['satsimCh', 'satsimPlatforms', 'satsimChSyncedV2', 'satsimChOther', 'satsimChProbe'];
 
 Page({
   data: {
@@ -89,15 +94,15 @@ Page({
 
     if (r.reason === 'nobind') { this.setData({ syncMsg: '还没有认证码' }); return; }
     if (r.reason === 'net') { this.setData({ syncMsg: '同步失败：' + (r.error || '网络问题') }); return; }
-    if (!r.n) { this.setData({ syncMsg: '已是最新' }); return; }
+    if (!r.n && !r.failed) { this.setData({ syncMsg: '已是最新' }); return; }
 
     const parts = [];
     if (r.cfg) parts.push(r.cfg + ' 份链路配置');
     if (r.plan) parts.push(r.plan + ' 份频率计划');
     if (r.gxt) parts.push(r.gxt + ' 份覆盖快照');
-    let msg = '已同步 ' + parts.join(' · ');
-    if (r.left) msg += '，还有 ' + r.left + ' 件待同步';
-    if (r.failed) msg += '（' + r.failed + ' 件失败，下次自动重试）';
+    let msg = parts.length ? '已同步 ' + parts.join(' · ') : '';
+    if (r.left) msg += (msg ? '，' : '') + '还有 ' + r.left + ' 件待同步';
+    if (r.failed) msg += (msg ? '，' : '') + r.failed + ' 件失败';
     this.setData({ syncMsg: msg });
     wx.showToast({ title: '同步完成', icon: 'success' });
   },

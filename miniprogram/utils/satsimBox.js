@@ -19,7 +19,8 @@ const satsimPack = require('./satsimPack.js');
 
 const KEY_CH = 'satsimCh';             // 本账号的认证码
 const KEY_SEEN = 'satsimSeen';         // { <消息id>: 投递时刻 } —— 判「这件同步过没有 / 是不是又变了」
-const KEY_GXT = 'satsimGxtInbox';      // 覆盖快照待消化队列（由「卫星覆盖」页取走，见本文件末尾）
+const KEY_GXT = 'satsimGxtInbox';      // 覆盖快照待消化队列的【索引】（由「卫星覆盖」页取走，见本文件末尾）
+const GXT_KEY = (id) => 'satsimGxt_' + id;    // 一份快照一键（同 satsimPack 的 fpPlan_*）
 const KEY_LAST = 'satsimLastSync';     // 上次同步时刻（节流）
 const KEY_PLAT = 'satsimPlatforms';    // 上次看到的平台清单（设置页显示「已连接」）
 // 认证码是否已成功备份到云端（见 ensureCh 的 ★★）。
@@ -37,6 +38,8 @@ const CH_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';   // 去 I L O 0 1，与�
 const MIN_INTERVAL_MS = 60 * 1000;     // 自动同步最小间隔（手动同步不受限）
 const MAX_PER_ROUND = 12;              // 一轮最多拉几件，剩下的下一轮 —— 避免首次绑定时一次拉几十件
 const PROBE_INTERVAL_MS = 24 * 3600 * 1000;   // 本地无码时，多久去云端探一次
+const GXT_MAX = 20;                    // 待消化队列最多囤几份
+const GXT_BUDGET = 4 * 1024 * 1024;    // 待消化队列的总字节预算（微信整个 storage 上限 10 MB）
 
 // ============================================================================
 // 认证码
@@ -245,24 +248,67 @@ const isFresh = (m, seen) => !!m && (!seen[m.id] || Number(seen[m.id]) < Number(
 // 覆盖快照要合成「波束」才能画，而那段逻辑（_mergeSnapshotToBeamData / _persistBeam）长在
 // 卫星覆盖页里、依赖页面状态。后台同步够不着它，也不该把那段逻辑复制一份到这里
 // —— 复制出来的就是第二份真相。故这里只排队，由覆盖页 onLoad 时取走消化。
-function queueGxt(row, snap) {
+//
+// ★ 分键存（同 satsimPack 的频率计划）：索引一键、每份快照一键。原先整队列囤在 KEY_GXT 一个键下，
+//   一份快照就有几百 KB，攒几份即越过微信单键 1 MB 上限 —— setStorageSync 当场抛错，这一件不记
+//   seen，下一轮重新下载再抛，无限循环烧流量而快照永远到不了覆盖页。
+function readGxtIndex() {
   const q = wx.getStorageSync(KEY_GXT);
-  const list = Array.isArray(q) ? q : [];
-  const at = list.findIndex((x) => x && x.id === row.id);
-  const item = { id: row.id, name: row.name || snap.name || '覆盖快照', from: row.from || '', ts: row.ts || Date.now(), snap: snap };
-  if (at >= 0) list[at] = item; else list.push(item);
-  wx.setStorageSync(KEY_GXT, list.slice(-20));
+  return Array.isArray(q) ? q.filter((x) => x && x.id) : [];
 }
 
-/** 覆盖页取待消化的快照 */
+/** 入队一份快照。返回 false = 没存下（存储满 / 单件仍超上限），由调用方记账。 */
+function queueGxt(row, snap) {
+  const id = row.id;
+  let bytes = 0;
+  try {
+    const s = JSON.stringify(snap);
+    bytes = s.length;
+    wx.setStorageSync(GXT_KEY(id), s);
+  } catch (e) {
+    try { wx.removeStorageSync(GXT_KEY(id)); } catch (e2) { /* 没写进去就没得删 */ }
+    console.error('[satsimBox] 覆盖快照存不下：', row.name, e);
+    return false;
+  }
+  const list = readGxtIndex();
+  const item = { id: id, name: row.name || snap.name || '覆盖快照', from: row.from || '', ts: row.ts || Date.now(), bytes: bytes };
+  const at = list.findIndex((x) => x.id === id);
+  if (at >= 0) list[at] = item; else list.push(item);
+  // 超份数 / 超总预算时丢最旧的，连它那一键一起删 —— 只删索引会留下永远没人读的孤儿键。
+  // 剩最后一份就不再丢：它自己已经写进去了，丢了也腾不出别的空间。
+  let total = list.reduce((s, x) => s + (Number(x.bytes) || 0), 0);
+  while (list.length > 1 && (list.length > GXT_MAX || total > GXT_BUDGET)) {
+    const gone = list.shift();
+    total -= Number(gone.bytes) || 0;
+    try { wx.removeStorageSync(GXT_KEY(gone.id)); } catch (e) { /* 清不掉只是占地方 */ }
+  }
+  // 索引写不进去（存储整体满了）就把刚存的那一键撤掉，否则留下一份没人索引得到的孤儿
+  try {
+    wx.setStorageSync(KEY_GXT, list);
+  } catch (e) {
+    try { wx.removeStorageSync(GXT_KEY(id)); } catch (e2) { /* 同上 */ }
+    console.error('[satsimBox] 覆盖快照索引写不下：', row.name, e);
+    return false;
+  }
+  return true;
+}
+
+/** 覆盖页取待消化的快照。内容取不到的 snap 给 null，由覆盖页照空快照吃掉出队。 */
 function takeGxtQueue() {
-  const q = wx.getStorageSync(KEY_GXT);
-  return Array.isArray(q) ? q : [];
+  return readGxtIndex().map((x) => {
+    if (x.snap) return x;                       // 分键存之前的老队列，内容就在索引里
+    const raw = wx.getStorageSync(GXT_KEY(x.id));
+    let snap = null;
+    if (raw && typeof raw === 'object') snap = raw;
+    else if (typeof raw === 'string' && raw) { try { snap = JSON.parse(raw); } catch (e) { snap = null; } }
+    return Object.assign({}, x, { snap: snap });
+  });
 }
 /** 覆盖页消化完某几件后清掉 */
 function clearGxtQueue(ids) {
   const drop = new Set(Array.isArray(ids) ? ids : []);
-  const rest = takeGxtQueue().filter((x) => x && !drop.has(x.id));
+  const rest = readGxtIndex().filter((x) => !drop.has(x.id));
+  for (const id of drop) if (id) { try { wx.removeStorageSync(GXT_KEY(id)); } catch (e) { /* 同上 */ } }
   wx.setStorageSync(KEY_GXT, rest);
   return rest;
 }
@@ -329,7 +375,8 @@ async function syncNow(opts) {
         const pr = satsimPack.importPlans(snap);
         cfg += cr.total; plan += pr.total;
       } else if (snap.kind === 'gxt-snapshot') {
-        queueGxt(m, snap); gxt++;
+        // 存不下时照样往下走记 seen：存储满 / 单件超上限是持久状态，重拉每轮都会再失败一次，只烧流量
+        if (queueGxt(m, snap)) gxt++; else failed++;
       } else {
         // 未知 kind：新版本平台发来的东西，记 seen 免得每轮都重拉
         console.warn('[satsimBox] 未知载荷 kind：', snap.kind);

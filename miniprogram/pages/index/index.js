@@ -1,6 +1,6 @@
 // index.js
 const app = getApp();
-const { MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE, DVBS2X_MODCOD_TABLE, DVB_RCS2_MODCOD_TABLE, NR_NTN_MODCOD_TABLE, NB_IOT_NTN_MODCOD_TABLE } = require('../../utils/constants');
+const { MODULATION_FACTORS, MODULATION_OPTIONS, FREQUENCY_BAND_OPTIONS, FEC_OPTIONS, DVB_STANDARD_OPTIONS, DVBS_MODCOD_TABLE, DVBS2_MODCOD_TABLE, DVBS2X_MODCOD_TABLE, DVB_RCS2_MODCOD_TABLE, NR_NTN_MODCOD_TABLE, NB_IOT_NTN_MODCOD_TABLE } = require('../../utils/constants');
 const { validateAllParams } = require('../../utils/validator');
 const { formatResultsForDisplay } = require('../../utils/formatter');
 const { calculateLinkBudget: calculateLinkBudgetGEO } = require('../../utils/linkCalculator');
@@ -37,19 +37,6 @@ function parseFractionOrDecimal(input, defaultValue) {
 function pickNum(v, def) {
   return (v !== '' && v !== null && v !== undefined) ? parseFloat(v) : def;
 }
-
-// 调制因子（用于符号率反推信息速率）
-const MODULATION_FACTORS = {
-  'BPSK': 1,
-  'QPSK': 2,
-  '8PSK': 3,
-  '8QAM': 3,
-  '16QAM': 4,
-  '16APSK': 4,
-  '32APSK': 5,
-  '64APSK': 6,
-  '128APSK': 7
-};
 
 Page({
   data: {
@@ -1510,18 +1497,6 @@ Page({
       
       // 从常量中获取调制方式的比特数（调制因子）
       const modulation = this.data.linkParams.modulation;
-      const MODULATION_FACTORS = {
-        'BPSK': 1,
-        'QPSK': 2,
-        '8PSK': 3,
-        '8QAM': 3,
-        '16QAM': 4,
-        '16APSK': 4,
-        '32APSK': 5,
-        '64APSK': 6,
-        '128APSK': 7
-      };
-      
       const modulationFactor = MODULATION_FACTORS[modulation] || 2;
       
       // 获取FEC码率、帧效率、扩频增益（支持分数格式）
@@ -4023,7 +3998,9 @@ Page({
         _id: `config_${Date.now()}`,
         configName: configName,
         satelliteParams: satelliteParamsForConfig,
-        linkParams: record.linkParams,
+        // 配置里的 linkParams 是槽位形 { 1:{...} }（同 _buildHistoryExportConfigs）。
+        // 历史记录存的是单条链路的扁平参数，这里必须包一层，否则载入时槽位取不到、链路参数整段不恢复。
+        linkParams: { 1: record.linkParams },
         calculationResults: {},
         noiseRatioMode: record.noiseRatioMode || 'ebno',
         markedParams: this.data.markedParams || [],
