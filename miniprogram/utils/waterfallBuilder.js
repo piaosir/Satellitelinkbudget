@@ -59,6 +59,7 @@ const WF_DICT = {
   '自由空间损耗': 'Free Space Loss',
   '大气衰减 P.676': 'Atmospheric Attenuation P.676',
   '雨衰 P.618': 'Rain Attenuation P.618',
+  '上行雨衰': 'Uplink Rain Attenuation',   // 主导降雨场景下计入下行列的那笔残余上行雨衰
   '云衰 P.840': 'Cloud Attenuation P.840',
   '其他损耗': 'Other Losses',
   '总衰减': 'Total Attenuation',
@@ -409,7 +410,15 @@ function createBuilder(ctx) {
     const cDn = num('transponderOutputEIRP') - num('downlinkFSLResult') - num('downlinkAtmosphericAttenuationResult')
       - dnRainEff - num('downlinkCloudAttenuation') - num('downlinkMiscLossResult');
     const dnThermalCN = cDn + num('gOverTeResult') + KB - noiseBW;
-    const dnIntfLoss = dnThermalCN - dnGtDegEff - num('downlinkCN');
+    // 下行干扰损失：优先取引擎真实四路并联值（downlinkInterferenceLossResult，与平台修复同源）；
+    // 旧存档结果没有该字段时回退反解残差（此时行为与旧版逐位一致）。
+    const dnIntfEngine = num('downlinkInterferenceLossResult');
+    const dnIntfLoss = Number.isFinite(dnIntfEngine)
+      ? dnIntfEngine
+      : (dnThermalCN - dnGtDegEff - num('downlinkCN'));
+    // 残差扣除真实干扰后的剩余 = 经弯管转嫁到下行侧资源账的上行残余雨衰（UPC 未补偿部分；
+    // 下行主导 / UPC 全补偿 / 回退口径时 ≈ 0）。按构造闭合，保证「下行 C/N」检查点逐行加得通。
+    const dnResidualRain = (dnThermalCN - dnGtDegEff - num('downlinkCN')) - dnIntfLoss;
     segs.push(b._cascadeTriSeg('链路预算级联（上行 / 下行 / 合计）', [
       // —— 上行：地球站 → 到达卫星 → C/T → C/N₀ → C/N ——
       C('base', '功放建议功率', 'paRecommendationdBResult', 'dBW', 'up'),
@@ -454,6 +463,11 @@ function createBuilder(ctx) {
       C('loss', '载波噪声带宽 10·lgB', noiseBW, 'dB', 'down'),
       C('chk', '下行 C/N（热噪声）', null, 'dB', 'down'),
       C('loss', '下行干扰损失 ACI/ASI/XPI/IM', dnIntfLoss, 'dB', 'down'),
+      // 「确有上行雨衰」门槛：残余由十余个 toFixed(2) 出参相加，量化噪声可越过 0.005，
+      // 晴空也会冒出一行 0.01~0.02 的假「上行雨衰」；上行雨衰 <0.05 dB 时本行无物理意义，不列。
+      ...(Number.isFinite(dnResidualRain) && Math.abs(dnResidualRain) >= 0.005 && num('uplinkRainAttenuation') >= 0.05
+        ? [C('loss', '上行雨衰', dnResidualRain, 'dB', 'down')]
+        : []),
       C('sub', '下行 C/N', null, 'dB', 'down'),
       // —— 合成与余量：上行 ⊕ 下行（噪声并联）= 合计 ——
       T('kpi', 'C/N（合成）', 'uplinkCN', 'downlinkCN', 'carrierTotalCN', 'dB'),
@@ -612,7 +626,15 @@ function createBuilder(ctx) {
     const cDn = num('transponderOutputEIRP') - num('downlinkFSLResult') - num('downlinkAtmosphericAttenuationResult')
       - dnRainEff - num('downlinkCloudAttenuation') - num('downlinkMiscLossResult');
     const dnThermalCN = cDn + num('gOverTeResult') + KB - noiseBW;
-    const dnIntfLoss = dnThermalCN - dnGtDegEff - num('downlinkCN');
+    // 下行干扰损失：优先取引擎真实四路并联值（downlinkInterferenceLossResult，与平台修复同源）；
+    // 旧存档结果没有该字段时回退反解残差（此时行为与旧版逐位一致）。
+    const dnIntfEngine = num('downlinkInterferenceLossResult');
+    const dnIntfLoss = Number.isFinite(dnIntfEngine)
+      ? dnIntfEngine
+      : (dnThermalCN - dnGtDegEff - num('downlinkCN'));
+    // 残差扣除真实干扰后的剩余 = 经弯管转嫁到下行侧资源账的上行残余雨衰（UPC 未补偿部分；
+    // 下行主导 / UPC 全补偿 / 回退口径时 ≈ 0）。按构造闭合，保证「下行 C/N」检查点逐行加得通。
+    const dnResidualRain = (dnThermalCN - dnGtDegEff - num('downlinkCN')) - dnIntfLoss;
 
     const cascadeRows = [
       // —— 上行：地球站 → 到达卫星 → C/T → C/N₀ → C/N ——
@@ -658,6 +680,11 @@ function createBuilder(ctx) {
       C('loss', '载波噪声带宽 10·lgB', noiseBW, 'dB', 'down'),
       C('chk', '下行 C/N（热噪声）', null, 'dB', 'down'),
       C('loss', '下行干扰损失 ACI/ASI/XPI/IM', dnIntfLoss, 'dB', 'down'),
+      // 「确有上行雨衰」门槛：残余由十余个 toFixed(2) 出参相加，量化噪声可越过 0.005，
+      // 晴空也会冒出一行 0.01~0.02 的假「上行雨衰」；上行雨衰 <0.05 dB 时本行无物理意义，不列。
+      ...(Number.isFinite(dnResidualRain) && Math.abs(dnResidualRain) >= 0.005 && num('uplinkRainAttenuation') >= 0.05
+        ? [C('loss', '上行雨衰', dnResidualRain, 'dB', 'down')]
+        : []),
       C('sub', '下行 C/N', null, 'dB', 'down')
     ];
     // —— 合成与余量：上行 ⊕ 下行（噪声并联）= 合计 ——

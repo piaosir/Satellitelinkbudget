@@ -363,7 +363,11 @@ function performCalculations(satParams, inputs) {
   const transponderStatus = satParams.transponderStatus || 'single';
   // 修复：优先从 inputs 读取极化参数，如果没有则从 satParams 读取
   // 保存原始极化显示值（LHCP/RHCP/V/H），并转换为计算用的值（C/V/H）
-  const uplinkPolarizationDisplay = inputs.uplinkPolarization || satParams.uplinkPolarization || 'V';
+  // 平台（卫星仿真平台）极化字典存 'L'/'R'，旧分享包会原样带过来：先归一为 LHCP/RHCP，
+  // 否则落进线极化分支按 τ=0° 算雨致 XPD（偏差可达 ~13 dB）
+  const uplinkPolarizationDisplayRaw = inputs.uplinkPolarization || satParams.uplinkPolarization || 'V';
+  const uplinkPolarizationDisplay = uplinkPolarizationDisplayRaw === 'L' ? 'LHCP'
+    : (uplinkPolarizationDisplayRaw === 'R' ? 'RHCP' : uplinkPolarizationDisplayRaw);
   const uplinkPolarization = (uplinkPolarizationDisplay === 'LHCP' || uplinkPolarizationDisplay === 'RHCP') ? 'C' : uplinkPolarizationDisplay;
   const transponderBandwidth = pickNum(satParams.transponderBandwidth, 36); // MHz
   const _orbitPosRaw = satParams.orbitPosition !== undefined && satParams.orbitPosition !== '' && satParams.orbitPosition !== null
@@ -524,11 +528,13 @@ function performCalculations(satParams, inputs) {
   const SFDs = SFDref - G_Ts;
   
   // 下行极化方式 - 修复：优先从 inputs 读取，如果没有则根据上行极化自动推导
-  // 保存原始极化显示值（LHCP/RHCP/V/H），并转换为计算用的值（C/V/H）
-  const downlinkPolarizationDisplay = inputs.downlinkPolarization || 
+  // 保存原始极化显示值（LHCP/RHCP/V/H），并转换为计算用的值（C/V/H）；'L'/'R' 同上行归一
+  const downlinkPolarizationDisplayRaw = inputs.downlinkPolarization ||
                                (uplinkPolarizationDisplay === 'LHCP' ? 'LHCP' :
                                (uplinkPolarizationDisplay === 'RHCP' ? 'RHCP' :
                                (uplinkPolarization === 'V' ? 'H' : 'V')));
+  const downlinkPolarizationDisplay = downlinkPolarizationDisplayRaw === 'L' ? 'LHCP'
+    : (downlinkPolarizationDisplayRaw === 'R' ? 'RHCP' : downlinkPolarizationDisplayRaw);
   const downlinkPolarization = (downlinkPolarizationDisplay === 'LHCP' || downlinkPolarizationDisplay === 'RHCP') ? 'C' : downlinkPolarizationDisplay;
   
   // 系统可用度
@@ -987,6 +993,14 @@ function performCalculations(satParams, inputs) {
   //          下行降雨占主导时，下行计入雨衰与 G/T 劣化，上行雨衰按实际值参与。
   const uplinkRainDominant = uplinkPowerRatio > downlinkPowerRatio;
 
+  // 下行干扰损失（真实四路 ACI/ASI/XPI/IM 并联代价，按主导场景取口径）：
+  //   上行主导（下行按晴空）= downlinkCT − downlinkTotalCT；
+  //   下行主导（下行计雨衰与 G/T 劣化；干扰项 C/I 同路径同衰减、不随雨变）= 雨口径热噪 C/T − 雨口径总 C/T。
+  // 供瀑布行级取数——此前瀑布该行由反解 downlinkCN 取残差，会把上行残余雨衰错计入干扰行（标签失真可达数 dB）。
+  const downlinkInterferenceLoss = uplinkRainDominant
+    ? (downlinkCT - downlinkTotalCT)
+    : ((downlinkCT - downlinkRainAttenuation - gOverTdegradation) - rainDownlinkTotalCT);
+
   // 上行：到达卫星载波电平 → 热噪声 C/N（始终含上行雨衰）
   const cLevelAtSatellite = stationEIRP - uplinkFSL - uplinkAtmosphericAttenuation -
                             uplinkRainAttenuation - uplinkCloudAttenuation - uplinkMiscLoss;
@@ -1016,9 +1030,10 @@ function performCalculations(satParams, inputs) {
   const downlinkCN = -10 * Math.log10(
     Math.max(Math.pow(10, -carrierTotalCN / 10) - Math.pow(10, -uplinkCN / 10), 1e-30)
   );
-  // 下行干扰等效 C/I（仅展示，由热噪声与反算 C/N 反推）
+  // 下行干扰等效 C/I（仅展示）：由真实四路干扰损失正推 ⊖(热噪−干扰损失, 热噪)，与级联「下行干扰损失」行同源。
+  // 不再由反解 downlinkCN 取残差——上行主导 + UPC 未全补偿时残差含上行残余雨衰，会把本行低报数 dB。
   const downlinkInterferenceCN = -10 * Math.log10(
-    Math.max(Math.pow(10, -downlinkCN / 10) - Math.pow(10, -downlinkThermalCN / 10), 1e-30)
+    Math.max(Math.pow(10, -(downlinkThermalCN - downlinkInterferenceLoss) / 10) - Math.pow(10, -downlinkThermalCN / 10), 1e-30)
   );
 
   // 地球站功率谱密度：EIRP - 10*log10(带宽Hz)
@@ -1599,6 +1614,7 @@ function performCalculations(satParams, inputs) {
   results.downlinkCN = downlinkCN.toFixed(2);
   results.downlinkThermalCN = downlinkThermalCN.toFixed(2); // 下行热噪声 C/N
   results.downlinkInterferenceCN = downlinkInterferenceCN.toFixed(2); // 下行干扰 C/I（表达为 C/N）
+  results.downlinkInterferenceLossResult = downlinkInterferenceLoss.toFixed(2); // 下行真实干扰损失(dB)，按主导场景口径，供瀑布行级取数
   results.actualDownlinkCT = actualDownlinkCT.toFixed(2); // 载波下行C/T
   results.actualDownlinkCN0 = (actualDownlinkCT + 228.6).toFixed(2); // 载波下行C/N₀
   results.satellitePFD = satellitePFD.toFixed(2);
