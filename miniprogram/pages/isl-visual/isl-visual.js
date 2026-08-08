@@ -7,7 +7,7 @@
 
 const sat = require('./satellite.js'); // SGP4 全套（与星座地图同一份，分包各自内置，避免跨分包 require）
 const tleStore = require('../../utils/tleStore.js');       // TLE 缓存/跨分组搜索索引/按组取星
-const satSearch = require('../../utils/satSearch.js');     // 归一化/分词/中文别名匹配（与星座地图同一份）
+const satSearch = require('./satSearch.js');     // 归一化/分词/中文别名匹配（与星座地图同一份）
 const RE = 6378.137;          // 地球赤道半径 km (WGS-84，与链路计算一致)
 const C_KM_S = 299792.458;    // 光速 km/s
 const DEG = Math.PI / 180;

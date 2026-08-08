@@ -1,4 +1,6 @@
-// 卫星搜索匹配（星座地图 / 星间链路共用）。
+// 卫星搜索匹配（星座地图 / 星间链路共用；同 satellite.js，分包各自内置一份，避免跨分包 require——
+// 也别放主包 utils/：主包没有页面用它，微信「主包内不应存在主包未使用的JS文件」检查会报未通过。
+// ★ 两份必须逐字一致，改一处即同步另一处：pages/constellation-map/satSearch.js 与 pages/isl-visual/satSearch.js）。
 //
 // 背景：原先两页各自写 `name.toLowerCase().indexOf(kw) >= 0 || String(noradId).indexOf(kw) >= 0`，
 // 要求关键字是编目名的「连续子串」，于是这些常见输入一律零结果：

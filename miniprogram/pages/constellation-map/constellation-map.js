@@ -8,7 +8,7 @@
 const sat = require('./satellite.js');
 const COASTLINE = require('./coastline-lo.js');      // 海岸线 ~10.5k（全程统一，= ISL 1:50m；高精度与之肉眼无差，已弃用）
 const tleStore = require('../../utils/tleStore.js');
-const satSearch = require('../../utils/satSearch.js'); // 归一化/分词/中文别名匹配（与星间链路页同一份）
+const satSearch = require('./satSearch.js'); // 归一化/分词/中文别名匹配（与星间链路页同一份）
 const satsimPack = require('../../utils/satsimPack.js'); // 仿真平台送来的「卫星集」（卫星组 / 自定义卫星 / 自定义星座）
 
 const RE = 6378.137;          // 地球赤道半径 km
