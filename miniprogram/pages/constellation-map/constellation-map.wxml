@@ -11,6 +11,10 @@
                confirm-type="search" bindinput="onSearchInput" />
         <text wx:if="{{keyword}}" class="search-clear" bindtap="clearSearch">✕</text>
       </view>
+      <!-- 仿真平台送来的星座：绑定后自动同步，或在这里输密钥 -->
+      <view class="imp-btn" bindtap="onImportTap">
+        导入<text wx:if="{{impSets.length}}" class="imp-n">{{impSets.length}}</text>
+      </view>
     </view>
     <!-- 时间轴行：拖动轨道 + 时刻读数（未来 0~24h，与星间链路一致） -->
     <view class="ctrl-row tl-row">
@@ -62,7 +66,9 @@
 
   <!-- 3D 地球 -->
   <view class="globe-wrap">
-    <canvas type="2d" id="globeCanvas" class="globe-canvas"
+    <!-- hidden：canvas 是原生组件，z-index 压不住它（同层渲染在这条路上不成立），
+         导入弹窗一开就被地球盖掉。弹窗期间把画布整个摘掉，关闭时由 _restartLoop 重新起帧循环。 -->
+    <canvas type="2d" id="globeCanvas" class="globe-canvas" hidden="{{showImp}}"
       bindtouchstart="onTouchStart" catchtouchmove="onTouchMove"
       bindtouchend="onTouchEnd" bindtouchcancel="onTouchEnd"
       catchwheel="onWheel"></canvas>
@@ -104,6 +110,49 @@
       <text class="lg"><text class="lg-dot dot-orbit"></text>轨道</text>
       <text class="lg"><text class="lg-dot dot-track"></text>星下点轨迹</text>
       <text class="lg"><text class="lg-dot dot-foot"></text>覆盖足迹</text>
+    </view>
+  </view>
+
+  <!-- 导入面板：已导入星座清单（点击切换 · 长按重命名/删除）+ 8 位密钥输入。
+       分格输入与「卫星覆盖 / 频率计划」两处同款；真实 <input> 移出可视区，字符与光标全靠自绘。 -->
+  <view class="kmask" wx:if="{{showImp}}" bindtap="hideImp"></view>
+  <view class="kpop" wx:if="{{showImp}}">
+    <view class="kpop-hd">
+      <text class="kpop-t">仿真平台星座</text>
+      <text class="kpop-x" bindtap="hideImp">✕</text>
+    </view>
+    <scroll-view class="imp-list" scroll-y wx:if="{{impSets.length}}">
+      <view wx:for="{{impSets}}" wx:key="id" class="imp-row" data-id="{{item.id}}"
+            bindtap="onImpTap" bindlongpress="onImpLongPress">
+        <view class="imp-main">
+          <text class="imp-nm">{{item.name}}</text>
+          <text class="imp-sub">{{item.count}} 颗<text wx:if="{{item.src}}"> · {{item.src}}</text><text wx:if="{{item.from}}"> · {{item.from}}</text></text>
+        </view>
+        <view class="imp-act" data-id="{{item.id}}" catchtap="onImpRename">改名</view>
+        <view class="imp-act del" data-id="{{item.id}}" catchtap="onImpDelete">移除</view>
+      </view>
+    </scroll-view>
+    <view wx:else class="imp-empty">还没有导入的星座。</view>
+    <view class="kpop-bd">
+      <view class="otp-field" bindtap="focusOtp">
+        <block wx:for="{{otpCells}}" wx:key="id">
+          <view wx:if="{{item.sep}}" class="otp-dash">-</view>
+          <view wx:else class="otp-cell {{item.filled ? 'is-filled' : ''}} {{item.active && keyFocus ? 'is-active' : ''}}">
+            <text wx:if="{{item.char}}" class="otp-cell-char">{{item.char}}</text>
+            <view wx:if="{{item.active && keyFocus && !item.char}}" class="otp-caret"></view>
+          </view>
+        </block>
+        <input class="otp-input" type="text" maxlength="11" value="{{keyInput}}"
+               focus="{{keyFocus}}" cursor="{{keyInput.length}}" confirm-type="done" hold-keyboard="{{true}}"
+               adjust-position="{{false}}"
+               bindinput="onKeyInput" bindfocus="onOtpFocus" bindblur="onOtpBlur"
+               bindconfirm="confirmKeyImport" />
+      </view>
+      <view class="otp-hint">8 位字母 / 数字，如 ABCD-2345</view>
+      <view class="kpop-acts">
+        <view class="kbtn" bindtap="hideImp">取消</view>
+        <view class="kbtn confirm {{importing ? 'disabled' : ''}}" bindtap="confirmKeyImport">{{importing ? '导入中…' : '导入'}}</view>
+      </view>
     </view>
   </view>
 </view>

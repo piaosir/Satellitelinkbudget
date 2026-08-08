@@ -633,11 +633,14 @@ function performCalculations(satParams, inputs) {
     : (downlinkPolarization === 'V' ? downlinkPolarizationAngle + 90 : downlinkPolarizationAngle);
 
   // 雨致 XPD（与同极化降雨衰减取同一时间百分比 p = 100 - 可用度）
+  // 第 6 参是 4~6 GHz 专用的雨衰上下文：C 频段要按 6 GHz 重算雨衰再标度，见函数头注
   const uplinkRainXPD = calculateRainXPD_P618_14(
-    uplinkRainAttenuation, uplinkFrequency, uplinkXpdTau, elevation, (1 - uplinkUnavailability) * 100
+    uplinkRainAttenuation, uplinkFrequency, uplinkXpdTau, elevation, (1 - uplinkUnavailability) * 100,
+    { R001: rainRate, pol: uplinkPolarization, lat: earthLat, lon: earthLon, orbitPos: orbitPosition, altitude }
   );
   const downlinkRainXPD = calculateRainXPD_P618_14(
-    downlinkRainAttenuation, downlinkFrequency, downlinkXpdTau, rxElevation, (1 - rxDownlinkAvailability) * 100
+    downlinkRainAttenuation, downlinkFrequency, downlinkXpdTau, rxElevation, (1 - rxDownlinkAvailability) * 100,
+    { R001: rxRainRate, pol: downlinkPolarization, lat: rxLatitude, lon: rxLongitude, orbitPos: orbitPosition, altitude: rxAltitude }
   );
 
   // ============ 云衰减计算 (ITU-R P.840-9) ============
@@ -2250,6 +2253,25 @@ function scaleRainAttenP618_14(A001, p, latDeg, elevDeg) {
 }
 
 /**
+ * 4~6 GHz 的雨致 XPD 专用：把同一条路径、同一时间百分比的雨衰重算到 6 GHz。
+ * 与平台 packages/core/utils/linkCalculator.js 的同名函数逐字一致（镜像不许漂）。
+ *
+ * @param {number} p       时间百分比（%），与主链路同值
+ * @param {number} elevDeg 路径仰角（度）
+ * @param {object} ctx     {R001, pol, lat, lon, orbitPos, altitude, elevOverride}
+ * @returns {number} 6 GHz 上超过 p% 时间的同极化雨衰（dB）
+ */
+function rainAttenAt6GHz(p, elevDeg, ctx) {
+  if (!ctx || !(Number(ctx.R001) > 0)) {
+    throw new Error('4~6 GHz 的雨致 XPD 需按 6 GHz 重算雨衰：请给 calculateRainXPD_P618_14 传 rainCtx（R001/pol/lat/lon/orbitPos/altitude）');
+  }
+  const { A001 } = calculateSinglePathRainAttenuation(
+    ctx.R001, 6, ctx.pol, ctx.lat, ctx.lon, ctx.orbitPos, ctx.altitude, ctx.elevOverride
+  );
+  return scaleRainAttenP618_14(A001, p, ctx.lat, elevDeg);
+}
+
+/**
  * ITU-R P.618-14 §4.1：由同极化降雨衰减统计估算去极化（交叉极化鉴别度 XPD）
  *
  * 适用范围：8 ≤ f ≤ 35 GHz（频率项 Cf 给出的扩展范围为 6 ≤ f ≤ 55 GHz），θ ≤ 60°。
@@ -2260,18 +2282,29 @@ function scaleRainAttenP618_14(A001, p, latDeg, elevDeg) {
  * @param {number} tauDeg  线极化电场矢量相对当地水平方向的倾斜角 τ（度），圆极化取 45°
  * @param {number} elevDeg 路径仰角 θ（度）
  * @param {number} p       时间百分比（%）
+ * @param {object} [rainCtx] 4~6 GHz 专用的雨衰上下文 {R001, pol, lat, lon, orbitPos, altitude, elevOverride}，
+ *                           字段与 calculateSinglePathRainAttenuation 的入参一一对应。f≥6 GHz 时不使用。
  * @returns {number} XPDp（dB）；无降雨或参数无效时返回 Infinity（表示无去极化效应）
  */
-function calculateRainXPD_P618_14(Ap, freq, tauDeg, elevDeg, p) {
+function calculateRainXPD_P618_14(Ap, freq, tauDeg, elevDeg, p, rainCtx) {
   // 无降雨衰减或参数无效 → 不产生雨致去极化
   if (!(Ap > 0) || !(freq > 0) || !(p > 0)) return Infinity;
 
-  // §4.1 频率下界 6 GHz：4~6 GHz 按 §4.2 半经验频率标度 XPD₂ = XPD₁ − 20·lg(f₂/f₁)
-  // 从域内 6 GHz 换算（直接把 f<6 代入 Cf=60·lgf−28.3 属域外使用，C 频段会低估 XPD ~8 dB）；
-  // f<4 GHz 超出 §4.2 标度下界，返回 Infinity（不计雨致去极化）。
+  // §4.1 频率下界 6 GHz：4~6 GHz 按 §4.3 式(79) 半经验频率标度 XPD₂ = XPD₁ − 20·lg(f₂/f₁)
+  // 从域内 6 GHz 换算（直接把 f<6 代入 Cf=60·lgf−28.3 属域外使用）；
+  // f<4 GHz 超出该标度的下界，返回 Infinity（不计雨致去极化）。
+  //
+  // ★ 换算的是「6 GHz 上的 XPD」，故喂进 §4.1 的必须是 **6 GHz 上的**同极化雨衰：
+  //   Step 2 的 CA = V(f)·lg(Ap) 里 V(6)=21.6 配套的就是 6 GHz 的 CPA 统计，
+  //   建议书 Step 8 后另有明文——4~6 GHz 路径衰减很低、其 Ap 统计不足以预测 XPD，
+  //   须由 6 GHz 的结果标度下来。C 频段雨衰随频率极陡（P.838 比衰减 γ(6)/γ(4)≈6），
+  //   沿用本频率那个小雨衰会把 CA 少算十几 dB、XPD 高报 16~17 dB（形同「雨天不去极化」）。
+  //   注：§2.4.1 的长期雨衰频率标度式在此段不可用（4→6 GHz 它给 ×2.2，实际 ×6，其适用域自 7 GHz 起）。
   if (freq < 4) return Infinity;
   if (freq < 6) {
-    const xpd6 = calculateRainXPD_P618_14(Ap, 6, tauDeg, elevDeg, p);
+    const ap6 = rainAttenAt6GHz(p, elevDeg, rainCtx);
+    if (!(ap6 > 0)) return Infinity;
+    const xpd6 = calculateRainXPD_P618_14(ap6, 6, tauDeg, elevDeg, p, rainCtx);
     return isFinite(xpd6) ? xpd6 - 20 * Math.log10(freq / 6) : xpd6;
   }
 

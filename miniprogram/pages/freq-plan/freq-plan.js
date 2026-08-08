@@ -152,11 +152,12 @@ Page({
 
     const pack = got.pack;
     const plans = satsimPack.itemsOf(pack, 'freq-plan');
-    const cfgs = satsimPack.itemsOf(pack, 'lb-config');
     if (!plans.length) {
+      // 同一个密钥在哪个入口输都拉得到同一个包 —— 说清这个包该去哪导，别让人反复试
       wx.showModal({
         title: '包里没有频率计划',
-        content: cfgs.length ? '这个密钥装的是 ' + cfgs.length + ' 份链路配置，请到「我的配置 → 导入 → 仿真平台密钥」输入。' : '包里没有可导入的内容。',
+        content: '这个密钥装的是 ' + satsimPack.describePack(pack)
+          + '。链路配置请到「我的配置 → 导入」，星座请到「工具栏 → 星座地图 → 导入」输入。',
         showCancel: false
       });
       return;

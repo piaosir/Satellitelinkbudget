@@ -17,6 +17,10 @@ const ENV_ID = 'cloud1-8gjv5ekx41d6fb76';
 const BUCKET = '636c-cloud1-8gjv5ekx41d6fb76-1385987144';
 const OMM_PREFIX = 'celestrak/omm/'; // OMM/CSV 独立命名空间（与旧 TLE 的 celestrak/* 隔离）
 const DAILY_KEY = 'tle_omm_check_date'; // 每设备「每过本地 0 点」只跑一次全量直连的本地标记
+// 跨分组搜索索引的本地缓存键。换名（原 '_index'）是为作废旧版 buildLocalIndex 落下的残缺索引——
+// 那些副本缺整个「其他」分组，且当天有效，不换键的话已装机用户当天仍旧搜不到那批星。
+const INDEX_KEY = '_index2';
+const INDEX_KEY_OLD = '_index';
 
 // 各组 -> CelesTrak GP 查询参数（须与云函数 fetchTLE 的 GROUPS 保持一致）
 const GROUP_QUERY = {
@@ -69,7 +73,7 @@ function localDateOf(iso) {
 }
 
 // ---- 本地缓存：与星座地图 _readCache/_writeCache 完全同一套键（tle_omm_<key>.json + tle_omm_date_<key>），
-//      让启动直连拉到的数据直接喂给地图读，用户进图零 CDN。'_index' 即跨分组搜索索引缓存。----
+//      让启动直连拉到的数据直接喂给地图读，用户进图零 CDN。INDEX_KEY 即跨分组搜索索引缓存。----
 const cachePath = (key) => `${wx.env.USER_DATA_PATH}/tle_omm_${key}.json`;
 function localCacheIsToday(key) {
   try { return wx.getStorageSync(`tle_omm_date_${key}`) === todayStr(); } catch (e) { return false; }
@@ -90,10 +94,25 @@ function readLocalCache(key) {
     return data;
   } catch (e) { return null; }
 }
-// 用当天本地各组缓存重建跨分组搜索索引，写入本地 '_index'（搜索零 CDN）。
+// 不看日期的原样读取：仅用于「宁可旧也别丢」的场景（搜索索引里的「其他」条目 —— 名称/编号逐日几乎不变）
+function readLocalCacheRaw(key) {
+  try { return JSON.parse(wx.getFileSystemManager().readFileSync(cachePath(key), 'utf8')); }
+  catch (e) { return null; }
+}
+// 清掉旧键 '_index' 那份本地索引（已被上面的迁移判定为残缺，或已改挂新键），别让它继续占着磁盘
+function dropOldIndexCache() {
+  try { wx.removeStorageSync(`tle_omm_date_${INDEX_KEY_OLD}`); } catch (e) {}
+  try { wx.getFileSystemManager().unlinkSync(cachePath(INDEX_KEY_OLD)); } catch (e) {}
+}
+// 用当天本地各组缓存重建跨分组搜索索引，写入本地 INDEX_KEY（搜索零 CDN）。
 // 归类口径与星座地图 _loadUniverse / 仿真平台 loadUniverse 一致：已知星座组按 ALL_KEYS 次序先到先认领
 // （同一颗星只进索引一次），再把「全部在轨」里没被认领的并进来记为 'other'（=「其他」分组）。
-// active 是按需缓存，没拉过就跳过，索引自动退化为已知组并集。
+//
+// 【关键】active 是按需缓存（只有用户真打开过「全部卫星/其他」才有），多数设备没有；而「其他」占编目
+// 约五分之一（NOAA/风云/遥感/科学试验星…）。若因此少写「其他」就落盘，这份残缺索引会当天命中
+// 本地缓存并把含「其他」的云端 _index.json 整个挡住 —— 那批星在两个页面里一颗都搜不到。
+// 故：没有 active 缓存时改沿用上一版索引里的 'other' 条目；连上一版都没有就干脆不落盘，让搜索
+// 回落云端 _index.json（那份由云函数/uploadIndex 维护，含「其他」）。同 uploadIndex 的保护口径。
 function buildLocalIndex() {
   try {
     const sats = [], seen = Object.create(null);
@@ -111,8 +130,15 @@ function buildLocalIndex() {
       claim((c && c.sats) || [], key);
     }
     const act = readLocalCache('active');
-    claim((act && act.sats) || [], 'other');
-    writeLocalCache('_index', { sats });
+    if (act && act.sats && act.sats.length) {
+      claim(act.sats, 'other');
+    } else {
+      const prev = readLocalCacheRaw(INDEX_KEY);
+      const olds = ((prev && prev.sats) || []).filter((s) => s.group === 'other');
+      if (!olds.length) return; // 无「其他」来源 -> 不写本地索引，保留云端那份兜底
+      claim(olds, 'other');
+    }
+    writeLocalCache(INDEX_KEY, { sats });
   } catch (e) { /* 索引为锦上添花，失败时搜索退回云端 _index.json */ }
 }
 
@@ -293,9 +319,16 @@ function uploadIndex(namesByKey) {
     }
   };
   Object.keys(namesByKey).forEach((k) => claim(namesByKey[k] || [], k));
-  const act = readLocalCache('active');
-  if (act && act.sats && act.sats.length) claim(act.sats, 'other');
-  const merge = (act && act.sats && act.sats.length)
+  // 「其他」来源：本机 active 缓存 -> 退而用本机索引里的 'other' 条目 -> 再退到云端旧索引的 'other'
+  const actv = readLocalCache('active');
+  let others = (actv && actv.sats && actv.sats.length) ? actv.sats : null;
+  if (!others) {
+    const prev = readLocalCacheRaw(INDEX_KEY);
+    const fromPrev = ((prev && prev.sats) || []).filter((s) => s.group === 'other');
+    if (fromPrev.length) others = fromPrev;
+  }
+  if (others) claim(others, 'other');
+  const merge = others
     ? Promise.resolve(sats)
     : downloadJSON(`${OMM_PREFIX}_index.json`).then(
       (old) => { claim(((old && old.sats) || []).filter((s) => s.group === 'other'), 'other'); return sats; },
@@ -373,12 +406,24 @@ function ensureTLEFresh() {
 
 let _indexCache = null; // 本会话内索引缓存
 
-// 跨分组搜索索引 [{name, noradId, group}]：本地 '_index' 缓存命中即返回，否则下云端 _index.json
+// 跨分组搜索索引 [{name, noradId, group}]：本地 INDEX_KEY 缓存命中即返回，否则下云端 _index.json
 // 并补 Starlink 名单（众包可能尚未并入云端索引），写回本地缓存。
+// 空结果（云端索引缺失/下载失败）绝不落盘、也不粘进 _indexCache —— 否则一次网络抖动就把当天的
+// 跨星座搜索钉死成「只搜当前组」，用户看到的就是「好多卫星搜不到」。返回空数组，下次调用重试。
 function ensureSearchIndex() {
-  if (_indexCache) return Promise.resolve(_indexCache);
-  const cached = readLocalCache('_index');
-  if (cached && cached.sats) { _indexCache = cached.sats; return Promise.resolve(_indexCache); }
+  if (_indexCache && _indexCache.length) return Promise.resolve(_indexCache);
+  const cached = readLocalCache(INDEX_KEY);
+  if (cached && cached.sats && cached.sats.length) { _indexCache = cached.sats; return Promise.resolve(_indexCache); }
+  // 一次性迁移：旧键那份含「其他」说明来自云端索引（完好）-> 直接改挂新键，省一次 CDN；
+  // 不含「其他」的就是旧 buildLocalIndex 落下的残缺副本 -> 丢弃，重新下云端那份。
+  const old = readLocalCache(INDEX_KEY_OLD);
+  if (old && old.sats && old.sats.length && old.sats.some((s) => s.group === 'other')) {
+    _indexCache = old.sats;
+    writeLocalCache(INDEX_KEY, { sats: old.sats });
+    dropOldIndexCache();
+    return Promise.resolve(_indexCache);
+  }
+  dropOldIndexCache();
   return Promise.all([
     downloadJSON(`${OMM_PREFIX}_index.json`).catch(() => null),
     downloadJSON(`${OMM_PREFIX}_names_starlink.json`).catch(() => null)
@@ -390,10 +435,56 @@ function ensureSearchIndex() {
         index.push({ name: star.names[i].name, noradId: star.names[i].noradId, group: 'starlink' });
       }
     }
+    if (!index.length) return index;
+    // 「其他」同理：云端索引若没建全（_names_active.json 还没上传/云函数没重建过），就地用名单文件补齐。
+    // 补的是名称+编号的名单（几百 KB），不是 5MB 的 active 根数——搜索只要名字与编号。
+    if (index.some((s) => s.group === 'other')) return index;
+    return downloadJSON(`${OMM_PREFIX}_names_active.json`).then(
+      (act) => {
+        const names = (act && act.names) || [];
+        if (!names.length) return index;
+        const seen = Object.create(null);
+        for (let i = 0; i < index.length; i++) seen[index[i].noradId] = 1;
+        for (let i = 0; i < names.length; i++) {
+          if (seen[names[i].noradId]) continue;
+          seen[names[i].noradId] = 1;
+          index.push({ name: names[i].name, noradId: names[i].noradId, group: 'other' });
+        }
+        return index;
+      },
+      () => index
+    );
+  }).then((index) => {
+    if (!index.length) return index; // 不缓存空索引，留待下次重试
     _indexCache = index;
-    writeLocalCache('_index', { sats: index });
+    writeLocalCache(INDEX_KEY, { sats: index });
     return index;
   });
+}
+
+// 已拿到「全部在轨」全集（星座地图打开「全部卫星/其他」时）就把其中不在索引里的星补成 'other'，
+// 回写本地索引缓存。严格增量（只加不删），故不要求各已知组当天缓存齐备；用来兜住「云端 _index.json
+// 自己就缺『其他』」（_names_active.json 还没被谁传上去）那种情况——否则这批星在搜索里始终不存在。
+function mergeOtherIntoIndex(activeSats) {
+  try {
+    const list = activeSats || [];
+    if (!list.length) return;
+    const cached = readLocalCache(INDEX_KEY);
+    const base = (_indexCache && _indexCache.length) ? _indexCache : ((cached && cached.sats) || []);
+    if (!base.length) return; // 索引还没建起来 -> 交给 ensureSearchIndex 正常走
+    const seen = Object.create(null);
+    for (let i = 0; i < base.length; i++) seen[base[i].noradId] = 1;
+    const merged = base.slice();
+    for (let i = 0; i < list.length; i++) {
+      const id = list[i].noradId;
+      if (seen[id]) continue;
+      seen[id] = 1;
+      merged.push({ name: list[i].name, noradId: id, group: 'other' });
+    }
+    if (merged.length === base.length) return; // 无新增
+    _indexCache = merged;
+    writeLocalCache(INDEX_KEY, { sats: merged });
+  } catch (e) { /* 补索引失败不影响本次展示 */ }
 }
 
 // 取某分组全量 sats（[{name,noradId,...OMM根数}]）：当天本地缓存 -> 云端(<key>.json 的 CSV 信封) -> 直连兜底
@@ -424,5 +515,6 @@ module.exports = {
   GROUP_QUERY,
   readLocalCache,
   ensureSearchIndex,
+  mergeOtherIntoIndex,
   loadGroupSats
 };

@@ -1774,7 +1774,7 @@ Page({
           // 云函数自 2026-08 起同时放行仿真平台的多件包（链路配置 / 频率计划）。那类密钥不是覆盖
           // 快照，喂进 _mergeSnapshotToBeamData 只会得到空等值线、报一句「导入为空」——说清楚该去哪导。
           if (r.data.kind === 'satsim-pack') {
-            wx.showModal({ title: '密钥用错了地方', content: '这个密钥装的是链路配置 / 频率计划，不是覆盖快照。请到「我的配置 → 导入」或「工具栏 → 频率计划」输入。', showCancel: false });
+            wx.showModal({ title: '密钥用错了地方', content: '这个密钥装的是链路配置 / 频率计划 / 星座，不是覆盖快照。请到「我的配置 → 导入」「工具栏 → 频率计划」或「工具栏 → 星座地图 → 导入」输入。', showCancel: false });
             return;
           }
           // 云函数内联返回快照数据 → 合并为一个波束的数据

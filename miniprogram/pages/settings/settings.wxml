@@ -50,7 +50,7 @@
       </view>
       <view class="about-item">
         <text class="label">版本号</text>
-        <text class="value">v3.8.9</text>
+        <text class="value">v3.8.10</text>
       </view>
       <view class="about-item">
         <text class="label">开发者</text>

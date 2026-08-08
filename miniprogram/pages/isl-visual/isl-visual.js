@@ -7,6 +7,7 @@
 
 const sat = require('./satellite.js'); // SGP4 全套（与星座地图同一份，分包各自内置，避免跨分包 require）
 const tleStore = require('../../utils/tleStore.js');       // TLE 缓存/跨分组搜索索引/按组取星
+const satSearch = require('../../utils/satSearch.js');     // 归一化/分词/中文别名匹配（与星座地图同一份）
 const RE = 6378.137;          // 地球赤道半径 km (WGS-84，与链路计算一致)
 const C_KM_S = 299792.458;    // 光速 km/s
 const DEG = Math.PI / 180;
@@ -238,10 +239,10 @@ Page({
 
   // ---- 全局搜索（group{slot} 为空时）：懒加载跨星座索引，打字才出结果 ----
   _ensureIndex() {
-    if (this._index || this._indexLoading) return;
+    if ((this._index && this._index.length) || this._indexLoading) return;
     this._indexLoading = true;
     tleStore.ensureSearchIndex().then((index) => {
-      this._index = index || [];
+      this._index = (index && index.length) ? index : null; // 空 -> 置回 null，下次打字重试而非当天钉死
       this._indexLoading = false;
       // 就绪后重跑仍处全局模式且有关键字的槽位（浏览模式与索引无关）
       if (!this.data.group1 && (this.data.kw1 || '').trim()) this._searchGlobal(1, this.data.kw1);
@@ -255,13 +256,8 @@ Page({
     this._ensureIndex();
     const idx = this._index;
     if (!idx || !idx.length) return; // 索引未就绪：就绪回调会重跑本次搜索
-    const out = [];
-    for (let i = 0; i < idx.length && out.length < 40; i++) {
-      const s = idx[i];
-      if (s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
-        out.push({ name: s.name, noradId: s.noradId, group: s.group, groupLabel: GROUP_LABEL[s.group] || s.group });
-      }
-    }
+    const out = satSearch.searchSats(idx, raw, 50).map((s) =>
+      ({ name: s.name, noradId: s.noradId, group: s.group, groupLabel: GROUP_LABEL[s.group] || s.group }));
     this.setData({ ['results' + slot]: out });
     this._resumeDraw(); // 结果增减会改变地球显隐 -> 重启绘制循环（隐藏期间 RAF 可能已停）
   },
@@ -281,15 +277,9 @@ Page({
   // 组内过滤：空关键字=列出前若干颗；GEO 带定点经度
   _filterGroup(slot, raw) {
     const sats = this['_groupSats' + slot] || [];
-    const kw = (raw || '').trim().toLowerCase();
     const key = this.data['group' + slot], label = this.data['group' + slot + 'Label'];
-    const out = [];
-    for (let i = 0; i < sats.length && out.length < 60; i++) {
-      const s = sats[i];
-      if (!kw || s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
-        out.push({ name: s.name, noradId: s.noradId, group: key, groupLabel: label, lonText: s.lonText || '' });
-      }
-    }
+    const out = satSearch.filterSats(sats, raw, 60).map((s) =>
+      ({ name: s.name, noradId: s.noradId, group: key, groupLabel: label, lonText: s.lonText || '' }));
     this.setData({ ['results' + slot]: out });
     this._resumeDraw();
   },

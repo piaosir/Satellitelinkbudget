@@ -3,7 +3,8 @@
 // 一个密钥 = 一个包，包里可以装多件：
 //   { kind:'satsim-pack', v:1, from, ts, expiresAt, name,
 //     items:[ {type:'lb-config', name, mod, config},
-//             {type:'freq-plan', name, meta, draw, chs, beams, los, alloc, xlsx} ] }
+//             {type:'freq-plan', name, meta, draw, chs, beams, los, alloc, xlsx},
+//             {type:'sat-set',   name, setId, src, epochMode, count, sats:[OMM记录]} ] }
 //
 // 通道与「卫星覆盖」的密钥导入是同一条：云函数 importGxtSnapshot 按密钥从平台约定的 COS 公读地址
 // 拉取，内联返回。故一个密钥在哪个入口输都能认出来 —— 包里有什么就落什么，两个入口共用本文件。
@@ -19,6 +20,15 @@ const FP_INDEX_KEY = 'fpPlanIds';
 const FP_PLAN_KEY = (id) => 'fpPlan_' + id;
 const FP_DRAW_KEY = (id) => 'fpDraw_' + id;
 const FP_XLSX_KEY = (id) => 'fpXlsx_' + id;
+
+// 卫星集（平台的卫星组 / 自定义卫星 / 自定义星座）：星座地图分组列表里的一行。
+// 同频率计划一样分键存 —— 一份几百颗星就是几十上百 KB，攒几份即越过微信单键 1 MB 上限。
+const SS_INDEX_KEY = 'satsimSetIds';
+const SS_KEY = (id) => 'satsimSet_' + id;
+// 「刚导入的那一份」：星座地图据此把它选成本次的默认星座。
+// ★ 必须是持久标志位而不是 importSatSets 的返回值 —— 后台自动同步落地时星座地图多半没打开，
+//   回值当场就没人接；下次进图要仍然能知道「有新东西进来了」。取走即清（takeFreshSet）。
+const SS_FRESH_KEY = 'satsimSetFresh';
 
 // 密钥归一：去分隔符、大写。字母表 A-Z2-9（去 I L O 0 1），长度 8 —— 与云函数、平台同口径。
 function normalizeKey(raw) {
@@ -53,16 +63,18 @@ const itemsOf = (pack, type) => (pack && Array.isArray(pack.items) ? pack.items 
 function describePack(pack) {
   const n1 = itemsOf(pack, 'lb-config').length;
   const n2 = itemsOf(pack, 'freq-plan').length;
+  const n3 = itemsOf(pack, 'sat-set').length;
   const parts = [];
   if (n1) parts.push(n1 + ' 份链路配置');
   if (n2) parts.push(n2 + ' 份频率计划');
+  if (n3) parts.push(n3 + ' 份星座');
   return parts.join(' · ') || '空包';
 }
 
 /** 包内清单的逐条明细（确认弹窗的正文） */
 function listPack(pack) {
   const lines = (pack && Array.isArray(pack.items) ? pack.items : []).map((it) => {
-    const tag = it.type === 'lb-config' ? (it.mod || 'GEO') : '频率计划';
+    const tag = it.type === 'lb-config' ? (it.mod || 'GEO') : (it.type === 'sat-set' ? (it.src || '星座') : '频率计划');
     return '· [' + tag + '] ' + (it.name || '未命名');
   });
   if (lines.length > 8) return lines.slice(0, 8).join('\n') + '\n… 共 ' + lines.length + ' 件';
@@ -215,6 +227,104 @@ function renamePlan(id, name) {
 }
 
 // ============================================================================
+// 卫星集：落进本地存储，供「星座地图」当一个分组直接渲染
+// ============================================================================
+// 一份 = 平台侧的一个卫星组 / 一个导入星历组 / 一座自定义星座，内容是 OMM 根数本身，
+// 星座地图照 omm2satrec 建 satrec 就能画 —— 不走 CelesTrak，也不需要那份 5MB 的全集。
+//
+// ★ 幂等按平台给的 setId 覆盖（同频率计划按 meta.id）：平台那边改一次重发，这边是【覆盖那一份】，
+//   不是每同步一次就在分组列表里多堆一行同名的。
+// ★★ 看到的是【发送那一刻】的根数。真实目录星的历元会随时间变旧，要新的就让平台重发。
+//    这一点没法在本地补救：这批星里的自定义卫星/合成星根本不在 CelesTrak 目录里，无从刷新。
+
+const ssId = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
+
+function readSetIndex() {
+  const v = wx.getStorageSync(SS_INDEX_KEY);
+  return Array.isArray(v) ? v.filter((x) => x && x.id) : [];
+}
+function writeSetIndex(list) { wx.setStorageSync(SS_INDEX_KEY, list); }
+
+/**
+ * 把包里的卫星集逐份落地。返回 { total, added, replaced, failed, newest }。
+ * failed 计的是「存不下 / 没有一颗可用根数」的件；存不下时把刚写的那一键撤掉，不留孤儿。
+ */
+function importSatSets(pack) {
+  const items = itemsOf(pack, 'sat-set');
+  if (!items.length) return { total: 0, added: 0, replaced: 0, failed: 0, newest: '' };
+  const index = readSetIndex();
+  let added = 0, replaced = 0, failed = 0, newest = '';
+  for (const it of items) {
+    // 缺历元/平均运动的记录构不出 satrec，进来只会在 _ingest 里被静默跳过 —— 在这里就滤掉，
+    // 免得列表上写着 200 颗、图上只有 180 颗。
+    const sats = (Array.isArray(it.sats) ? it.sats : []).filter((s) => s && s.noradId && s.epoch && s.meanMotion);
+    if (!sats.length) { failed++; continue; }
+    const id = ssId(it.setId) || ('ss' + Date.now() + Math.floor(Math.random() * 1000));
+    try {
+      wx.setStorageSync(SS_KEY(id), { sats: sats });
+    } catch (e) {
+      try { wx.removeStorageSync(SS_KEY(id)); } catch (e2) { /* 没写进去就没得删 */ }
+      console.error('[satsimPack] 卫星集存不下：', it.name, e);
+      failed++;
+      continue;
+    }
+    const row = {
+      id: id,
+      name: it.name || '导入星座',
+      count: sats.length,
+      src: it.src || '',
+      epochMode: it.epochMode || 'file',
+      from: pack.from || '',
+      ts: Date.now()
+    };
+    const at = index.findIndex((x) => x.id === id);
+    if (at >= 0) { index[at] = row; replaced++; } else { index.unshift(row); added++; }
+    newest = id;
+  }
+  try {
+    writeSetIndex(index);
+  } catch (e) {
+    console.error('[satsimPack] 卫星集索引写不下：', e);
+    return { total: items.length, added: 0, replaced: 0, failed: items.length, newest: '' };
+  }
+  if (newest) { try { wx.setStorageSync(SS_FRESH_KEY, newest); } catch (e) { /* 只影响「自动选中新的那份」 */ } }
+  return { total: items.length, added: added, replaced: replaced, failed: failed, newest: newest };
+}
+
+/** 某份卫星集的根数（不存在返回空数组） */
+function loadSetSats(id) {
+  const v = wx.getStorageSync(SS_KEY(ssId(id)));
+  return (v && Array.isArray(v.sats)) ? v.sats : [];
+}
+
+function removeSet(id) {
+  const i = ssId(id);
+  try { wx.removeStorageSync(SS_KEY(i)); } catch (e) { /* 清不掉只是占地方 */ }
+  writeSetIndex(readSetIndex().filter((x) => x.id !== i));
+  if (wx.getStorageSync(SS_FRESH_KEY) === i) { try { wx.removeStorageSync(SS_FRESH_KEY); } catch (e) {} }
+}
+
+function renameSet(id, name) {
+  const nm = String(name == null ? '' : name).trim();
+  if (!nm) return false;
+  const list = readSetIndex();
+  const row = list.find((x) => x.id === ssId(id));
+  if (!row) return false;
+  row.name = nm;
+  writeSetIndex(list);
+  return true;
+}
+
+/** 取走「刚导入的那一份」的 id（取一次即清）。没有新导入返回空串。 */
+function takeFreshSet() {
+  const v = wx.getStorageSync(SS_FRESH_KEY);
+  if (!v) return '';
+  try { wx.removeStorageSync(SS_FRESH_KEY); } catch (e) { /* 清不掉会多选中一次，无害 */ }
+  const id = ssId(v);
+  return readSetIndex().some((x) => x.id === id) ? id : '';
+}
+
+// ============================================================================
 // 读数：MHz → 屏上。参数（刻度因子 f 与小数位 dec）由平台随包算好送过来，
 // 故本地不做任何单位判断 —— 刻度是整份计划的属性，这边再给一个下拉就是第二个真相源。
 // ============================================================================
@@ -244,6 +354,12 @@ module.exports = {
   loadXlsx: loadXlsx,
   removePlan: removePlan,
   renamePlan: renamePlan,
+  importSatSets: importSatSets,
+  readSetIndex: readSetIndex,
+  loadSetSats: loadSetSats,
+  removeSet: removeSet,
+  renameSet: renameSet,
+  takeFreshSet: takeFreshSet,
   fmtFreq: fmtFreq,
   fmtFreqU: fmtFreqU
 };

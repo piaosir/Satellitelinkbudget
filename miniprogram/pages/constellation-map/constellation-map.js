@@ -8,6 +8,8 @@
 const sat = require('./satellite.js');
 const COASTLINE = require('./coastline-lo.js');      // 海岸线 ~10.5k（全程统一，= ISL 1:50m；高精度与之肉眼无差，已弃用）
 const tleStore = require('../../utils/tleStore.js');
+const satSearch = require('../../utils/satSearch.js'); // 归一化/分词/中文别名匹配（与星间链路页同一份）
+const satsimPack = require('../../utils/satsimPack.js'); // 仿真平台送来的「卫星集」（卫星组 / 自定义卫星 / 自定义星座）
 
 const RE = 6378.137;          // 地球赤道半径 km
 const DEG = Math.PI / 180;
@@ -22,8 +24,11 @@ const REFRESH_MS = 1000;      // 卫星位置实时刷新间隔（1Hz，由“�
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
-// 显示名 + 云存储分组键（与云函数 fetchTLE 的键一致）
-const GROUPS = [
+// 显示名 + 云存储分组键（与云函数 fetchTLE 的键一致）。
+// ★ 这是【内置】分组表；屏上真正的分组列表 = 仿真平台导入的星座（置顶）+ 本表，见 _rebuildGroups。
+//   凡「枚举真实星历源」的地方（_loadUniverse）必须用本表，别用 data.groups —— 导入的那几行
+//   没有 CelesTrak 端点，混进去就是一串必然失败的下载。
+const BUILT_IN = [
   { key: 'all', label: '全部卫星' }, // 合并显示所有星座
   { key: 'gps', label: 'GPS' },
   { key: 'glonass', label: 'GLONASS' },
@@ -47,20 +52,28 @@ const GROUPS = [
 ];
 // 非真实星历源的“合成分组”：由 active 全集派生，_loadUniverse 归类时要排除自身
 const DERIVED_KEYS = ['all', 'other'];
-// 默认选中“中国星网”（China SatNet）
-const DEFAULT_GROUP_INDEX = Math.max(0, GROUPS.findIndex((g) => g.key === 'guowang'));
+// 没有导入星座时的默认分组：“中国星网”（China SatNet）
+const DEFAULT_KEY = 'guowang';
+// 导入星座的分组键前缀（后接 satsimPack 的 setId）
+const SS_PREFIX = 'ss:';
 
-// 分组键 -> 显示名
-const GROUP_LABEL = {};
-GROUPS.forEach((g) => { GROUP_LABEL[g.key] = g.label; });
+// 内置分组键 -> 显示名
+const BUILTIN_LABEL = {};
+BUILT_IN.forEach((g) => { BUILTIN_LABEL[g.key] = g.label; });
 
 // 地固系 -> 渲染系
 const ecefToRender = (p) => [p.x, p.z, -p.y];
 
 Page({
   data: {
-    groups: GROUPS,
-    groupIndex: DEFAULT_GROUP_INDEX, // 默认“中国星网”
+    groups: BUILT_IN,        // 实际列表由 _rebuildGroups 现攒（导入星座置顶 + 内置分组）
+    groupIndex: 0,
+    impSets: [],             // 已导入的星座 [{id,name,count,src,from,ts,epochMode}]（按到达时间倒序）
+    showImp: false,          // 导入面板（管理已导入星座 + 密钥导入）
+    keyInput: '',            // 8 位密钥
+    otpCells: [],
+    keyFocus: false,
+    importing: false,
     loading: false,
     statusText: '',
     satCount: 0,             // 该组卫星总数
@@ -99,11 +112,13 @@ Page({
   _selOrbit: null, _selTrack: null, _selFootprint: null,
   _selPos: null,      // 选中卫星当前渲染坐标（保证抽稀/搜索命中也能高亮）
   _refreshTimer: null,// 位置实时刷新定时器
+  _loopGen: 0,        // 帧循环代号（画布 hidden 后重起循环时换代，作废在途 rAF 回调）
   _baseTime: 0,       // 时间轴锚点“此刻”（ms）；非实时时计算时刻 = 锚点 + timeOffset
   _trackLeft: 0, _trackW: 0, // 时间轴轨道触区的视口左缘/宽度（onReady 量一次，拖动时换算位置）
   _lastTimeCalc: 0,   // 拖动节流时间戳
   _index: null,       // 全局搜索索引 [{name, noradId, group}]（跨分组，懒加载）
   _indexLoading: false,
+  _metaSrc: null, _metaSrcKey: '', // 索引未就绪时的退化搜索源（当前组），按组缓存
   _pendingNorad: null,// 跨分组选中：切组加载后待定位的 NORAD
   _pendingNoFace: false,// 恢复缓存选星时为 true：只选中不转向、不停自转（保持进页面默认旋转）
 
@@ -112,14 +127,21 @@ Page({
     // 恢复上次的分组 + 选中卫星（永久缓存，切出再开保持不变）
     let saved = null;
     try { saved = wx.getStorageSync('constellation/selection'); } catch (e) { saved = null; }
+    let wantKey = '';
     if (saved && typeof saved === 'object') {
-      if (Number.isInteger(saved.groupIndex) && saved.groupIndex >= 0 && saved.groupIndex < GROUPS.length) {
-        this.setData({ groupIndex: saved.groupIndex });
+      if (saved.groupKey) wantKey = String(saved.groupKey);
+      // 老版本存的是【下标】（那时分组表是固定的内置表）→ 一次性换算成键。
+      // 键化是必须的：导入的星座插在最前面，下标会整体错位，恢复出来的是另一个星座。
+      else if (Number.isInteger(saved.groupIndex) && saved.groupIndex >= 0 && saved.groupIndex < BUILT_IN.length) {
+        wantKey = BUILT_IN[saved.groupIndex].key;
       }
       // 选中星交给现有 _pendingNorad 机制：_computePositions 加载完按 NORAD 定位；
       // 若该星在最新数据中不存在则自然落空（仅恢复分组、无选中），符合失效回退默认。
       if (saved.selNorad) { this._pendingNorad = String(saved.selNorad); this._pendingNoFace = true; }
     }
+    // 有新导入的星座（可能是上次没打开本页时后台同步进来的）→ 它就是本次的默认星座
+    const fresh = satsimPack.takeFreshSet();
+    this._rebuildGroups(fresh ? SS_PREFIX + fresh : wantKey);
     this._loadGroup(this.data.groupIndex);
     // 跨分组搜索索引改懒加载：用户真去搜索时才下（见 onSearchInput -> _ensureIndex）
   },
@@ -129,6 +151,176 @@ Page({
   },
   onShow() {
     if (this.data.liveRefresh) this._startRefresh(); // 仅当开关开启时恢复刷新
+    this._syncFromSatsim();
+  },
+
+  // 每次进入本页都拉一次平台投递（force：App.onShow 只在【应用回到前台】时触发，
+  // 小程序内部从首页点进来不会 —— 那正是「刚在电脑上发完、马上进来看」的路径）。
+  async _syncFromSatsim() {
+    let box = null;
+    try { box = require('../../utils/satsimBox'); } catch (e) { return; }
+    if (!box.getCh()) return;                    // 没绑定过，不发任何请求
+    let r = null;
+    try { r = await box.syncNow({ force: true }); } catch (e) { return; }
+    if (!r || !r.set) return;                    // 这一轮没有星座进来（配置/计划照旧由各自的页面消化）
+    const fresh = satsimPack.takeFreshSet();
+    const key = this._rebuildGroups(fresh ? SS_PREFIX + fresh : this._curKey());
+    // 没有「新到的那一份」（只是名字/颗数变了）→ 列表已随 _rebuildGroups 刷新，不打断正在看的分组
+    if (!fresh) return;
+    this._loadGroup(this.data.groupIndex);
+    this._saveSelection();
+    wx.showToast({ title: '已同步「' + this._labelOf(key) + '」', icon: 'none', duration: 2000 });
+  },
+
+  // ===================== 分组列表（导入星座置顶 + 内置分组） =====================
+  _curKey() {
+    const g = this.data.groups[this.data.groupIndex];
+    return g ? g.key : '';
+  },
+  _labelOf(key) {
+    if (BUILTIN_LABEL[key]) return BUILTIN_LABEL[key];
+    const row = (this.data.impSets || []).find((x) => SS_PREFIX + x.id === key);
+    return row ? row.name : key;
+  },
+  /**
+   * 重攒分组列表：仿真平台导入的星座排在最前（按到达时间倒序，最近发来的第一个），其后是内置分组。
+   * preferKey 命中就选它；否则保持当前分组；再否则取第一个导入星座（没有则「中国星网」）。
+   * 返回最终选中的分组键。只 setData，不加载 —— 加载与否由调用方决定。
+   */
+  _rebuildGroups(preferKey) {
+    const sets = satsimPack.readSetIndex().slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const groups = sets.map((s) => ({ key: SS_PREFIX + s.id, label: s.name })).concat(BUILT_IN);
+    const pick = (k) => (k ? groups.findIndex((g) => g.key === k) : -1);
+    let idx = pick(preferKey);
+    if (idx < 0) idx = pick(this._curKey());
+    if (idx < 0) idx = pick(sets.length ? SS_PREFIX + sets[0].id : DEFAULT_KEY);
+    if (idx < 0) idx = 0;
+    this.setData({ groups: groups, impSets: sets, groupIndex: idx });
+    return groups[idx] ? groups[idx].key : '';
+  },
+
+  // ===================== 导入面板（已导入星座的管理 + 密钥导入） =====================
+  // 两条收件路径同一份内容，与「卫星覆盖」「频率计划」完全一致：
+  //   · 绑定账号 —— 平台直投，打开本页即自动同步（见 _syncFromSatsim），不用输任何东西
+  //   · 8 位密钥 —— 给没绑定过的人，在这里输
+  onImportTap() {
+    this.setData({ showImp: true, keyInput: '', otpCells: this.buildOtpCells(''), keyFocus: false });
+  },
+  hideImp() { this.setData({ showImp: false, keyFocus: false }, () => this._restartLoop()); },
+
+  // 8 位分格输入，与「卫星覆盖 / 频率计划」那两处逐格同款（同一条通道，同一种手感）。
+  // 真实 <input> 移出可视区：真机上它是画在 webview 之上的原生控件，文字与系统光标 CSS 压不住。
+  buildOtpCells(key) {
+    const chars = String(key || '').split('');
+    const n = chars.length, cells = [];
+    for (let i = 0; i < 8; i++) {
+      if (i === 4) cells.push({ id: 'sep', sep: true });   // 第 4/5 格之间一个只读「-」
+      cells.push({ id: 'c' + i, sep: false, char: chars[i] || '', filled: i < n, active: i === n });
+    }
+    return cells;
+  },
+  onKeyInput(e) {
+    const key = satsimPack.normalizeKey(e.detail.value);
+    this.setData({ keyInput: key, otpCells: this.buildOtpCells(key), keyFocus: true });
+  },
+  onOtpFocus() { this.setData({ keyFocus: true }); },
+  onOtpBlur() { this.setData({ keyFocus: false }); },
+  focusOtp() { if (!this.data.keyFocus) this.setData({ keyFocus: true }); },
+
+  async confirmKeyImport() {
+    const key = satsimPack.normalizeKey(this.data.keyInput);
+    if (!/^[A-Z0-9]{8}$/.test(key)) { wx.showToast({ title: '请输入 8 位密钥', icon: 'none' }); return; }
+    if (this.data.importing) return;
+    this.setData({ importing: true });
+    wx.showLoading({ title: '拉取中...', mask: true });
+    let got = null;
+    try {
+      got = await satsimPack.fetchPack(key);
+    } catch (e) {
+      wx.hideLoading();
+      this.setData({ importing: false });
+      wx.showModal({ title: '导入失败', content: (e && e.message) || '未知错误', showCancel: false });
+      return;
+    }
+    wx.hideLoading();
+    this.setData({ importing: false });
+
+    const pack = got.pack;
+    if (!satsimPack.itemsOf(pack, 'sat-set').length) {
+      // 同一个密钥在哪个入口输都拉得到同一个包 —— 说清这个包该去哪导，别让人反复试
+      wx.showModal({
+        title: '包里没有星座',
+        content: '这个密钥装的是 ' + satsimPack.describePack(pack)
+          + '。链路配置请到「我的配置 → 导入」，频率计划请到「工具栏 → 频率计划」输入。',
+        showCancel: false
+      });
+      return;
+    }
+    const r = satsimPack.importSatSets(pack);
+    this._applyImported(r);
+  },
+
+  // 导入落地后：重攒分组列表 → 选中刚进来的那一份 → 加载。密钥与绑定两条路共用。
+  _applyImported(r) {
+    const fresh = satsimPack.takeFreshSet();
+    this._rebuildGroups(fresh ? SS_PREFIX + fresh : this._curKey());
+    this.setData({ showImp: false, keyFocus: false, keyInput: '', otpCells: this.buildOtpCells('') }, () => this._restartLoop());
+    this._loadGroup(this.data.groupIndex);
+    this._saveSelection();
+    const tail = r.failed ? `（${r.failed} 份存不下）` : '';
+    wx.showToast({ title: '已导入 ' + (r.total - r.failed) + ' 份星座' + tail, icon: 'none', duration: 2000 });
+  },
+
+  // 面板里点某一份 -> 切到它
+  onImpTap(e) {
+    const id = e.currentTarget.dataset.id;
+    this.setData({ showImp: false, keyword: '', searchResults: [] }, () => this._restartLoop());
+    this._rebuildGroups(SS_PREFIX + id);
+    this._loadGroup(this.data.groupIndex);
+    this._saveSelection();
+  },
+  _impRow(e) {
+    const id = e && e.currentTarget && e.currentTarget.dataset.id;
+    return (this.data.impSets || []).find((x) => x.id === id) || null;
+  },
+  // 行上的「改名 / 移除」（catchtap，不触发切换分组）。长按同样出这两项 —— 有人会先去长按。
+  onImpRename(e) { const row = this._impRow(e); if (row) this._renameImp(row); },
+  onImpDelete(e) { const row = this._impRow(e); if (row) this._deleteImp(row); },
+  onImpLongPress(e) {
+    const row = this._impRow(e);
+    if (!row) return;
+    wx.showActionSheet({
+      itemList: ['改名', '移除'],
+      success: (res) => {
+        if (res.tapIndex === 0) this._renameImp(row);
+        else if (res.tapIndex === 1) this._deleteImp(row);
+      }
+    });
+  },
+  _renameImp(row) {
+    wx.showModal({
+      title: '改名', editable: true, placeholderText: row.name, content: row.name,
+      success: (res) => {
+        if (!res.confirm) return;
+        const nm = String(res.content || '').trim();
+        if (!nm || !satsimPack.renameSet(row.id, nm)) return;
+        this._rebuildGroups(this._curKey());
+      }
+    });
+  },
+  _deleteImp(row) {
+    wx.showModal({
+      title: '移除星座',
+      content: '移除「' + row.name + '」（' + row.count + ' 颗）？平台重新发送即可恢复。',
+      success: (res) => {
+        if (!res.confirm) return;
+        const wasCur = this._curKey() === SS_PREFIX + row.id;
+        satsimPack.removeSet(row.id);
+        this._rebuildGroups(this._curKey());
+        if (wasCur) { this._loadGroup(this.data.groupIndex); this._saveSelection(); }
+        wx.showToast({ title: '已移除「' + row.name + '」', icon: 'none' });
+      }
+    });
   },
   onHide() {
     this._stopRefresh(); // 后台不空跑（开关状态保留，回到前台再恢复）
@@ -161,7 +353,8 @@ Page({
     const m = this._meta;
     const selNorad = (this._selIdx >= 0 && m && m[this._selIdx]) ? String(m[this._selIdx].noradId) : '';
     try {
-      wx.setStorageSync('constellation/selection', { groupIndex: this.data.groupIndex, selNorad });
+      // 按【键】存而不是下标：导入的星座插在列表最前面，下标会整体错位
+      wx.setStorageSync('constellation/selection', { groupKey: this._curKey(), selNorad });
     } catch (e) { /* 存储失败不影响功能 */ }
   },
 
@@ -188,30 +381,56 @@ Page({
 
     this._ensureIndex(); // 首次搜索才加载跨分组索引（就绪后会自动重跑本次搜索）
 
-    const curKey = GROUPS[this.data.groupIndex].key;
+    const curKey = this._curKey();
     // 优先用全局索引跨分组搜索；索引未就绪时退化为当前组
     const hasIndex = this._index && this._index.length;
-    const src = hasIndex ? this._index : this._meta.map((m) => ({ name: m.name, noradId: m.noradId, group: curKey }));
+    if (!hasIndex && this._metaSrcKey !== curKey) {
+      // 退化源按组缓存一份（同一数组身份才能命中 satSearch 的归一化名缓存）
+      this._metaSrc = this._meta.map((m) => ({ name: m.name, noradId: m.noradId, group: curKey }));
+      this._metaSrcKey = curKey;
+    }
+    const src = this._searchSrc(hasIndex ? this._index : (this._metaSrc || []));
 
     const now = new Date();
     const gmst = sat.gstime(now);
-    const out = [];
-    for (let i = 0; i < src.length && out.length < 40; i++) {
-      const s = src[i];
-      if (s.name.toLowerCase().indexOf(kw) >= 0 || String(s.noradId).indexOf(kw) >= 0) {
-        // 槽位仅当该星属当前已加载分组且为 GEO 时才能算（其它情况无 TLE 在手）
-        let slot = '';
-        if (s.group === curKey && curKey === 'geo') {
-          const idx = this._idxByNorad(s.noradId);
-          if (idx >= 0) {
-            const pv = sat.propagate(this._recs[idx], now);
-            if (pv && pv.position) slot = this._fmtSlot(sat.degreesLong(sat.eciToGeodetic(pv.position, gmst).longitude));
-          }
+    const out = satSearch.searchSats(src, raw, 50).map((s) => {
+      // 槽位仅当该星属当前已加载分组且为 GEO 时才能算（其它情况无 TLE 在手）
+      let slot = '';
+      if (s.group === curKey && curKey === 'geo') {
+        const idx = this._idxByNorad(s.noradId);
+        if (idx >= 0) {
+          const pv = sat.propagate(this._recs[idx], now);
+          if (pv && pv.position) slot = this._fmtSlot(sat.degreesLong(sat.eciToGeodetic(pv.position, gmst).longitude));
         }
-        out.push({ name: s.name, noradId: s.noradId, group: s.group, groupLabel: GROUP_LABEL[s.group] || s.group, slot });
       }
-    }
+      return { name: s.name, noradId: s.noradId, group: s.group, groupLabel: this._labelOf(s.group), slot };
+    });
     this.setData({ searchResults: out });
+  },
+
+  // 搜索源 = 导入星座的星（放最前，保证在 50 条上限内先被扫到）+ 跨分组索引（或退化的当前组）。
+  // ★ 合并结果必须缓存住数组【身份】：satSearch 的归一化名缓存以数组本身为键，每次敲键都新造一个
+  //   数组的话，那份缓存永远命中不了，几万条名字每按一个键重新归一化一遍。
+  _searchSrc(base) {
+    const imp = this._impSearchSrc();
+    if (!imp.length) return base;
+    if (this._mergedBase !== base || this._mergedImp !== imp) {
+      this._mergedBase = base; this._mergedImp = imp; this._merged = imp.concat(base);
+    }
+    return this._merged;
+  },
+  // 导入星座的名录 [{name,noradId,group}]，按索引签名缓存（内容没变就不重新读一遍存储）
+  _impSearchSrc() {
+    const sets = this.data.impSets || [];
+    const sig = sets.map((s) => s.id + ':' + (s.ts || 0)).join(',');
+    if (this._impSrcSig === sig) return this._impSrc || [];
+    const out = [];
+    for (const row of sets) {
+      const key = SS_PREFIX + row.id;
+      for (const s of satsimPack.loadSetSats(row.id)) out.push({ name: s.name, noradId: s.noradId, group: key });
+    }
+    this._impSrcSig = sig; this._impSrc = out;
+    return out;
   },
 
   clearSearch() {
@@ -221,7 +440,7 @@ Page({
   onPickResult(e) {
     const norad = String(e.currentTarget.dataset.norad);
     const group = e.currentTarget.dataset.group;
-    const curKey = GROUPS[this.data.groupIndex].key;
+    const curKey = this._curKey();
     this.setData({ searchResults: [] });
 
     // 已经就在该卫星所属分组 -> 直接选中
@@ -231,7 +450,7 @@ Page({
       return;
     }
     // 否则跳转到该卫星所属分组，加载完成后在 _computePositions 中定位该星
-    const gi = GROUPS.findIndex((g) => g.key === group);
+    const gi = this.data.groups.findIndex((g) => g.key === group);
     if (gi < 0) {
       // 分组未知（极少）-> 退化为当前视图内就地选中
       const li = this._idxByNorad(norad);
@@ -411,39 +630,29 @@ Page({
     });
   },
 
-  // 懒加载全局搜索索引（跨分组）：仅用户首次搜索时触发，且当天本地缓存（零重复 CDN）。
-  // Starlink 走前端众包，云端索引可能还没并入，故同时读众包的 _names_starlink.json 补齐。
+  // 懒加载全局搜索索引（跨分组）：仅用户首次搜索时触发。取数与「本地缓存/云端 _index.json + Starlink
+  // 名单补齐/空结果不落盘」的口径统一收在 tleStore.ensureSearchIndex（星间链路页同一份），本页不再自建。
   _ensureIndex() {
-    if (this._index || this._indexLoading) return; // 已就绪/加载中
-    const cached = this._readCache('_index');      // 当天本地缓存命中 -> 零 CDN
-    if (cached && cached.sats) { this._index = cached.sats; return; }
-
+    if ((this._index && this._index.length) || this._indexLoading) return; // 已就绪/加载中
     this._indexLoading = true;
-    Promise.all([
-      this._downloadJSON(this._fileID('_index.json')).catch(() => null),
-      this._downloadJSON(this._fileID('_names_starlink.json')).catch(() => null)
-    ]).then(([idx, star]) => {
-      const index = (idx && idx.sats) ? idx.sats.slice() : [];
-      const hasStarlink = index.some((s) => s.group === 'starlink');
-      if (!hasStarlink && star && star.names) {
-        for (let i = 0; i < star.names.length; i++) {
-          index.push({ name: star.names[i].name, noradId: star.names[i].noradId, group: 'starlink' });
-        }
-      }
-      this._index = index;
-      this._writeCache('_index', { sats: index });
+    tleStore.ensureSearchIndex().then((index) => {
+      this._index = (index && index.length) ? index : null; // 空 -> 置回 null，下次搜索重试而非当天钉死
       this._indexLoading = false;
       // 索引就绪后，若用户当前仍有关键字，重跑一次以升级为跨分组结果
       const kw = (this.data.keyword || '').trim();
-      if (kw) this.onSearchInput({ detail: { value: this.data.keyword } });
+      if (kw && this._index) this.onSearchInput({ detail: { value: this.data.keyword } });
     }).catch(() => { this._indexLoading = false; });
   },
 
   _loadGroup(idx) {
-    const g = GROUPS[idx];
+    const g = this.data.groups[idx];
+    if (!g) return;
     this.setData(Object.assign({ loading: true, statusText: `加载 ${g.label} …`, selected: null }, this._beamResetPatch()));
     this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null; this._selPos = null;
 
+    // 仿真平台导入的星座：根数就在本地存储里，零网络（这批星里的自定义卫星/合成星
+    // 本就不在 CelesTrak 目录中，除了平台送来的这一份别无来源）
+    if (g.key.indexOf(SS_PREFIX) === 0) { this._loadImported(g); return; }
     if (g.key === 'all') { this._loadAll(); return; }
     if (g.key === 'other') { this._loadOther(); return; }
 
@@ -465,13 +674,29 @@ Page({
       .catch(() => this._fetchGroupLive(g, null)); // 下载失败 -> 现场直连兜底
   },
 
+  // 仿真平台导入的星座：读本地存储那份 OMM 根数直接建 satrec。
+  // 「OMM 时间」取记录里最新的那个历元（不是导入时刻）—— 屏上那一行说的是根数有多新，
+  // 而根数的新旧只由历元决定；导入时刻早晚不改变星在哪儿。
+  _loadImported(g) {
+    const id = g.key.slice(SS_PREFIX.length);
+    const sats = satsimPack.loadSetSats(id);
+    if (!sats.length) { this._fail('「' + g.label + '」没有可用的轨道根数，请让仿真平台重新发送'); return; }
+    let latest = '';
+    for (let i = 0; i < sats.length; i++) { const e = sats[i].epoch || ''; if (e > latest) latest = e; }
+    // OMM 的 EPOCH 列不带时区后缀，直接 new Date 会被当本地时间读 —— 与 omm2satrec 同样补 Z 当 UTC
+    if (latest && !/Z$/i.test(latest)) latest += 'Z';
+    this.setData({ statusText: '' });
+    this._ingest({ group: g.key, label: g.label, fetchedAt: latest || '', count: sats.length, sats: sats });
+  },
+
   // 全集：各已知星座组并集 ∪「全部在轨」(active)，按 NORAD 去重后归类——在已知组里的标该组，
   // 其余标 'other'（=「其他」分组）。与仿真平台 ConstellationMap3D 的 loadUniverse 同口径。
   // 各已知组优先用当天本地缓存（零 CDN），未命中才下载；active 走 _loadActive（缓存→云端→直连兜底）。
   // active 拿不到时自动退化为已知组并集（此时「其他」为空），与平台一致。
   // 返回 Promise<{sats, fetchedAt}>；sats 每颗带 _group。label 仅用于进度文案（「全部卫星」/「其他」共用本函数）。
   _loadUniverse(label) {
-    const keys = GROUPS.filter((g) => DERIVED_KEYS.indexOf(g.key) < 0).map((g) => g.key);
+    // 只枚举【内置】真实星历源：导入的星座没有 CelesTrak 端点，也不该混进「全部卫星 / 其他」的归类
+    const keys = BUILT_IN.filter((g) => DERIVED_KEYS.indexOf(g.key) < 0).map((g) => g.key);
     const total = keys.length + 1; // +1 = 全部在轨(active)
     let done = 0;
     this.setData({ loading: true, statusText: `加载${label} 0/${total} …` });
@@ -531,14 +756,17 @@ Page({
   // 明文约 5MB，故不进启动时的众包全量刷新（见 utils/tleStore 的 ALL_KEYS），只在用户真正打开
   // 「全部卫星 / 其他」时按需取一次，之后当天走本地缓存。四路都拿不到时返回 null（全集退化为已知组并集）。
   _loadActive() {
+    // 拿到全集就顺手把其中不在搜索索引里的星补成「其他」（索引可能是缺「其他」的旧副本/云端那份
+    // 本身就没建全）——否则这批星在搜索框里始终不存在，用户只能靠切到「其他」分组慢慢翻。
+    const withIndex = (data) => { if (data && data.sats) tleStore.mergeOtherIntoIndex(data.sats); return data; };
     const cached = this._readCache('active');
-    if (cached && cached.sats && cached.sats.length) return Promise.resolve(cached);
+    if (cached && cached.sats && cached.sats.length) return Promise.resolve(withIndex(cached));
     const live = () => {
       this.setData({ statusText: '从 CelesTrak 获取全部在轨（约 5MB，首次较慢）…' });
       return tleStore.fetchGroupLiveOrSup('active').then((payload) => {
         this._writeCache('active', payload);
         tleStore.uploadGroupPayload('active', payload); // 后台回传云存储，后续用户走 CDN
-        return payload;
+        return withIndex(payload);
       }).catch(() => null); // 直连也失败 -> 退化为已知组并集
     };
     return this._downloadJSON(this._fileID('active.json'))
@@ -546,7 +774,7 @@ Page({
         data = this._omm(data);
         if (!data || !data.sats || !data.sats.length) return null;
         this._writeCache('active', data);
-        return data;
+        return withIndex(data);
       })
       .catch(() => null)
       .then((data) => data || live()); // 云端缺失才直连，且只试一次
@@ -632,6 +860,7 @@ Page({
     }
     this._recs = recs;
     this._meta = meta;
+    this._metaSrc = null; this._metaSrcKey = ''; // 组数据换了 -> 退化搜索源作废
     this.setData({
       satCount: recs.length,
       dataTime: (data && data.fetchedAt) ? this._fmtDate(new Date(data.fetchedAt)) : '—'
@@ -661,7 +890,7 @@ Page({
 
     // 抽稀（仅渲染层面，数据/点击仍基于全量 _recs）
     let render;
-    if (GROUPS[this.data.groupIndex].key === 'all') {
+    if (this._curKey() === 'all') {
       // “全部”模式：先放满非 Starlink，再用 Starlink 垫满到 MAX_RENDER_ALL（Starlink 最后绘制，叠在最上）
       const nonStar = [], star = [];
       for (let i = 0; i < all.length; i++) {
@@ -856,7 +1085,16 @@ Page({
     if (!this._canvas) return;
     if (this._autoRotate && !this._dragging && !this._pinching) this._yaw += 0.0006;
     this._draw();
-    this._rafId = this._canvas.requestAnimationFrame(() => this._loop());
+    const gen = this._loopGen;
+    this._rafId = this._canvas.requestAnimationFrame(() => { if (gen === this._loopGen) this._loop(); });
+  },
+  // 画布被 hidden 过（导入弹窗期间）之后 rAF 不再回调，帧循环会永久停住 —— 关弹窗时重新起一轮。
+  // ★ 必须在 setData 的渲染完成回调里调：this.data 是同步更新的，但画布真正解除 display:none 要等
+  //   这一帧渲染完；早了就是对着还没显示的画布起循环，起完照样停。
+  // ★★ 换代号作废所有在途回调：hidden 期间那个迟到的 rAF 若还会回来，两条循环并行就是双倍开销。
+  _restartLoop() {
+    this._loopGen = (this._loopGen || 0) + 1;
+    if (this._canvas) this._loop();
   },
 
   _project(x, y, z, cx, cy, scale) {
@@ -1248,7 +1486,11 @@ Page({
       ? Math.hypot(v.x + WE * r.y, v.y - WE * r.x, v.z)
       : 0;
     const RE = 6378.137; // SGP4 地球半径 km；altp/alta 以地球半径为单位
-    const isGeo = (m.group || GROUPS[this.data.groupIndex].key) === 'geo';
+    // 轨位读数：内置 GEO 分组直接认；导入的星座里也可能全是 GEO 星（平台的卫星组常常就是几颗
+    // 同步轨道星），那批星没有分组身份可依，改按根数判——周期≈恒星日、近圆、近赤道。
+    const grp = m.group || this._curKey();
+    const isGeo = grp === 'geo' || (grp.indexOf(SS_PREFIX) === 0
+      && Math.abs((2 * Math.PI) / rec.no - 1436.07) < 12 && rec.ecco < 0.01 && Math.abs(rec.inclo / DEG) < 15);
     return {
       name: m.name,
       noradId: m.noradId,
