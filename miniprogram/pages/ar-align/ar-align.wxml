@@ -1,69 +1,133 @@
 <!--ar-align.wxml-->
 <view class="container">
-  <!-- 输入卫星轨位阶段 -->
+  <!-- 选择目标阶段 -->
   <view class="input-stage" wx:if="{{stage === 'input'}}">
-    <view class="input-card">
-      <view class="input-title">选择卫星对星</view>
-      
-      <view class="orbit-input-group">
+    <view class="sel-card">
+      <view class="sel-head">
+        <text class="sel-title">AR 对星</text>
+        <view class="orbit-seg">
+          <view class="orbit-seg-item {{mode === 'gso' ? 'active' : ''}}" data-mode="gso" bindtap="onModeTap">同步轨道 GSO</view>
+          <view class="orbit-seg-item {{mode === 'ngso' ? 'active' : ''}}" data-mode="ngso" bindtap="onModeTap">非同步轨道 NGSO</view>
+        </view>
+      </view>
+
+      <!-- GSO：常用通信卫星 + GEO 组搜索 -->
+      <block wx:if="{{mode === 'gso'}}">
         <view class="form-group">
-          <text class="form-label">选择卫星</text>
-          <picker mode="selector" 
-                  range="{{satellites}}" 
-                  range-key="name"
-                  value="{{satelliteIndex}}"
-                  bindchange="onSatelliteChange">
+          <text class="form-label">常用通信卫星 <text class="form-label-unit">(中星 / 亚太 / 亚洲)</text></text>
+          <picker mode="selector" range="{{satellites}}" range-key="name" value="{{satelliteIndex}}" bindchange="onSatelliteChange">
             <view class="form-picker">
-              {{satellites[satelliteIndex].name}}
+              <text>{{satellites[satelliteIndex].name}}</text>
+              <text class="form-picker-sub">{{satellites[satelliteIndex].position}}°E</text>
             </view>
           </picker>
         </view>
-      </view>
-      
-      <button class="btn-start-integrated" bindtap="startAR">
-        <view class="btn-orbit-display">
-          <text class="btn-orbit-label">目标轨位</text>
-          <text class="btn-orbit-value">{{orbitDisplay}}</text>
+        <view class="form-group">
+          <text class="form-label">或搜索其他同步轨道卫星 <text class="form-label-unit">(名称 / NORAD 编号，可中文)</text></text>
+          <view class="sch">
+            <input class="form-input sch-in" value="{{keyword}}" placeholder="如 中星 / Intelsat / 44067；点此按经度浏览 GEO 组"
+                   confirm-type="search" bindfocus="onSearchFocus" bindinput="onSearchInput" />
+            <text wx:if="{{keyword}}" class="sch-clr" bindtap="clearSearch">✕</text>
+          </view>
         </view>
-        <view class="btn-start-text">开始对星 ▶</view>
-      </button>
+      </block>
+
+      <!-- NGSO：分组 + 跨全部在轨搜索 -->
+      <block wx:else>
+        <view class="form-group">
+          <text class="form-label">星座 / 分组</text>
+          <picker mode="selector" range="{{groups}}" range-key="label" value="{{groupIndex}}" bindchange="onGroupChange">
+            <view class="form-picker"><text>{{groups[groupIndex].label}}</text></view>
+          </picker>
+        </view>
+        <view class="form-group">
+          <text class="form-label">搜索卫星 <text class="form-label-unit">(名称 / NORAD 编号，可中文：北斗、星链、天宫…)</text></text>
+          <view class="sch">
+            <input class="form-input sch-in" value="{{keyword}}" placeholder="{{groups[groupIndex].key ? '组内过滤，或点此浏览该组' : '输入卫星名或 NORAD 编号'}}"
+                   confirm-type="search" bindfocus="onSearchFocus" bindinput="onSearchInput" />
+            <text wx:if="{{keyword}}" class="sch-clr" bindtap="clearSearch">✕</text>
+          </view>
+        </view>
+      </block>
+
+      <!-- 搜索 / 浏览结果 -->
+      <view wx:if="{{results.length || resultsTitle}}" class="sch-res">
+        <view class="sch-res-hd">
+          <text class="sch-res-ti">{{resultsTitle}}</text>
+          <text class="sch-res-x" bindtap="closeResults">收起</text>
+        </view>
+        <scroll-view wx:if="{{results.length}}" class="sch-res-list" scroll-y>
+          <view wx:for="{{results}}" wx:key="noradId" class="sch-item"
+                data-norad="{{item.noradId}}" data-group="{{item.group}}" data-name="{{item.name}}" bindtap="onPickResult">
+            <text class="si-name">{{item.name}}</text>
+            <text class="si-meta">{{item.groupLabel}} · {{item.noradId}}{{item.lonText ? ' · 定点 ' + item.lonText : ''}}</text>
+          </view>
+        </scroll-view>
+      </view>
+
+      <!-- 目标卡：实时方位 / 仰角 / 距离 / 可见状态 / 过境预报 -->
+      <view class="tgt" wx:if="{{tgt}}">
+        <view class="tgt-head">
+          <text class="tgt-name">{{tgt.name}}</text>
+          <text class="tgt-badge" wx:if="{{tgt.badge}}">{{tgt.badge}}</text>
+          <text class="tgt-grp" wx:if="{{tgt.groupLabel && tgt.groupLabel !== tgt.badge}}">{{tgt.groupLabel}}</text>
+        </view>
+        <view class="tgt-sub" wx:if="{{tgt.sub || tgt.noradId}}">{{tgt.sub}}{{tgt.sub && tgt.noradId ? ' · ' : ''}}{{tgt.noradId ? 'NORAD ' + tgt.noradId : ''}}</view>
+        <view class="tgt-grid" wx:if="{{tInfo && !tInfo.pending && !tInfo.err}}">
+          <view class="kv"><text class="k">方位角</text><text class="v">{{tInfo.az}}°</text></view>
+          <view class="kv"><text class="k">仰角</text><text class="v">{{tInfo.el}}°</text></view>
+          <view class="kv"><text class="k">距离</text><text class="v">{{tInfo.range}} km</text></view>
+          <view class="kv"><text class="k">状态</text><text class="v {{tInfo.vis ? '' : 'v-warn'}}">{{tInfo.visText}}</text></view>
+        </view>
+        <view class="tgt-line" wx:if="{{tInfo && tInfo.pending}}">等待定位后显示方位角与仰角</view>
+        <view class="tgt-line" wx:if="{{tInfo && tInfo.err}}">{{tInfo.err}}</view>
+        <view class="tgt-line" wx:if="{{tInfo && tInfo.where}}">{{tInfo.where}}</view>
+        <view class="tgt-line" wx:if="{{tInfo && tInfo.pass}}">{{tInfo.pass}}</view>
+        <view class="tgt-foot">
+          <text class="tgt-src">{{tgt.src}}</text>
+          <text class="tgt-loc {{locOk ? '' : 'tgt-loc-bad'}}" bindtap="retryLocate">站点 {{locText}}</text>
+        </view>
+      </view>
+      <view class="tgt tgt-empty" wx:else>请在上方搜索并选择一颗卫星</view>
+
+      <button class="btn-start" bindtap="startAR">开始对星 ▶</button>
     </view>
   </view>
-  
+
   <!-- AR相机阶段 -->
   <view class="ar-stage" wx:if="{{stage === 'ar'}}">
     <!-- 相机视图 - 启用高帧率和原生层级 -->
-    <camera 
-      device-position="back" 
+    <camera
+      device-position="back"
       flash="off"
       frame-size="medium"
       class="camera-view"
       binderror="onCameraError"
       bindinitialdone="onCameraReady">
-      
+
       <!-- 提示层 -->
       <cover-view class="tip-overlay" wx:if="{{showTip}}">
         <cover-view class="tip-card">
           <cover-view class="tip-icon">📱</cover-view>
           <cover-view class="tip-text">请垂直放置手机</cover-view>
-          <cover-view class="tip-subtext">保持手机屏幕朝向天空</cover-view>
+          <cover-view class="tip-subtext">摄像头对着天空，屏幕朝向自己</cover-view>
         </cover-view>
       </cover-view>
-      
+
       <!-- AR覆盖层 -->
       <cover-view class="ar-overlay">
         <!-- 中心瞄准圈 -->
         <cover-view class="aim-circle {{isAligned ? 'aligned' : ''}}">
           <cover-view class="aim-dot"></cover-view>
         </cover-view>
-        
+
         <!-- 卫星图标 - 使用satellite.png图片 -->
-        <cover-view 
+        <cover-view
           wx:if="{{satelliteVisible}}"
-          class="satellite-icon {{isAtEdge ? 'at-edge' : ''}}" 
+          class="satellite-icon {{isAtEdge ? 'at-edge' : ''}}"
           style="left: {{satelliteX}}px; top: {{satelliteY}}px;">
-          <cover-image 
-            class="satellite-image" 
+          <cover-image
+            class="satellite-image"
             src="/images/satellite.png"
             mode="aspectFit">
           </cover-image>
@@ -71,7 +135,7 @@
             <cover-view class="edge-arrow">→</cover-view>
           </cover-view>
         </cover-view>
-        
+
         <!-- 顶部信息栏 -->
         <cover-view class="info-bar">
           <cover-view class="info-section">
@@ -89,7 +153,7 @@
           </cover-view>
           <cover-view class="info-divider"></cover-view>
           <cover-view class="info-section">
-            <cover-view class="info-section-title">🛰️ 目标位置</cover-view>
+            <cover-view class="info-section-title">🛰️ {{tgt ? tgt.name : '目标位置'}}</cover-view>
             <cover-view class="info-row">
               <cover-view class="info-item">
                 <cover-view class="info-label">方位角</cover-view>
@@ -100,22 +164,36 @@
                 <cover-view class="info-value">{{elevation}}°</cover-view>
               </cover-view>
             </cover-view>
+            <cover-view class="info-target-line" wx:if="{{targetLine}}">{{targetLine}}</cover-view>
           </cover-view>
         </cover-view>
-        
+
         <!-- 底部状态栏 -->
         <cover-view class="status-bar">
-          <cover-view class="status-text {{isAligned ? 'success' : ''}}">
-            {{isAligned ? '✓ 已对准卫星' : '移动手机对准卫星图标'}}
+          <cover-view class="status-text {{isAligned ? 'success' : (belowHorizon ? 'warn' : '')}}">
+            {{isAligned ? '✓ 已对准卫星' : (belowHorizon ? '目标在地平线下，图标指向其方位' : '移动手机对准卫星图标')}}
           </cover-view>
           <cover-view class="distance-info" wx:if="{{!isAligned}}">
             偏差: {{offsetDistance}}°
           </cover-view>
         </cover-view>
       </cover-view>
+
+      <!-- 底部工具行：换星 / 手动翻转 / 诊断（放在 .ar-overlay 之外，可点击） -->
+      <cover-view class="tool-row">
+        <cover-view class="tool-btn" bindtap="backToInput">‹ 换星</cover-view>
+        <cover-view class="tool-btn {{manualFlip ? 'active' : ''}}" bindtap="toggleManualFlip">{{manualFlip ? '已翻转180° 点此还原' : '方向反了？翻转180°'}}</cover-view>
+        <cover-view class="tool-btn" bindtap="toggleDebug">{{debugVisible ? '关闭诊断' : '诊断'}}</cover-view>
+      </cover-view>
+
+      <!-- 诊断面板：原始传感器值与解算结果；录 10 秒可把数据复制到剪贴板发给开发者 -->
+      <cover-view class="debug-panel" wx:if="{{debugVisible}}">
+        <cover-view class="debug-line" wx:for="{{debugLines}}" wx:key="*this">{{item}}</cover-view>
+        <cover-view class="tool-btn debug-rec" bindtap="startRecording">{{recording ? '录制中…' : '录10秒传感器数据并复制'}}</cover-view>
+      </cover-view>
     </camera>
   </view>
-  
+
   <!-- 加载状态 -->
   <view class="loading-mask" wx:if="{{loading}}">
     <view class="loading-spinner"></view>

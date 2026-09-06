@@ -284,6 +284,16 @@
   color: #8aa0b8;
   padding: 0 10rpx;
 }
+/* 信息卡「AR 对星」入口：与 .btn-on 同一套描边样式 */
+.card-ar {
+  flex: 0 0 auto;
+  font-size: 22rpx;
+  color: #9fd0ef;
+  border: 1rpx solid rgba(123, 180, 204, 0.6);
+  border-radius: 8rpx;
+  padding: 4rpx 14rpx;
+  margin-right: 12rpx;
+}
 .card-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

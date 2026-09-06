@@ -5,7 +5,7 @@ const app = getApp();
 const { formatDateTime } = require('../../utils/formatter');
 const { buildWaterfallSegments, buildLinkSummary } = require('../../utils/waterfallBuilder');
 const satsimPack = require('../../utils/satsimPack');   // 仿真平台密钥导入（与频率计划页共用同一条通道）
-const { DVB_STANDARD_OPTIONS } = require('../../utils/constants');
+const { DVB_STANDARD_OPTIONS, isNtnStandard, NTN_TABLE_META } = require('../../utils/constants');
 
 // 翻译文本（用于导出报告 - 云函数版本已内置翻译，此处仅保留UI显示用）
 const exportTranslations = {
@@ -1915,6 +1915,13 @@ Page({
     // Es/N₀、2 号槽 NR-NTN 的每 RE SNR），槽里没有才回落到配置级 —— 存量配置全走回落。
     const noiseMode = lp.noiseRatioMode || config.noiseRatioMode || 'ebno';
     const noiseLabel = noiseMode === 'snr' ? 'SNR门限' : (noiseMode === 'esno' ? 'Es/N₀门限' : 'Eb/N₀门限');
+    // 3GPP 载波的门限按 BLER 10% 首传给，表单里那个误码率对它无意义，改印目标 BLER（云函数导出已是
+    // 这个口径）。算过的取引擎出的 phyBlerResult；还没算过的配置按 phy / 表元数据回显（各表恒 10%）。
+    const isNtn = !!cr.phyKindResult || (isNtnStandard(lp.dvbStandard) && !!lp.phy && typeof lp.phy === 'object');
+    const blerPct = cr.phyBlerResult
+      ? v(cr.phyBlerResult)
+      : String(Math.round(((lp.phy && lp.phy.blerTarget) || (NTN_TABLE_META[lp.dvbStandard] || {}).bler || 0.1) * 100));
+    const berRow = isNtn ? ['目标 BLER', blerPct + '%'] : ['误码率', '1E-' + v(lp.ber)];
 
     // NGSO 适配
     const isNGSO = sat.orbitType === 'NGSO';
@@ -1986,7 +1993,7 @@ Page({
         ['标准', dvbLabel, '调制方式', v(lp.modulation)],
         ['信息速率', v(lp.infoRate) + 'kbps', 'FEC码率', v(lp.fec)],
         ['频谱效率', v(cr.spectralEfficiencyResult) + (cr.spectralEfficiencyResult ? 'bps/Hz' : ''), '滚降系数(1+α)', v(lp.bandwidthFactor)],
-        ['误码率', '1E-' + v(lp.ber), noiseLabel, v(lp.ebno) + 'dB'],
+        [berRow[0], berRow[1], noiseLabel, v(lp.ebno) + 'dB'],
         [lastLabel, lastValue],
       ]},
     ];

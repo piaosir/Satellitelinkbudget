@@ -91,6 +91,8 @@
         <text class="card-name">{{selected.name}}</text>
         <text wx:if="{{selected.slot}}" class="card-slot">{{selected.slot}}</text>
       </view>
+      <!-- 带着这颗星跳到 AR 对星页（跨分包） -->
+      <text class="card-ar" catchtap="goArAlign">AR 对星</text>
       <text class="card-close" bindtap="closeCard">✕</text>
     </view>
     <view class="card-grid">

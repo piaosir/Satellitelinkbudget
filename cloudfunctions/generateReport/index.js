@@ -8,6 +8,32 @@ const fs = require('fs');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
+// 标准 key → 显示名。原先只认 DVB-S / S2 / S2X 三个，DVB-RCS2 与 3GPP 一族八张表全被印成「自定义」。
+// 与小程序 utils/constants.js 的 DVB_STANDARD_OPTIONS 同 key（云函数不能 require 小程序目录，故抄一份）。
+const STANDARD_LABELS = {
+  'DVB-S': 'DVB-S', 'DVB-S2': 'DVB-S2', 'DVB-RCS2': 'DVB-RCS2', 'DVB-S2X': 'DVB-S2X',
+  '3GPP NR-NTN': '3GPP NR-NTN · 表1 64QAM', '3GPP NR-NTN T2': '3GPP NR-NTN · 表2 256QAM',
+  '3GPP NR-NTN T3': '3GPP NR-NTN · 表3 低频谱效率', '3GPP NR-NTN TP1': '3GPP NR-NTN · 预编码表1',
+  '3GPP NR-NTN TP2': '3GPP NR-NTN · 预编码表2', '3GPP NB-IoT NTN': '3GPP NB-IoT · NPDSCH',
+  '3GPP NB-IoT NTN NPUSCH MT': '3GPP NB-IoT · NPUSCH 多音', '3GPP NB-IoT NTN NPUSCH ST': '3GPP NB-IoT · NPUSCH 单音'
+};
+const STANDARD_LABELS_EN = {
+  '3GPP NR-NTN': '3GPP NR-NTN · MCS Table 1 (64QAM)', '3GPP NR-NTN T2': '3GPP NR-NTN · MCS Table 2 (256QAM)',
+  '3GPP NR-NTN T3': '3GPP NR-NTN · MCS Table 3 (low SE)', '3GPP NR-NTN TP1': '3GPP NR-NTN · TP Table 1',
+  '3GPP NR-NTN TP2': '3GPP NR-NTN · TP Table 2', '3GPP NB-IoT NTN': '3GPP NB-IoT · NPDSCH',
+  '3GPP NB-IoT NTN NPUSCH MT': '3GPP NB-IoT · NPUSCH multi-tone', '3GPP NB-IoT NTN NPUSCH ST': '3GPP NB-IoT · NPUSCH single-tone'
+};
+const standardLabel = (key, isZh) => (isZh ? STANDARD_LABELS[key] : (STANDARD_LABELS_EN[key] || STANDARD_LABELS[key])) || (isZh ? '自定义' : 'Custom');
+// 门限口径：优先这条链路自己存的（v3.8.11 起逐链路存，一份配置的多条链路口径可以不同），其次配置级。
+// 'snr' 是 3GPP 的每资源元素 SNR —— 原先只认 esno / ebno 两档，3GPP 的 −6.00 dB 被印成「Eb/N0 门限」。
+const noiseLabelOf = (lp, config) => {
+  const m = (lp && lp.noiseRatioMode) || (config && config.noiseRatioMode) || 'ebno';
+  return m === 'snr' ? 'SNR' : (m === 'esno' ? 'Es/N0' : 'Eb/N0');
+};
+// 3GPP 载波：引擎对它出 phyKindResult（'nr' / 'nbiot'），DVB 载波恒为空。
+// 3GPP 行没有符号速率 / 误码率这两个读数（OFDM、门限按 BLER 10% 给），换报占用带宽 / 目标 BLER 与物理层各项。
+const isNtnResult = (r) => !!(r && r.phyKindResult);
+
 // 翻译文本（与报告页面完全一致）
 const TRANSLATIONS = {
   zh: {
@@ -258,9 +284,10 @@ function _buildCompareSections(records, lang, t) {
     const { config, sat, lp, r } = rec;
     const isNGSO = sat.orbitType === 'NGSO';
     const ngsoClass = sat.ngsoOrbitClass || 'LEO';
-    const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : (isZh ? '自定义' : 'Custom');
+    const dvbLabel = standardLabel(lp.dvbStandard, isZh);
     const isForward = lp.calcMode === 'forward';
-    const noiseLabel = (config.noiseRatioMode || 'ebno') === 'esno' ? 'Es/N0' : 'Eb/N0';
+    const noiseLabel = noiseLabelOf(lp, config);
+    const isNtn = isNtnResult(r);
     const linkMargin = r.linkmargin || '0';
     const status = getLinkStatus(linkMargin);
     const statusText = t[`status${status.charAt(0).toUpperCase() + status.slice(1)}`];
@@ -269,13 +296,14 @@ function _buildCompareSections(records, lang, t) {
     const eqBWFmt = formatBandwidth(Math.max(parseFloat(r.allocBandwidthResult) || 0, parseFloat(r.PowerBWResult) || 0));
     const upDistVal = (lp.distanceMode || 'altitude') === 'slantRange' ? u(lp.slantRange, 'km') : u(lp.orbitAltitude, 'km');
     const rxDistVal = (lp.rxDistanceMode || 'altitude') === 'slantRange' ? u(lp.rxSlantRange, 'km') : u(lp.rxOrbitAltitude, 'km');
-    return { sat, lp, r, isNGSO, ngsoClass, dvbLabel, isForward, noiseLabel, linkMargin, statusText, availWeather, eqBWFmt, upDistVal, rxDistVal };
+    return { sat, lp, r, isNGSO, ngsoClass, dvbLabel, isForward, noiseLabel, isNtn, linkMargin, statusText, availWeather, eqBWFmt, upDistVal, rxDistVal };
   });
 
   const anyNGSO = D.some(d => d.isNGSO);
   const anyGEO = D.some(d => !d.isNGSO);
   const anyForward = D.some(d => d.isForward);
   const anyReverse = D.some(d => !d.isForward);
+  const anyNtn = D.some(d => d.isNtn);
   const row = (label, fn, opts) => Object.assign({ label, vals: D.map(fn) }, opts || {});
   const ifNGSO = (fn) => (d) => d.isNGSO ? fn(d) : '--';
   const ifGEO = (fn) => (d) => d.isNGSO ? '--' : fn(d);
@@ -310,6 +338,19 @@ function _buildCompareSections(records, lang, t) {
       row(isZh ? '调制方式' : 'Modulation', d => u(d.r.modulationResult)),
       row('FEC', d => u(d.r.fecResult)),
       row(isZh ? '符号速率' : 'Symbol Rate', d => u(d.r.symbolRateResult, 'ksps')),
+      // 3GPP 载波多出的物理层行：只在选中的记录里有 3GPP 载波时才出，DVB 记录这几格印 '--'
+      ...(anyNtn ? [
+        row(isZh ? '体制与配置' : 'PHY Config', d => u(d.r.phyDescResult)),
+        row(isZh ? 'PRB 数 / 子载波数' : 'PRBs / Subcarriers', d => u(d.r.phyUnitsResult)),
+        row(isZh ? '子载波间隔' : 'SCS', d => u(d.r.phyScsResult, 'kHz')),
+        row(isZh ? '重复次数' : 'Repetitions', d => u(d.r.phyRepResult)),
+        row(isZh ? '传输块大小' : 'TBS', d => u(d.r.phyTbsResult, 'bit')),
+        row(isZh ? '占用带宽' : 'Occupied BW', d => u(d.r.noiseBwResult, 'kHz')),
+        row(isZh ? '目标 BLER' : 'Target BLER', d => u(d.r.phyBlerResult, '%')),
+        row(isZh ? '门限 SNR（表值）' : 'Thresh. SNR (table)', d => u(d.r.snrThresholdResult, 'dB')),
+        row(isZh ? '门限 SNR（含重复）' : 'Thresh. SNR (w/ rep.)', d => u(d.r.snrThresholdEffResult, 'dB')),
+        row('SNR', d => u(d.r.snrActualResult, 'dB')),
+      ] : []),
       row(isZh ? '门限Eb/N0' : 'Thresh. Eb/N0', d => u(d.r.ebnoResult, 'dB')),
       row(isZh ? '门限Es/N0' : 'Thresh. Es/N0', d => u(d.r.esnoResult, 'dB')),
       row('Eb/N0', d => u(d.r.ebnoActualResult, 'dB')),
@@ -423,13 +464,15 @@ function _buildCompareSections(records, lang, t) {
       row(isZh ? '可用度' : 'Availability', d => u(d.lp.rxDownlinkAvailability, '%')),
     ]},
     { title: isZh ? '载波与调制' : 'Carrier & Modulation', rows: [
-      row(isZh ? 'DVB 标准' : 'DVB Standard', d => d.dvbLabel),
+      row(anyNtn ? (isZh ? '标准' : 'Standard') : (isZh ? 'DVB 标准' : 'DVB Standard'), d => d.dvbLabel),
       row(isZh ? '调制方式' : 'Modulation', d => u(d.lp.modulation)),
       row(isZh ? '信息速率' : 'Info Rate', d => u(d.lp.infoRate, 'kbps')),
       row('FEC', d => u(d.lp.fec)),
       row(isZh ? '频谱效率' : 'Spectral Eff.', d => u(d.r.spectralEfficiencyResult, 'bps/Hz')),
       row(isZh ? '滚降系数 (1+α)' : 'Roll-off (1+a)', d => u(d.lp.bandwidthFactor)),
-      row('BER', d => `1x10^-${u(d.lp.ber)}`),
+      // 3GPP 行的门限按 BLER 10% 首传给，表单里那个误码率对它无意义，改印目标 BLER
+      row(anyNtn ? (isZh ? 'BER / 目标 BLER' : 'BER / Target BLER') : 'BER',
+        d => d.isNtn ? (isZh ? `目标 BLER ${u(d.r.phyBlerResult, '%')}` : `Target BLER ${u(d.r.phyBlerResult, '%')}`) : `1x10^-${u(d.lp.ber)}`),
       row(isZh ? '门限' : 'Threshold', d => `${u(d.lp.ebno, 'dB')} (${d.noiseLabel})`),
       ...(anyForward ? [row(isZh ? '功放功率' : 'PA Power', d => d.isForward ? u(d.lp.inputPaPower, 'W') : '--')] : []),
       ...(anyReverse ? [row(isZh ? '余量' : 'Margin', d => d.isForward ? '--' : u(d.lp.margin, 'dB'))] : []),
@@ -454,6 +497,7 @@ function _fmtU(val, unit) {
 function buildRecordResultSections(rec, isZh) {
   const { config, sat, lp, r } = rec;
   const u = _fmtU;
+  const isNtn = isNtnResult(r);
   const isNGSO = sat.orbitType === 'NGSO';
   const ngsoClass = sat.ngsoOrbitClass || 'LEO';
   const linkMargin = r.linkmargin || '0';
@@ -487,7 +531,17 @@ function buildRecordResultSections(rec, isZh) {
   sections.push({ title: isZh ? '卫星与转发器' : 'Satellite & Transponder', rows: satRows });
   sections.push({ title: isZh ? '载波与调制' : 'Carrier & Modulation', rows: [
     R([isZh ? '信息速率' : 'Info Rate', u(r.infoRateResult, 'kbps')], [isZh ? '调制方式' : 'Modulation', u(r.modulationResult)]),
-    R(['FEC', u(r.fecResult)], [isZh ? '符号速率' : 'Symbol Rate', u(r.symbolRateResult, 'ksps')]),
+    // 3GPP 载波没有符号率这个读数（OFDM），这一格改报占用带宽 = PRB 数 × 12 × 子载波间隔
+    isNtn
+      ? R(['FEC', u(r.fecResult)], [isZh ? '占用带宽' : 'Occupied BW', u(r.noiseBwResult, 'kHz')])
+      : R(['FEC', u(r.fecResult)], [isZh ? '符号速率' : 'Symbol Rate', u(r.symbolRateResult, 'ksps')]),
+    ...(isNtn ? [
+      R([isZh ? '体制与配置' : 'PHY Config', u(r.phyDescResult)]),
+      R([isZh ? (r.phyKindResult === 'nr' ? 'PRB 数' : '子载波数') : (r.phyKindResult === 'nr' ? 'PRBs' : 'Subcarriers'), u(r.phyUnitsResult)], [isZh ? '子载波间隔' : 'SCS', u(r.phyScsResult, 'kHz')]),
+      R([isZh ? '重复次数' : 'Repetitions', u(r.phyRepResult)], [isZh ? '传输块大小' : 'TBS', u(r.phyTbsResult, 'bit')]),
+      R([isZh ? '目标 BLER' : 'Target BLER', u(r.phyBlerResult, '%')], [isZh ? '门限 SNR（表值）' : 'Thresh. SNR (table)', u(r.snrThresholdResult, 'dB')]),
+      R([isZh ? '门限 SNR（含重复）' : 'Thresh. SNR (w/ rep.)', u(r.snrThresholdEffResult, 'dB')], ['SNR', u(r.snrActualResult, 'dB')])
+    ] : []),
     R([isZh ? '门限Eb/N0' : 'Thresh. Eb/N0', u(r.ebnoResult, 'dB')], [isZh ? '门限Es/N0' : 'Thresh. Es/N0', u(r.esnoResult, 'dB')]),
     R(['Eb/N0', u(r.ebnoActualResult, 'dB')], ['Es/N0', u(r.esnoActualResult, 'dB')])
   ]});
@@ -523,9 +577,9 @@ function buildRecordParamSections(rec, isZh) {
   const isNGSO = sat.orbitType === 'NGSO';
   const ngsoClass = sat.ngsoOrbitClass || 'LEO';
   const isForward = lp.calcMode === 'forward';
-  const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : (isZh ? '自定义' : 'Custom');
-  const noiseMode = (config && config.noiseRatioMode) || 'ebno';
-  const noiseLabel = noiseMode === 'esno' ? 'Es/N0' : 'Eb/N0';
+  const dvbLabel = standardLabel(lp.dvbStandard, isZh);
+  const noiseLabel = noiseLabelOf(lp, config);
+  const isNtn = isNtnResult(r);
   const R = (a, b) => ({ a, b: b || null });
 
   const satRows = [];
@@ -586,10 +640,11 @@ function buildRecordParamSections(rec, isZh) {
   sections.push({ title: isZh ? '上行站参数' : 'Uplink Station', rows: upRows });
   sections.push({ title: isZh ? '接收站参数' : 'Downlink Station', rows: rxRows });
   sections.push({ title: isZh ? '载波与调制' : 'Carrier & Modulation', rows: [
-    R([isZh ? 'DVB 标准' : 'DVB Standard', dvbLabel], [isZh ? '调制方式' : 'Modulation', u(lp.modulation)]),
+    R([isNtn ? (isZh ? '标准' : 'Standard') : (isZh ? 'DVB 标准' : 'DVB Standard'), dvbLabel], [isZh ? '调制方式' : 'Modulation', u(lp.modulation)]),
     R([isZh ? '信息速率' : 'Info Rate', u(lp.infoRate, 'kbps')], ['FEC', u(lp.fec)]),
     R([isZh ? '频谱效率' : 'Spectral Eff.', u(r.spectralEfficiencyResult, 'bps/Hz')], [isZh ? '滚降系数 (1+α)' : 'Roll-off (1+a)', u(lp.bandwidthFactor)]),
-    R(['BER', `1x10^-${u(lp.ber)}`], [`${noiseLabel}${isZh ? '门限' : ' Thresh.'}`, u(lp.ebno, 'dB')]),
+    // 3GPP 行的门限按 BLER 10% 首传给，表单里那个误码率对它无意义，改印目标 BLER；门限标签按逐链路口径给
+    R(isNtn ? [isZh ? '目标 BLER' : 'Target BLER', u(r.phyBlerResult, '%')] : ['BER', `1x10^-${u(lp.ber)}`], [`${noiseLabel}${isZh ? '门限' : ' Thresh.'}`, u(lp.ebno, 'dB')]),
     R(isForward ? [isZh ? '功放功率' : 'PA Power', u(lp.inputPaPower, 'W')] : [isZh ? '余量' : 'Margin', u(lp.margin, 'dB')])
   ]});
   return sections;
@@ -637,6 +692,7 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
     for (const linkNum of Object.keys(calc)) {
       const r = calc[linkNum];
       const lp = links[linkNum] || {};
+      const isNtn = isNtnResult(r);
       const linkMargin = r.linkmargin || '0';
       const status = getLinkStatus(linkMargin);
       const statusText = t[`status${status.charAt(0).toUpperCase() + status.slice(1)}`];
@@ -673,7 +729,17 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
         ] : []),
         [S, isZh ? '载波参数' : 'Carrier Parameters'],
         [D, isZh ? '信息速率' : 'Info Rate', u(r.infoRateResult, 'kbps'), isZh ? '调制方式' : 'Modulation', u(r.modulationResult)],
-        [D, 'FEC', u(r.fecResult), isZh ? '符号速率' : 'Symbol Rate', u(r.symbolRateResult, 'ksps')],
+        // 3GPP 载波没有符号率这个读数（OFDM），这一格改报占用带宽，并多出物理层各行
+        isNtn
+          ? [D, 'FEC', u(r.fecResult), isZh ? '占用带宽' : 'Occupied BW', u(r.noiseBwResult, 'kHz')]
+          : [D, 'FEC', u(r.fecResult), isZh ? '符号速率' : 'Symbol Rate', u(r.symbolRateResult, 'ksps')],
+        ...(isNtn ? [
+          [D, isZh ? '体制与配置' : 'PHY Config', u(r.phyDescResult), isZh ? '子载波间隔' : 'SCS', u(r.phyScsResult, 'kHz')],
+          [D, isZh ? (r.phyKindResult === 'nr' ? 'PRB 数' : '子载波数') : (r.phyKindResult === 'nr' ? 'PRBs' : 'Subcarriers'), u(r.phyUnitsResult), isZh ? '重复次数' : 'Repetitions', u(r.phyRepResult)],
+          [D, isZh ? '传输块大小' : 'TBS', u(r.phyTbsResult, 'bit'), isZh ? '目标 BLER' : 'Target BLER', u(r.phyBlerResult, '%')],
+          [D, isZh ? '门限 SNR（表值）' : 'Thresh. SNR (table)', u(r.snrThresholdResult, 'dB'), isZh ? '门限 SNR（含重复）' : 'Thresh. SNR (w/ rep.)', u(r.snrThresholdEffResult, 'dB')],
+          [D, 'SNR', u(r.snrActualResult, 'dB')],
+        ] : []),
         [D, isZh ? '上行频率' : 'UL Freq.', u(r.uplinkFrequencyResult, 'GHz'), isZh ? '下行频率' : 'DL Freq.', u(r.downlinkFrequencyResult, 'GHz')],
         [D, isZh ? '门限Eb/N0' : 'Thresh. Eb/N0', u(r.ebnoResult, 'dB'), isZh ? '门限Es/N0' : 'Thresh. Es/N0', u(r.esnoResult, 'dB')],
         [D, 'Eb/N0', u(r.ebnoActualResult, 'dB'), 'Es/N0', u(r.esnoActualResult, 'dB')],
@@ -698,7 +764,8 @@ function _writeResultsToSheet(workbook, sheetName, configs, lang, compareMode) {
         [D, isZh ? '综合C/N' : 'Total C/N', u(r.carrierTotalCN, 'dB'), isZh ? '门限C/N' : 'Thresh. C/N', u(r.thresholdCN, 'dB')],
         [D, isZh ? '链路余量' : 'Link Margin', u(linkMargin, 'dB'), isZh ? '链路状态' : 'Link Status', statusText],
         [D, isZh ? '系统可用度' : 'Availability', u(r.systemAvailabilityResult, '%') + availWeather, isZh ? '推荐功放功率' : 'Rec. PA Power', u(r.paRecommendation, 'W')],
-        [D, isZh ? '占用带宽' : 'Alloc. BW', u(r.allocBandwidthResult, 'kHz'), isZh ? '功率带宽' : 'Power BW', u(r.PowerBWResult, 'kHz')],
+        // 3GPP 行的「占用带宽」另有所指（见上），信道带宽这一格改叫「载波带宽」免得撞名；DVB 行照旧
+        [D, isNtn ? (isZh ? '载波带宽' : 'Carrier BW') : (isZh ? '占用带宽' : 'Alloc. BW'), u(r.allocBandwidthResult, 'kHz'), isZh ? '功率带宽' : 'Power BW', u(r.PowerBWResult, 'kHz')],
         ['red', isZh ? '带宽占用' : 'BW Usage', u(r.bandwidthUsageRatio, '%'), isZh ? '功率占用' : 'Power Usage', u(r.powerUsageRatio, '%')],
         [D, isZh ? '等效占用带宽' : 'Equiv. BW', eqBWFmt]
       ];

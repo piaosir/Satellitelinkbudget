@@ -1,6 +1,7 @@
 // report.js
 const app = getApp();
 const { formatDateTime } = require('../../utils/formatter');
+const ntnPhy = require('../../utils/ntnPhy.js');   // 3GPP 载波的英文描述串（引擎只出中文那份）
 
 // 翻译文本
 const translations = {
@@ -24,6 +25,12 @@ const translations = {
     fecCode: 'FEC码率',
     symbolRate: '符号速率',
     allocBandwidth: '占用带宽',
+    // 3GPP 载波专用：它的「占用带宽」= PRB 数 × 12 × 子载波间隔（门限 SNR 的噪声带宽），
+    // 与含保护带的信道带宽不是同一个数，后者改叫「载波带宽」，与结果页同一套叫法
+    phyDesc: '物理层',
+    occupiedBw: '占用带宽',
+    blerTarget: '目标 BLER',
+    snrThresholdEff: 'SNR门限（含重复）',
     uplinkFreq: '上行频率',
     downlinkFreq: '下行频率',
     threshold: '门限',
@@ -116,6 +123,10 @@ const translations = {
     fecCode: 'FEC Code',
     symbolRate: 'Symbol Rate',
     allocBandwidth: 'Bandwidth',
+    phyDesc: 'PHY Config',
+    occupiedBw: 'Occupied BW',
+    blerTarget: 'Target BLER',
+    snrThresholdEff: 'Threshold SNR (w/ rep.)',
     uplinkFreq: 'Uplink Freq',
     downlinkFreq: 'Downlink Freq',
     threshold: 'Threshold',
@@ -199,6 +210,8 @@ Page({
     reportTime: '',
     linkPerformance: {},
     noiseRatioLabel: 'Eb/N₀', // 默认显示Eb/N0
+    isNtn: false,             // 3GPP 载波：符号速率 / 误码率两行换成占用带宽 / 目标 BLER，见 wxml
+    phyDescEn: '',
     isNGSO: false,
     reportOrbitMeta: '',
     lang: 'zh', // 当前语言
@@ -251,6 +264,9 @@ Page({
       reportTime: formatDateTime(new Date(), 'YYYY-MM-DD HH:mm'),
       linkPerformance: linkPerformance,
       noiseRatioLabel: noiseRatioLabel,
+      // 3GPP 载波：引擎对它出 phyKindResult（DVB 恒空）。英文描述串由 ntnPhy 按 phy 现造
+      isNtn: !!(results && results.phyKindResult),
+      phyDescEn: (linkParams && linkParams.phy) ? ntnPhy.describe(linkParams.phy, 'en') : '',
       isNGSO,
       reportOrbitMeta,
       lang: savedLang,
@@ -685,13 +701,22 @@ Page({
 
   // 生成报告文本（专业咨询风格的自然语言描述）
   generateReportText() {
-    const { satelliteParams, linkParams, results, linkPerformance, lang, isNGSO, reportOrbitMeta } = this.data;
+    const { satelliteParams, linkParams, results, linkPerformance, lang, isNGSO, reportOrbitMeta, isNtn, phyDescEn } = this.data;
+
+    // 载波那一句分两族：DVB 报符号速率与占用带宽（滚降后的分配带宽）；3GPP 载波没有符号率这个读数（OFDM），
+    // 改报物理层配置、占用带宽（PRB 数 × 12 × 子载波间隔）与载波带宽（信道带宽）。DVB 那句一字不动。
+    const ntnZh = isNtn
+      ? `采用 3GPP ${results.phyDescResult}，${results.modulationResult}+${results.fecResult}，信息速率${results.infoRateResult}kbps，占用带宽${results.noiseBwResult}kHz，载波带宽${results.allocBandwidthResult}kHz，重复${results.phyRepResult}次后门限SNR ${results.snrThresholdEffResult}dB`
+      : '';
+    const ntnEn = isNtn
+      ? `uses 3GPP ${phyDescEn || results.phyDescResult} with ${results.modulationResult}+${results.fecResult} at ${results.infoRateResult}kbps information rate, ${results.noiseBwResult}kHz occupied bandwidth and ${results.allocBandwidthResult}kHz carrier bandwidth, threshold SNR ${results.snrThresholdEffResult}dB after ${results.phyRepResult} repetition(s)`
+      : '';
 
     if (lang === 'zh') {
       if (isNGSO) {
         let text = `基于${satelliteParams.satelliteName}卫星（${reportOrbitMeta}）${satelliteParams.frequencyBand}频段的NGSO链路预算分析，`;
         text += `本方案链路状态评估为“${linkPerformance.statusText}”，系统可用度达${results.systemAvailabilityResult}%，链路余量${results.linkmargin}dB。`;
-        text += `链路采用${results.modulationResult}+${results.fecResult}编码体制，信息速率${results.infoRateResult}kbps，符号速率${results.symbolRateResult}ksps，占用带宽${results.allocBandwidthResult}kHz。`;
+        text += isNtn ? `链路${ntnZh}。` : `链路采用${results.modulationResult}+${results.fecResult}编码体制，信息速率${results.infoRateResult}kbps，符号速率${results.symbolRateResult}ksps，占用带宽${results.allocBandwidthResult}kHz。`;
         text += `几何条件方面，上行最低仰角${results.elevationResult}°、星地斜距${results.slantRangeResult}km，下行最低仰角${results.rxElevationResult}°、星地斜距${results.rxSlantRangeResult}km，参考轨道高度${results.orbitAltitudeResult}km。`;
         text += `动态特性方面，单程链路时延${results.linkDelayResult}ms，上行/下行最大多普勒频移分别约±${results.maxDopplerUplinkResult}kHz和±${results.maxDopplerDownlinkResult}kHz。`;
         text += `上行段（${linkParams.earthStationLocation}）配置${results.earthAntennaDiameterResult}m天线、${results.selectedPowerWResult}W功放，上行C/N达${results.uplinkCN}dB；`;
@@ -702,7 +727,7 @@ Page({
       // 麦肯锡风格：结论先行，数据支撑，简洁有力
       let text = `基于${satelliteParams.satelliteName}卫星（${satelliteParams.orbitPosition}°E）${satelliteParams.frequencyBand}频段的链路预算分析，`;
       text += `本方案链路状态评估为"${linkPerformance.statusText}"，系统可用度达${results.systemAvailabilityResult}%，链路余量${results.linkmargin}dB，满足通信需求。`;
-      text += `具体而言，该链路采用${results.modulationResult}+${results.fecResult}编码体制，信息速率${results.infoRateResult}kbps，符号速率${results.symbolRateResult}ksps，占用带宽${results.allocBandwidthResult}kHz，`;
+      text += isNtn ? `具体而言，该链路${ntnZh}，` : `具体而言，该链路采用${results.modulationResult}+${results.fecResult}编码体制，信息速率${results.infoRateResult}kbps，符号速率${results.symbolRateResult}ksps，占用带宽${results.allocBandwidthResult}kHz，`;
       text += `上行${results.uplinkFrequencyResult}GHz、下行${results.downlinkFrequencyResult}GHz。`;
       text += `上行段（${linkParams.earthStationLocation}）配置${results.earthAntennaDiameterResult}m天线、${results.selectedPowerWResult}W功放，地球站EIRP ${results.stationEIRPResult}dBW，仰角${results.elevationResult}°条件下上行C/N达${results.uplinkCN}dB；`;
       text += `下行段（${linkParams.rxEarthStationLocation}）采用${results.rxAntennaDiameterResult}m天线，G/T值${results.gOverTeResult}dB/K，仰角${results.rxElevationResult}°条件下下行C/N达${results.downlinkCN}dB。`;
@@ -713,7 +738,7 @@ Page({
       if (isNGSO) {
         let text = `Based on NGSO link budget analysis for ${satelliteParams.satelliteName} satellite (${reportOrbitMeta}) ${satelliteParams.frequencyBand} band, `;
         text += `the proposed solution achieves “${linkPerformance.statusText}” link status with ${results.systemAvailabilityResult}% system availability and ${results.linkmargin}dB link margin. `;
-        text += `The link employs ${results.modulationResult}+${results.fecResult} coding at ${results.infoRateResult}kbps information rate, ${results.symbolRateResult}ksps symbol rate, occupying ${results.allocBandwidthResult}kHz bandwidth. `;
+        text += isNtn ? `The link ${ntnEn}. ` : `The link employs ${results.modulationResult}+${results.fecResult} coding at ${results.infoRateResult}kbps information rate, ${results.symbolRateResult}ksps symbol rate, occupying ${results.allocBandwidthResult}kHz bandwidth. `;
         text += `For geometry, uplink minimum elevation is ${results.elevationResult}° with ${results.slantRangeResult}km slant range, while downlink minimum elevation is ${results.rxElevationResult}° with ${results.rxSlantRangeResult}km slant range; reference orbit altitude is ${results.orbitAltitudeResult}km. `;
         text += `Dynamic characteristics include ${results.linkDelayResult}ms one-way delay and maximum Doppler shifts of approximately ±${results.maxDopplerUplinkResult}kHz uplink / ±${results.maxDopplerDownlinkResult}kHz downlink. `;
         text += `The uplink segment (${linkParams.earthStationLocation}) is configured with ${results.earthAntennaDiameterResult}m antenna and ${results.selectedPowerWResult}W HPA, achieving uplink C/N of ${results.uplinkCN}dB; `;
@@ -724,7 +749,7 @@ Page({
       // McKinsey style: conclusion first, data-driven, concise and impactful
       let text = `Based on link budget analysis for ${satelliteParams.satelliteName} satellite (${satelliteParams.orbitPosition}°E) ${satelliteParams.frequencyBand} band, `;
       text += `the proposed solution achieves "${linkPerformance.statusText}" link status with ${results.systemAvailabilityResult}% system availability and ${results.linkmargin}dB link margin, meeting communication requirements. `;
-      text += `Specifically, the link employs ${results.modulationResult}+${results.fecResult} coding scheme at ${results.infoRateResult}kbps information rate, ${results.symbolRateResult}ksps symbol rate, occupying ${results.allocBandwidthResult}kHz bandwidth, `;
+      text += isNtn ? `Specifically, the link ${ntnEn}, ` : `Specifically, the link employs ${results.modulationResult}+${results.fecResult} coding scheme at ${results.infoRateResult}kbps information rate, ${results.symbolRateResult}ksps symbol rate, occupying ${results.allocBandwidthResult}kHz bandwidth, `;
       text += `with ${results.uplinkFrequencyResult}GHz uplink and ${results.downlinkFrequencyResult}GHz downlink. `;
       text += `The uplink segment (${linkParams.earthStationLocation}) is configured with ${results.earthAntennaDiameterResult}m antenna and ${results.selectedPowerWResult}W HPA, achieving EIRP of ${results.stationEIRPResult}dBW, yielding uplink C/N of ${results.uplinkCN}dB at ${results.elevationResult}° elevation; `;
       text += `the downlink segment (${linkParams.rxEarthStationLocation}) utilizes ${results.rxAntennaDiameterResult}m antenna with G/T of ${results.gOverTeResult}dB/K, achieving downlink C/N of ${results.downlinkCN}dB at ${results.rxElevationResult}° elevation. `;

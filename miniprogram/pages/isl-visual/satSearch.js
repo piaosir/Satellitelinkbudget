@@ -1,6 +1,7 @@
-// 卫星搜索匹配（星座地图 / 星间链路共用；同 satellite.js，分包各自内置一份，避免跨分包 require——
+// 卫星搜索匹配（星座地图 / 星间链路 / AR 对星共用；同 satellite.js，分包各自内置一份，避免跨分包 require——
 // 也别放主包 utils/：主包没有页面用它，微信「主包内不应存在主包未使用的JS文件」检查会报未通过。
-// ★ 两份必须逐字一致，改一处即同步另一处：pages/constellation-map/satSearch.js 与 pages/isl-visual/satSearch.js）。
+// ★ 三份必须逐字一致，改一处即同步另两处：pages/constellation-map/satSearch.js、pages/isl-visual/satSearch.js、
+//   pages/ar-align/satSearch.js）。
 //
 // 背景：原先两页各自写 `name.toLowerCase().indexOf(kw) >= 0 || String(noradId).indexOf(kw) >= 0`，
 // 要求关键字是编目名的「连续子串」，于是这些常见输入一律零结果：
@@ -40,8 +41,11 @@ const ALIAS = {
   '资源': ['ziyuan'],
   '环境': ['huanjing'],
   '实践': ['shijian'],
-  '中星': ['chinasat'],
+  // CelesTrak 编目里中星多数写作 ZHONGXING-xx（6C/6D/9/10/11/12/19/26…），只有少数几颗是 CHINASAT xx
+  // （9B/9C/16/3B）；原先只映射 chinasat，搜「中星」整张表只出 4 颗。
+  '中星': ['chinasat', 'zhongxing'],
   '亚太': ['apstar'],
+  '亚洲卫星': ['asiasat'],
   '天通': ['tiantong'],
   '天链': ['tianlian'],
   '北斗导航': ['beidou'],

@@ -732,11 +732,33 @@ Page({
 
   // 一条链路该用哪个门限口径：优先槽位里存的那一份，其次配置级，最后 'ebno'。
   // 存量配置的槽位里没有这个字段，回落到配置级即原样照旧。
+  //
+  // ★ 'snr' 只对「3GPP 标准 + 有物理层参数」的链路成立（引擎对没有 phy 的 snr 行按 Es/N₀ 回落，
+  //   见 linkCalculator.js 的 snr 分支）。它会经配置级那一份从 1 号槽漏到别的槽：选一次 3GPP MODCOD
+  //   就把 app.globalData.noiseRatioMode 写成 'snr'，再切到一条没存过口径的槽（新槽的默认参数、
+  //   旧档的 DVB 链路），回落拿到 'snr' 后标签写着 SNR、切换按钮锁死，默认的 5.50 dB 被当 Es/N₀ 算，
+  //   门限 C/N 静默低了 10lg(k)。故 'snr' 必须验明正身，验不过就按这一槽自己的东西定口径。
   _modeOfLink(lp) {
-    const m = lp && lp.noiseRatioMode;
-    if (m === 'ebno' || m === 'esno' || m === 'snr') return m;
+    const own = lp && lp.noiseRatioMode;
     const g = app.globalData.noiseRatioMode;
-    return (g === 'ebno' || g === 'esno' || g === 'snr') ? g : 'ebno';
+    const isMode = (m) => m === 'ebno' || m === 'esno' || m === 'snr';
+    const mode = isMode(own) ? own : (isMode(g) ? g : 'ebno');
+    if (mode !== 'snr') return mode;
+    const std = lp && lp.dvbStandard;
+    if (isNtnStandard(std) && ntnPhy.normalizePhy(lp.phy)) return 'snr';
+    // 没有 phy 的 3GPP 行（v3.8.11 之前的老档）、或自己存着 snr 却已不是 3GPP 标准（换到「自定义」前存的）：
+    // 两种情形引擎都按 Es/N₀ 解读，口径也如实记成 Es/N₀，不让标签与算法各说各话
+    if (own === 'snr' || isNtnStandard(std)) return 'esno';
+    return this._modeOfModcod(lp);
+  },
+
+  // 全局漏过来的 'snr' 落到一条 DVB / 自定义链路上时，这一槽存下的门限该按什么口径读：
+  // 选着内置表就按那一行的口径（DVB-S 是 Eb/N₀，其余 DVB 表是 Es/N₀），自定义按 Eb/N₀——默认的 5.50 dB 即此口径
+  _modeOfModcod(lp) {
+    const list = MODCOD_TABLE_OF[lp && lp.dvbStandard];
+    const row = list && list[Number(lp && lp.modcodIndex)];
+    const m = row && row.noiseRatioMode;
+    return (m === 'ebno' || m === 'esno') ? m : 'ebno';
   },
 
   // 存档里那个 modcodIndex 在【本版】表里还指着同一档吗？
@@ -1151,8 +1173,9 @@ Page({
   // 载波带宽输入完成 - 反推符号率和信息速率
   onCarrierBandwidthBlur(e) {
     const carrierBandwidth = parseFloat(e.detail.value);
-    
-    if (isNaN(carrierBandwidth) || carrierBandwidth <= 0) {
+
+    // 3GPP 载波的信道带宽在物理层面板里选档，这一格对它只读；界面已禁用，这里再兜一层
+    if ((this.data.ntn && this.data.ntn.on) || isNaN(carrierBandwidth) || carrierBandwidth <= 0) {
       // 无效值，恢复计算
       this.updateRealtimeParams();
       return;
@@ -1200,8 +1223,9 @@ Page({
   // 符号率输入完成 - 反推信息速率
   onSymbolRateBlur(e) {
     const symbolRate = parseFloat(e.detail.value);
-    
-    if (isNaN(symbolRate) || symbolRate <= 0) {
+
+    // 3GPP 载波没有符号率这个读数（速率由 TBS 定），这一格对它只读；界面已禁用，这里再兜一层
+    if ((this.data.ntn && this.data.ntn.on) || isNaN(symbolRate) || symbolRate <= 0) {
       // 无效值，恢复计算
       this.updateRealtimeParams();
       return;
@@ -1368,6 +1392,18 @@ Page({
 
     updateData.currentModcodList = modcodList;
 
+    // 3GPP 载波的信息速率由 TBS 算出并回写进表单（见 refreshNtnPanel）。换回 DVB / 自定义时把进 3GPP
+    // 之前那个数还回去 —— 不还的话 DVB 链路会静默按 NB-IoT 那种 2 kbps 的速率算，框里那个数看着又像真的。
+    // 本会话没记到（配置载入时就是 3GPP）就回表单默认值，那是一个明摆着的占位数。
+    const wasNtn = isNtnStandard(this.data.linkParams.dvbStandard);
+    const nowNtn = isNtnStandard(standard);
+    if (!wasNtn && nowNtn) this._infoRateBeforeNtn = this.data.linkParams.infoRate;
+    if (wasNtn && !nowNtn) {
+      const back = parseFloat(this._infoRateBeforeNtn);
+      updateData['linkParams.infoRate'] = (isFinite(back) && back > 0) ? this._infoRateBeforeNtn : app.getDefaultLinkParams().infoRate;
+      this._infoRateBeforeNtn = null;
+    }
+
     // 非自定义模式：自动选中第一个MODCOD并填充全部参数
     if (standard !== 'custom' && modcodList.length > 0) {
       const firstModcod = modcodList[0];
@@ -1397,6 +1433,18 @@ Page({
     } else {
       updateData['linkParams.modcodIndex'] = -1;
       updateData['linkParams.phy'] = null;      // 「自定义」没有体制骨架
+      // ★ 'snr' 只对 3GPP 载波成立。原先换到「自定义」不动口径：标签仍写 SNR、切换按钮锁死、
+      //   引擎却按 Es/N₀ 回落，三处对不上，而且再也切不回 Eb/N₀。每资源元素 SNR 与 Es/N₀ 在数值上
+      //   是同一个量，故门限值原样保留、口径改记 Es/N₀，之后可照常切到 Eb/N₀。
+      if (this.data.noiseRatioMode === 'snr') {
+        updateData.noiseRatioMode = 'esno';
+        app.globalData.noiseRatioMode = 'esno';
+        try {
+          wx.setStorageSync('noiseRatioMode', 'esno');
+        } catch (err) {
+          console.error('保存噪声比模式失败:', err);
+        }
+      }
     }
 
     this.setData(updateData);
@@ -1404,8 +1452,8 @@ Page({
   },
 
   // 选中某一档 MODCOD 时该配的 phy：内置骨架 + 这一行在标准表里的序号。
-  // ★ 序号必须从表行的 idx 取，不能从 label 里正则抠 —— 单音表的行是按 I_TBS 升序排的
-  //   （I_MCS 1 与 2 的 I_TBS 反着来），按行下标当序号会取到另一档的调制方式。
+  // ★ 序号必须从表行的 idx 取，不能从 label 里正则抠、也不能拿行下标当序号 —— 单音表的行是按
+  //   门限（即 I_TBS）升序排的，而它的 idx 是 I_MCS（I_MCS 1 与 2 的 I_TBS 正好反着来）。
   _phyForModcod(standard, modcod, prevPhy) {
     const base = NTN_PHY_OF[standard];
     if (!base) return null;
@@ -1422,7 +1470,14 @@ Page({
     if (keep && base.kind === 'nr' && base.mcsTable !== 'tp1' && base.mcsTable !== 'tp2') phy.dir = keep.dir || base.dir;
     const idx = (modcod && modcod.idx != null) ? Number(modcod.idx) : 0;
     if (base.kind === 'nr') { phy.mcs = idx; phy.q = (modcod && modcod.modulation === 'BPSK') ? 1 : 2; }
-    else phy.iTbs = idx;
+    else if (base.st === true) {
+      // ★ 单音表的行号是 I_MCS，而 phy 里存的、引擎与面板查表用的都是 I_TBS，必须经
+      //   TS 36.213 Table 16.5.1.2-1 映射（I_MCS 1 → I_TBS 2、I_MCS 2 → I_TBS 1，其余恒等）。
+      //   直接 iTbs = idx 会让这两档拿隔壁那一档的 TBS 算速率 / 有效码率 / Eb/N₀，而门限还是本档的
+      //   （I_MCS 2 那行报 TBS 32、4 kbps，实为 24 bit、3 kbps）。与平台 BasebandPanel 同一映射。
+      const st = ntnPhy.nbSingleToneMcs(idx);
+      phy.iTbs = st ? st.iTbs : idx;
+    } else phy.iTbs = idx;
     // 门限那一列的目标 BLER：跟着表走，供结果页回显（3GPP 各表恒 10% 首传）
     const meta = NTN_TABLE_META[standard];
     if (meta && meta.bler) phy.blerTarget = meta.bler;
@@ -1595,6 +1650,15 @@ Page({
       const cur = phy.dir === 'ul' ? phy.iRu : phy.iSf;
       ntn.spanIndex = cur <= lim ? cur : 0;
       ntn.iTbs = phy.iTbs;
+      // 单音表的一致性自检：phy.iTbs 必须等于当前选中行的 I_MCS 映射出来的 I_TBS（见 _phyForModcod）。
+      // 对不上的两种来源：本版之前把行号 I_MCS 直接当 I_TBS 存进 phy 的存档（I_MCS 1 / 2 两档错档），
+      // 或外来的 phy（手改的配置、别处送来的分享包）。都不静默改，只在面板上标出来 ——
+      // 与旧档提示同一条规矩，重新选一次 MODCOD 即对齐。
+      if (phy.st === true) {
+        const row = (this.data.currentModcodList || [])[this.data.modcodPickerIndex];
+        const st = (row && row.idx != null) ? ntnPhy.nbSingleToneMcs(Number(row.idx)) : null;
+        ntn.stMismatch = !!(st && st.iTbs !== phy.iTbs);
+      }
     }
     // 信息速率是全小程序的存储字段（历史记录、配置、导出报表都读它）：3GPP 行由物理层参数算出来，
     // 这里同步写回，免得「面板上写着 768 kbps、历史记录里还是上一次的 2048」。
@@ -1627,6 +1691,15 @@ Page({
     });
   },
 
+  // 换方向 / 换频段 / 换子载波间隔时原档位在新表里没有，落到哪一档：取第一个【非可选】档。
+  // ★ 不能直接取 steps[0]：n256 / n255 / n254 在 15 kHz 下第一档是本版标为可选的 3 MHz，取它等于
+  //   替用户做了一个部署决定，与 ntnPhy.nrChannelBwKHz 反查时跳过可选档的规矩正好相反
+  //  （上行切回下行会配出 3 MHz / 15 PRB，而骨架缺省是 5 MHz / 25 PRB）。整表皆可选才退回第一档。
+  _defaultBwStep(steps) {
+    const list = steps || [];
+    return list.find((x) => !x.optional) || list[0] || null;
+  },
+
   // 换方向 = 换分配对象：下行一条载波就是整个 NR 载波，上行是一个终端本次的分配。
   // 原样留着 25 PRB / 5 MHz 切到上行，等于把一个终端的分配报成整载波（转发器占用比虚高 27 倍）。
   onNtnDirChange(e) {
@@ -1638,7 +1711,7 @@ Page({
     if (!phy || phy.kind !== 'nr' || phy.mcsTable === 'tp1' || phy.mcsTable === 'tp2') return;
     if (phy.dir === dir) { this._setPhy({ dir: dir }); return; }
     if (dir === 'ul') { this._setPhy({ dir: dir, chBwMHz: null, nRb: 1, nSymb: 14 }); return; }
-    const first = ntnPhy.nrBwSteps(Object.assign({}, phy, { dir: dir }))[0] || null;
+    const first = this._defaultBwStep(ntnPhy.nrBwSteps(Object.assign({}, phy, { dir: dir })));
     this._setPhy(first ? { dir: dir, chBwMHz: first.mhz, nRb: first.nRb, nSymb: 12 } : { dir: dir, nSymb: 12 });
   },
 
@@ -1657,7 +1730,7 @@ Page({
     const probe = Object.assign({}, phy, { band: band, scs: scs });
     const next = ntnPhy.nrBwSteps(probe).filter((x) => !(x.dlOnly && phy.dir === 'ul'));
     if (phy.chBwMHz == null) { this._setPhy({ band: band, scs: scs }); return; }
-    const pick = next.find((x) => x.mhz === phy.chBwMHz) || next[0] || null;
+    const pick = next.find((x) => x.mhz === phy.chBwMHz) || this._defaultBwStep(next);
     this._setPhy(pick ? { band: band, scs: scs, chBwMHz: pick.mhz, nRb: pick.nRb } : { band: band, scs: scs });
   },
 
@@ -1675,7 +1748,7 @@ Page({
     const patch = { scs: scs };
     if (phy.chBwMHz != null) {
       const next = ntnPhy.nrBwSteps(Object.assign({}, phy, { scs: scs })).filter((x) => !(x.dlOnly && phy.dir === 'ul'));
-      const pick = next.find((x) => x.mhz === phy.chBwMHz) || next[0] || null;
+      const pick = next.find((x) => x.mhz === phy.chBwMHz) || this._defaultBwStep(next);
       if (pick) { patch.chBwMHz = pick.mhz; patch.nRb = pick.nRb; }
     }
     this._setPhy(patch);
@@ -1789,6 +1862,11 @@ Page({
 
   // 切换帧效率/频谱效率显示模式
   toggleRsCodeMode() {
+    // 3GPP 载波没有帧效率这一项（OFDM 的速率由 TBS 定），频谱效率也不是由它反推的：这一格对 3GPP 只读
+    if (this.data.ntn && this.data.ntn.on) {
+      wx.showToast({ title: '3GPP 载波不使用帧效率', icon: 'none', duration: 2000 });
+      return;
+    }
     const currentMode = this.data.rsCodeMode;
     const newMode = currentMode === 'fraction' ? 'spectral' : 'fraction';
 
@@ -1815,13 +1893,18 @@ Page({
 
   // 切换Eb/N0和Es/N0
   toggleEbnoEsno() {
-    const currentMode = this.data.noiseRatioMode;
+    let currentMode = this.data.noiseRatioMode;
     // ★ 3GPP 的 snr 行不给切：门限是每资源元素信噪比，噪声带宽由 phy 的占用带宽定；切到 Eb/N₀ 会
     //   拿 DVB 那个组合效率 k 去换算（k 是按符号率反推的，对 OFDM 不成立），换出来的数看着像模像样
     //   却对不上任何一份厂家表。要改口径请先把标准换回 DVB 或「自定义」。
     if (currentMode === 'snr') {
-      wx.showToast({ title: '3GPP 门限按每资源元素 SNR 定，不换算', icon: 'none', duration: 2400 });
-      return;
+      if (this.data.ntn && this.data.ntn.on) {
+        wx.showToast({ title: '3GPP 门限按每资源元素 SNR 定，不换算', icon: 'none', duration: 2400 });
+        return;
+      }
+      // 只锁真正的 3GPP 载波。'snr' 落在别的链路上是口径失配的存档（例如换到「自定义」前存下的），
+      // 引擎对它按 Es/N₀ 解读，这里也按 Es/N₀ 起步换算 —— 原先一律拒绝，用户就永远切不回 Eb/N₀。
+      currentMode = 'esno';
     }
     const newMode = currentMode === 'ebno' ? 'esno' : 'ebno';
     
@@ -2277,7 +2360,7 @@ Page({
   // 显示配置管理菜单
   showConfigMenu() {
     wx.showActionSheet({
-      itemList: ['保存配置', '管理配置', '地球站参数互换', '生成报告'],
+      itemList: ['保存配置', '管理配置', '地球站参数互换', '使用指南', '生成报告'],
       success: (res) => {
         if (res.tapIndex === 0) {
           // 保存配置
@@ -2289,11 +2372,20 @@ Page({
           // 地球站参数互换
           this.swapStationParams();
         } else if (res.tapIndex === 3) {
+          // 使用指南
+          this.goToHelp();
+        } else if (res.tapIndex === 4) {
           // 生成报告
           this.generateReport();
         }
       }
     });
+  },
+
+  // 使用指南：整本《软件功能与使用指南》的页面版，见 pages/help（设置页同一入口）。
+  // 首页这个入口不带章号，从目录页进；带章号直达的两个入口在设置页。
+  goToHelp() {
+    wx.navigateTo({ url: '/pages/help/help' });
   },
 
   // 保存配置
@@ -3274,9 +3366,14 @@ Page({
     // 停在上一份，用户看着 12 PRB 而实际按 25 PRB 在算）。集中在入口调一次，非 3GPP 时它立刻返回。
     this.refreshNtnPanel();
     const skipSpectralEfficiency = !!(options && options.skipSpectralEfficiency);
+    // 3GPP 载波的速率由物理层参数定，「符号率优先 / 载波带宽优先」两种反推模式对它不成立：
+    // 强制回到信息速率优先。否则下面两段会用 DVB 公式把 infoRate 反推回去，与 refreshNtnPanel 的回写
+    // 互相覆盖 —— 引擎虽不读这个数（snr 行由 TBS 算），历史记录与配置里存下的却是那个反推出来的假数。
+    const ntnOn = !!(this.data.ntn && this.data.ntn.on);
+    if (ntnOn && this.data.rateCalcMode !== 'infoRate') this.setData({ rateCalcMode: 'infoRate' });
     try {
       // 如果是符号率优先模式，先根据当前符号率反推信息速率和载波带宽
-      if (this.data.rateCalcMode === 'symbolRate') {
+      if (!ntnOn && this.data.rateCalcMode === 'symbolRate') {
         const currentSymbolRate = parseFloat(this.data.realtimeParams.symbolRate);
         
         // 只有当符号率是有效数值时才反推
@@ -3304,7 +3401,7 @@ Page({
       }
       
       // 如果是载波带宽优先模式，先根据当前载波带宽反推符号率和信息速率
-      if (this.data.rateCalcMode === 'carrierBandwidth') {
+      if (!ntnOn && this.data.rateCalcMode === 'carrierBandwidth') {
         const currentBandwidth = parseFloat(this.data.realtimeParams.carrierBandwidth);
         
         if (!isNaN(currentBandwidth) && currentBandwidth > 0) {
@@ -3349,8 +3446,11 @@ Page({
         const _bandwidthFactor = pickNum(this.data.linkParams.bandwidthFactor, 1.2);
         const _m = pickNum(this.data.linkParams.m, 1);
         const _se = _modulationFactor * _fec * _rsCode / (_bandwidthFactor * _m);
+        // 3GPP 载波的频谱效率 = 信息速率 ÷ 信道带宽（面板与计算结果同口径），DVB 那个「调制×码率×帧效率÷滚降」
+        // 对 OFDM 不成立 —— 原先照算，帧效率框切到频谱效率档时显示的就是这个错数
+        const _ntnSe = ntnOn ? ((this.data.ntn.out && this.data.ntn.out.se !== '—') ? this.data.ntn.out.se : '') : null;
         const spectralEfficiencyUpdate = skipSpectralEfficiency ? {} : {
-          'realtimeParams.spectralEfficiency': isNaN(_se) ? '' : _se.toFixed(4)
+          'realtimeParams.spectralEfficiency': ntnOn ? _ntnSe : (isNaN(_se) ? '' : _se.toFixed(4))
         };
 
         // 根据模式决定是否更新符号率和载波带宽
@@ -4214,12 +4314,18 @@ Page({
       ? record.inputPaPower
       : ((recordLp.inputPaPower !== undefined && recordLp.inputPaPower !== '') ? recordLp.inputPaPower : '');
 
+    // 门限口径过一遍 _modeOfLink：'snr' 只对「3GPP 标准 + 有 phy」的记录成立，其余按同一条回落解读。
+    // 两级都没有的老记录按 'ebno'（与原先写进槽位 / 全局的兜底同一个值，引擎语义不变）
+    const recordMode = this._modeOfLink(Object.assign({}, recordLp, {
+      noiseRatioMode: record.noiseRatioMode || recordLp.noiseRatioMode || 'ebno'
+    }));
+
     // 恢复参数
     this.setData({
       satelliteParams: restoredSatelliteParams,
       linkParams: record.linkParams,
       marginValue: record.marginValue,
-      noiseRatioMode: record.noiseRatioMode,
+      noiseRatioMode: recordMode,
       calcMode: recordCalcMode,
       inputPaPower: recordPaPower,
       rateCalcMode: recordLp.rateCalcMode || 'infoRate',
@@ -4242,9 +4348,9 @@ Page({
       inputPaPower: recordPaPower,
       // 旧记录的 linkParams 里没有门限口径，用记录级那一份补上 —— 不补的话，
       // 这一槽往后被 _modeOfLink 读到的会是别的链路留下的口径
-      noiseRatioMode: record.noiseRatioMode || recordLp.noiseRatioMode || 'ebno'
+      noiseRatioMode: recordMode
     });
-    app.globalData.noiseRatioMode = record.noiseRatioMode || 'ebno';
+    app.globalData.noiseRatioMode = recordMode;
     app.globalData.orbitType = recordOrbitType;
     
     // 更新实时参数

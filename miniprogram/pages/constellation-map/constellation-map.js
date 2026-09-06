@@ -1543,6 +1543,19 @@ Page({
     this.setData(patch);
   },
 
+  // 带着选中星跳到 AR 对星页（跨分包 navigateTo）。分组传该星【真实所属】分组（「全部 / 其他」视图下
+  // 与当前分组不同；导入星座为 ss:<id>），AR 页按它取根数
+  goArAlign() {
+    const idx = this._selIdx;
+    const m = (idx >= 0 && this._meta) ? this._meta[idx] : null;
+    if (!m) return;
+    const group = m.group || this._curKey();
+    wx.navigateTo({
+      url: '/pages/ar-align/ar-align?norad=' + encodeURIComponent(m.noradId) +
+        '&group=' + encodeURIComponent(group) + '&name=' + encodeURIComponent(m.name || '')
+    });
+  },
+
   closeCard() {
     this._selIdx = -1; this._selOrbit = this._selTrack = this._selFootprint = null;
     this._selPos = null;

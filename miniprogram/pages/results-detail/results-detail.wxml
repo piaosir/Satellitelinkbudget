@@ -501,7 +501,8 @@
     </view>
 
     <!-- ===================== 通信参数 ===================== -->
-    <view id="sec-comm" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行频率','下行频率','载波带宽','频谱效率','上行极化方式','下行极化方式','信息速率','调制方式','调制因子','误码率','门限 Eb/N₀','门限 Es/N₀','Eb/N₀','Es/N₀','FEC码率','载波速率','码片速率','符号速率','载波噪声带宽','系统余量'], searchKeyword, results, ['uplinkFrequencyResult','downlinkFrequencyResult','allocBandwidthResult','spectralEfficiencyResult','uplinkPolarizationResult','downlinkPolarizationResult','infoRateResult','modulationResult','modulationFactorResult','berResult','ebnoResult','esnoResult','ebnoActualResult','esnoActualResult','fecResult','carrierRateResult','ChipRateResult','symbolRateResult','RXnoiseBW','marginResult'])}}">
+    <!-- 段级搜索清单要与下面各行的标签 / 字段一一对应：3GPP 物理层那十几行原先没收进来，搜「PRB」「重复次数」「SNR」会把整段隐藏 -->
+    <view id="sec-comm" class="section-card" wx:if="{{!isSearching || filter.sectionHasMatch(['上行频率','下行频率','载波带宽','频谱效率','上行极化方式','下行极化方式','信息速率','调制方式','调制因子','误码率','门限 Eb/N₀','门限 Es/N₀','Eb/N₀','Es/N₀','FEC码率','载波速率','码片速率','符号速率','载波噪声带宽','体制与配置','传输方向','NTN 频段','MCS 档位','I_TBS 档位','子载波间隔','PRB 数','子载波数','子帧数','RU 数','重复次数','传输块大小','有效码率','目标 BLER','占用带宽','门限 SNR（表值）','门限 SNR（含重复）','SNR','系统余量'], searchKeyword, results, ['uplinkFrequencyResult','downlinkFrequencyResult','allocBandwidthResult','spectralEfficiencyResult','uplinkPolarizationResult','downlinkPolarizationResult','infoRateResult','modulationResult','modulationFactorResult','berResult','ebnoResult','esnoResult','ebnoActualResult','esnoActualResult','fecResult','carrierRateResult','ChipRateResult','symbolRateResult','RXnoiseBW','phyDescResult','phyDirTextResult','phyBandResult','phyMcsResult','phyScsResult','phyUnitsResult','phySpanResult','phyRepResult','phyTbsResult','phyCodeRateResult','phyBlerResult','noiseBwResult','snrThresholdResult','snrThresholdEffResult','snrActualResult','marginResult'])}}">
       <view class="section-header" bindtap="toggleSection" data-section="comm">
         <view class="section-title-row">
           <view class="section-dot dot-cyan"></view>
@@ -559,7 +560,9 @@
             <text class="detail-label">门限 Eb/N₀</text>
             <text class="detail-value">{{results.ebnoResult}} dB</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'esnoResult') ? 'marked' : ''}}" wx:if="{{results.esnoResult && filter.matchSearch('门限 Es/N₀', searchKeyword, results.esnoResult)}}" bindtap="toggleHighlight" data-param="esnoResult">
+          <!-- 3GPP 行的 Es/N₀ 与每资源元素 SNR 恒为同一个数，下面另出「门限 SNR」两行，这两行不重复摆
+               （与首页结果面板、瀑布表同口径）。引擎对 3GPP 照常出 esnoResult / esnoActualResult，故要按 phyKindResult 判 -->
+          <view class="detail-item {{filter.includes(markedParams, 'esnoResult') ? 'marked' : ''}}" wx:if="{{!results.phyKindResult && results.esnoResult && filter.matchSearch('门限 Es/N₀', searchKeyword, results.esnoResult)}}" bindtap="toggleHighlight" data-param="esnoResult">
             <text class="detail-label">门限 Es/N₀</text>
             <text class="detail-value">{{results.esnoResult}} dB</text>
           </view>
@@ -567,7 +570,7 @@
             <text class="detail-label">Eb/N₀</text>
             <text class="detail-value">{{results.ebnoActualResult}} dB</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'esnoActualResult') ? 'marked' : ''}}" wx:if="{{results.esnoActualResult && filter.matchSearch('Es/N₀', searchKeyword, results.esnoActualResult)}}" bindtap="toggleHighlight" data-param="esnoActualResult">
+          <view class="detail-item {{filter.includes(markedParams, 'esnoActualResult') ? 'marked' : ''}}" wx:if="{{!results.phyKindResult && results.esnoActualResult && filter.matchSearch('Es/N₀', searchKeyword, results.esnoActualResult)}}" bindtap="toggleHighlight" data-param="esnoActualResult">
             <text class="detail-label">Es/N₀</text>
             <text class="detail-value">{{results.esnoActualResult}} dB</text>
           </view>

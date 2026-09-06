@@ -1656,6 +1656,8 @@
           <view class="ntn-out-i"><text class="ntn-out-l">频谱效率</text><text class="ntn-out-v">{{ntn.out.se}} bps/Hz</text></view>
         </view>
         <view class="ntn-err" wx:if="{{ntn.out.error}}">{{ntn.out.error}}</view>
+        <!-- 单音表的行号是 I_MCS，phy 里存的是映射后的 I_TBS。对不上的（本版之前直接存了 I_MCS 的存档、或外来 phy）不静默改，只标出来 -->
+        <view class="ntn-err" wx:if="{{ntn.stMismatch}}">所选单音档位的 I_TBS 与物理层参数不一致，重新选一次上面的 MODCOD 即对齐。</view>
       </view>
 
 
@@ -1732,11 +1734,13 @@
           <view class="form-label-row">
             <text class="form-label">误码率 <text class="form-label-unit">(1×10⁻ⁿ)</text></text>
           </view>
-          <input class="form-input {{focusedField === 'ber' ? 'input-focused' : ''}}" 
+          <!-- 3GPP 行：门限按 BLER 10% 首传给，误码率对它无意义（结果里改报「目标 BLER」），置灰只读 -->
+          <input class="form-input {{ntn.on ? 'input-readonly' : ''}} {{focusedField === 'ber' ? 'input-focused' : ''}}"
                  type="text"
-                 placeholder="7" 
+                 placeholder="7"
                  value="{{linkParams.ber}}"
                  data-field="ber"
+                 disabled="{{ntn.on}}"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -1747,11 +1751,13 @@
           <view class="form-label-row">
             <text class="form-label">扩频增益</text>
           </view>
-          <input class="form-input {{focusedField === 'm' ? 'input-focused' : ''}}" 
+          <!-- 扩频增益 / 滚降 / 帧效率是 DVB 换算链上的三项，对 3GPP 的 OFDM 载波不参与计算，置灰只读 -->
+          <input class="form-input {{ntn.on ? 'input-readonly' : ''}} {{focusedField === 'm' ? 'input-focused' : ''}}"
                  type="text"
-                 placeholder="1.00" 
+                 placeholder="1.00"
                  value="{{linkParams.m}}"
                  data-field="m"
+                 disabled="{{ntn.on}}"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -1762,11 +1768,12 @@
           <view class="form-label-row">
             <text class="form-label">滚降系数<text class="form-label-unit">(1+α)</text></text>
           </view>
-          <input class="form-input {{focusedField === 'bandwidthFactor' ? 'input-focused' : ''}}" 
+          <input class="form-input {{ntn.on ? 'input-readonly' : ''}} {{focusedField === 'bandwidthFactor' ? 'input-focused' : ''}}"
                  type="text"
-                 placeholder="1.20" 
+                 placeholder="1.20"
                  value="{{linkParams.bandwidthFactor}}"
                  data-field="bandwidthFactor"
+                 disabled="{{ntn.on}}"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -1778,11 +1785,12 @@
             <text class="form-label">{{rsCodeMode === 'spectral' ? '频谱效率' : '帧效率'}}<text class="form-label-unit">{{rsCodeMode === 'spectral' ? '(bps/Hz)' : ''}}</text></text>
             <view class="unit-toggle" bindtap="toggleRsCodeMode"><view class="unit-toggle-icon"></view></view>
           </view>
-          <input class="form-input {{focusedField === 'rsCode' ? 'input-focused' : ''}}" 
+          <input class="form-input {{ntn.on ? 'input-readonly' : ''}} {{focusedField === 'rsCode' ? 'input-focused' : ''}}"
                  type="text"
-                 placeholder="{{rsCodeMode === 'spectral' ? '0.9216' : '188/204'}}" 
+                 placeholder="{{rsCodeMode === 'spectral' ? '0.9216' : '188/204'}}"
                  value="{{rsCodeMode === 'spectral' ? realtimeParams.spectralEfficiency : linkParams.rsCode}}"
                  data-field="rsCode"
+                 disabled="{{ntn.on}}"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -1794,11 +1802,14 @@
       <view class="station-result station-result-row">
         <view class="station-result-item station-result-editable">
           <text class="station-result-label">载波带宽</text>
-          <input class="station-result-input {{focusedField === 'carrierBandwidth' ? 'input-focused' : ''}}"
+          <!-- 3GPP 行：信道带宽在物理层面板里选档、符号率对 OFDM 没有这个读数，两格都只读——
+               否则在这里填一个数会切到符号率 / 载波带宽优先模式，用 DVB 公式把信息速率反推回去 -->
+          <input class="station-result-input {{ntn.on ? 'input-readonly' : ''}} {{focusedField === 'carrierBandwidth' ? 'input-focused' : ''}}"
                  type="text"
                  placeholder="--"
                  value="{{realtimeParams.carrierBandwidth}}"
                  data-field="carrierBandwidth"
+                 disabled="{{ntn.on}}"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -1811,11 +1822,12 @@
         </view>
         <view class="station-result-item station-result-editable">
           <text class="station-result-label">符号率</text>
-          <input class="station-result-input {{focusedField === 'symbolRate' ? 'input-focused' : ''}}"
+          <input class="station-result-input {{ntn.on ? 'input-readonly' : ''}} {{focusedField === 'symbolRate' ? 'input-focused' : ''}}"
                  type="text"
                  placeholder="--"
                  value="{{realtimeParams.symbolRate}}"
                  data-field="symbolRate"
+                 disabled="{{ntn.on}}"
                data-focus-area="carrier"
                adjust-position="{{true}}"
                cursor-spacing="120"
@@ -2444,8 +2456,10 @@
           <text class="result-label">调制因子</text>
           <text class="result-value">{{results.modulationFactorResult}}</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('berResult') > -1 ? 'result-item-marked' : ''}}" 
-              bindtap="toggleHighlight" 
+        <!-- 误码率 / 载波速率 / 码片速率 / 符号速率是 DVB 换算链的读数，3GPP 载波由引擎出空串，整行不出 -->
+        <view class="result-item {{markedParams.indexOf('berResult') > -1 ? 'result-item-marked' : ''}}"
+              wx:if="{{results.berResult}}"
+              bindtap="toggleHighlight"
               data-param="berResult">
           <text class="result-label">误码率</text>
           <text class="result-value">{{results.berResult}}</text>
@@ -2456,7 +2470,9 @@
           <text class="result-label">Eb/N₀门限</text>
           <text class="result-value">{{results.ebnoResult}} dB</text>
         </view>
+        <!-- 3GPP 行的 Es/N₀ 与每资源元素 SNR 恒为同一个数，下面另出「门限 SNR」两行，这里不重复摆 -->
         <view class="result-item {{markedParams.indexOf('esnoResult') > -1 ? 'result-item-marked' : ''}}"
+              wx:if="{{!results.phyKindResult}}"
               bindtap="toggleHighlight"
               data-param="esnoResult">
           <text class="result-label">Es/N₀门限</text>
@@ -2468,23 +2484,80 @@
           <text class="result-label">FEC码率</text>
           <text class="result-value">{{results.fecResult}}</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('carrierRateResult') > -1 ? 'result-item-marked' : ''}}" 
-              bindtap="toggleHighlight" 
+        <view class="result-item {{markedParams.indexOf('carrierRateResult') > -1 ? 'result-item-marked' : ''}}"
+              wx:if="{{results.carrierRateResult}}"
+              bindtap="toggleHighlight"
               data-param="carrierRateResult">
           <text class="result-label">载波速率</text>
           <text class="result-value">{{results.carrierRateResult}} kbps</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('ChipRateResult') > -1 ? 'result-item-marked' : ''}}" 
-              bindtap="toggleHighlight" 
+        <view class="result-item {{markedParams.indexOf('ChipRateResult') > -1 ? 'result-item-marked' : ''}}"
+              wx:if="{{results.ChipRateResult}}"
+              bindtap="toggleHighlight"
               data-param="ChipRateResult">
           <text class="result-label">码片速率</text>
           <text class="result-value">{{results.ChipRateResult}} kcps</text>
         </view>
-        <view class="result-item {{markedParams.indexOf('symbolRateResult') > -1 ? 'result-item-marked' : ''}}" 
-              bindtap="toggleHighlight" 
+        <view class="result-item {{markedParams.indexOf('symbolRateResult') > -1 ? 'result-item-marked' : ''}}"
+              wx:if="{{results.symbolRateResult}}"
+              bindtap="toggleHighlight"
               data-param="symbolRateResult">
           <text class="result-label">符号速率</text>
           <text class="result-value">{{results.symbolRateResult}} ksps</text>
+        </view>
+        <!-- ===== 3GPP NTN 物理层：只在 3GPP 载波上有值（DVB 载波这些出参为空，整行不出），
+             清单与结果详情页同一份 ===== -->
+        <view class="result-item {{markedParams.indexOf('phyDescResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyDescResult}}" bindtap="toggleHighlight" data-param="phyDescResult">
+          <text class="result-label">体制与配置</text>
+          <text class="result-value">{{results.phyDescResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phyMcsResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyMcsResult}}" bindtap="toggleHighlight" data-param="phyMcsResult">
+          <text class="result-label">{{results.phyKindResult === 'nr' ? 'MCS 档位' : 'I_TBS 档位'}}</text>
+          <text class="result-value">{{results.phyMcsResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phyScsResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyScsResult}}" bindtap="toggleHighlight" data-param="phyScsResult">
+          <text class="result-label">子载波间隔</text>
+          <text class="result-value">{{results.phyScsResult}} kHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phyUnitsResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyUnitsResult}}" bindtap="toggleHighlight" data-param="phyUnitsResult">
+          <text class="result-label">{{results.phyKindResult === 'nr' ? 'PRB 数' : '子载波数'}}</text>
+          <text class="result-value">{{results.phyUnitsResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phySpanResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phySpanResult}}" bindtap="toggleHighlight" data-param="phySpanResult">
+          <text class="result-label">{{results.phyDirResult === 'ul' ? 'RU 数' : '子帧数'}}</text>
+          <text class="result-value">{{results.phySpanResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phyRepResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyRepResult}}" bindtap="toggleHighlight" data-param="phyRepResult">
+          <text class="result-label">重复次数</text>
+          <text class="result-value">×{{results.phyRepResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phyTbsResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyTbsResult}}" bindtap="toggleHighlight" data-param="phyTbsResult">
+          <text class="result-label">传输块大小</text>
+          <text class="result-value">{{results.phyTbsResult}} bit</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phyCodeRateResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyCodeRateResult}}" bindtap="toggleHighlight" data-param="phyCodeRateResult">
+          <text class="result-label">有效码率</text>
+          <text class="result-value">{{results.phyCodeRateResult}}</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('phyBlerResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.phyBlerResult}}" bindtap="toggleHighlight" data-param="phyBlerResult">
+          <text class="result-label">目标 BLER</text>
+          <text class="result-value">{{results.phyBlerResult}} %</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('noiseBwResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.noiseBwResult}}" bindtap="toggleHighlight" data-param="noiseBwResult">
+          <text class="result-label">占用带宽</text>
+          <text class="result-value">{{results.noiseBwResult}} kHz</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('snrThresholdResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.snrThresholdResult}}" bindtap="toggleHighlight" data-param="snrThresholdResult">
+          <text class="result-label">门限 SNR（表值）</text>
+          <text class="result-value">{{results.snrThresholdResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('snrThresholdEffResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.snrThresholdEffResult}}" bindtap="toggleHighlight" data-param="snrThresholdEffResult">
+          <text class="result-label">门限 SNR（含重复）</text>
+          <text class="result-value">{{results.snrThresholdEffResult}} dB</text>
+        </view>
+        <view class="result-item {{markedParams.indexOf('snrActualResult') > -1 ? 'result-item-marked' : ''}}" wx:if="{{results.snrActualResult}}" bindtap="toggleHighlight" data-param="snrActualResult">
+          <text class="result-label">SNR</text>
+          <text class="result-value">{{results.snrActualResult}} dB</text>
         </view>
         <view class="result-item {{markedParams.indexOf('noiseBW') > -1 ? 'result-item-marked' : ''}}" 
               bindtap="toggleHighlight" 

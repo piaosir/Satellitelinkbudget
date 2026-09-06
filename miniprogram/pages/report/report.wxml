@@ -45,8 +45,12 @@
           <view class="param-entry"><text class="p-label">{{t.infoRate}}</text><text class="p-value">{{results.infoRateResult}}<text class="p-unit"> kbps</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.modulation}}</text><text class="p-value">{{results.modulationResult}}</text></view>
           <view class="param-entry"><text class="p-label">{{t.fecCode}}</text><text class="p-value">{{results.fecResult}}</text></view>
-          <view class="param-entry"><text class="p-label">{{t.symbolRate}}</text><text class="p-value">{{results.symbolRateResult}}<text class="p-unit"> ksps</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.allocBandwidth}}</text><text class="p-value">{{results.allocBandwidthResult}}<text class="p-unit"> kHz</text></text></view>
+          <!-- 3GPP 载波没有符号率这个读数（OFDM），这一行换成物理层配置与占用带宽 = PRB 数 × 12 × 子载波间隔；
+               信道带宽改叫「载波带宽」，免得与上一行的「占用带宽」撞名（DVB 行照旧） -->
+          <view class="param-entry" wx:if="{{!isNtn}}"><text class="p-label">{{t.symbolRate}}</text><text class="p-value">{{results.symbolRateResult}}<text class="p-unit"> ksps</text></text></view>
+          <view class="param-entry" wx:if="{{isNtn}}"><text class="p-label">{{t.phyDesc}}</text><text class="p-value">{{results.phyDescResult}}</text></view>
+          <view class="param-entry" wx:if="{{isNtn}}"><text class="p-label">{{t.occupiedBw}}</text><text class="p-value">{{results.noiseBwResult}}<text class="p-unit"> kHz</text></text></view>
+          <view class="param-entry"><text class="p-label">{{isNtn ? t.carrierBW : t.allocBandwidth}}</text><text class="p-value">{{results.allocBandwidthResult}}<text class="p-unit"> kHz</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.uplinkFreq}}</text><text class="p-value">{{results.uplinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.downlinkFreq}}</text><text class="p-value">{{results.downlinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
           <view class="param-entry"><text class="p-label">{{noiseRatioLabel}} {{t.threshold}}</text><text class="p-value">{{noiseRatioLabel === 'SNR' ? results.snrThresholdEffResult : (noiseRatioLabel === 'Es/N₀' ? results.esnoResult : results.ebnoResult)}}<text class="p-unit"> dB</text></text></view>
@@ -83,9 +87,11 @@
           <view class="param-entry"><text class="p-label">{{t.totalCN}}</text><text class="p-value">{{results.carrierTotalCN}}<text class="p-unit"> dB</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.thresholdCN}}</text><text class="p-value">{{results.thresholdCN}}<text class="p-unit"> dB</text></text></view>
           <view class="param-entry highlight"><text class="p-label">{{t.linkMargin}}</text><text class="p-value">{{results.linkmargin}}<text class="p-unit"> dB</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.esnoThreshold}}</text><text class="p-value">{{results.esnoResult}}<text class="p-unit"> dB</text></text></view>
+          <!-- 3GPP 行：Es/N₀ 与每资源元素 SNR 恒同数，按体制用对名字；误码率对它无意义，改报目标 BLER -->
+          <view class="param-entry"><text class="p-label">{{isNtn ? t.snrThresholdEff : t.esnoThreshold}}</text><text class="p-value">{{results.esnoResult}}<text class="p-unit"> dB</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.availability}}</text><text class="p-value">{{results.systemAvailabilityResult}}<text class="p-unit">%</text></text></view>
-          <view class="param-entry"><text class="p-label">{{t.ber}}</text><text class="p-value">{{results.berResult}}</text></view>
+          <view class="param-entry" wx:if="{{!isNtn}}"><text class="p-label">{{t.ber}}</text><text class="p-value">{{results.berResult}}</text></view>
+          <view class="param-entry" wx:if="{{isNtn}}"><text class="p-label">{{t.blerTarget}}</text><text class="p-value">{{results.phyBlerResult}}<text class="p-unit">%</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.bwUsage}}</text><text class="p-value">{{results.bandwidthUsageRatio}}<text class="p-unit">%</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.pwrUsage}}</text><text class="p-value">{{results.powerUsageRatio}}<text class="p-unit">%</text></text></view>
         </view>

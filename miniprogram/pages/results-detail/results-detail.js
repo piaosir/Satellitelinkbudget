@@ -203,14 +203,17 @@ Page({
       'spectralEfficiencyResult', 'uplinkPolarizationResult', 'downlinkPolarizationResult',
       'infoRateResult', 'modulationResult', 'modulationFactorResult', 'ebnoResult',
       'fecResult', 'RXnoiseBW', 'marginResult'];
-    // 值为空即整行不出的那些（DVB 专有四项 + Es/N₀ 两项 + 3GPP 物理层十余项）
-    const maybe = ['berResult', 'esnoResult', 'ebnoActualResult', 'esnoActualResult',
+    // 值为空即整行不出的那些（DVB 专有四项 + 3GPP 物理层十余项）
+    const maybe = ['berResult', 'ebnoActualResult',
       'carrierRateResult', 'ChipRateResult', 'symbolRateResult',
       'phyDescResult', 'phyDirTextResult', 'phyBandResult', 'phyMcsResult', 'phyScsResult',
       'phyUnitsResult', 'phySpanResult', 'phyRepResult', 'phyTbsResult', 'phyCodeRateResult',
       'phyBlerResult', 'noiseBwResult', 'snrThresholdResult', 'snrThresholdEffResult', 'snrActualResult'];
     const has = (k) => { const v = r && r[k]; return v !== undefined && v !== null && v !== ''; };
-    return always.filter(has).length + maybe.filter(has).length;
+    // Es/N₀ 两行：引擎对 3GPP 载波照常出这两个数（与每资源元素 SNR 恒同值，不是空串），WXML 按
+    // phyKindResult 整行隐藏、另出「门限 SNR」两行（与首页结果面板、瀑布表同一口径），故 3GPP 时不计
+    const esno = (r && r.phyKindResult) ? [] : ['esnoResult', 'esnoActualResult'];
+    return always.filter(has).length + maybe.filter(has).length + esno.filter(has).length;
   },
 
   // ============ 链路瀑布 ============
