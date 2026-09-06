@@ -69,7 +69,9 @@ Page({
     // 导出元信息（卫星 / 频段，用于报表副标题）
     exportMeta: { satelliteName: '', frequencyBand: '' },
     // 是否正在导出
-    exporting: false
+    exporting: false,
+    // 「通信参数」段实际行数（3GPP 与 DVB 载波的行不同，见 _commCount）
+    commCount: 0
   },
 
   onReady() {
@@ -183,11 +185,32 @@ Page({
       exportMeta: {
         satelliteName: src.satelliteName || '',
         frequencyBand: src.frequencyBand || ''
-      }
+      },
+      commCount: this._commCount(results)
     });
 
     // 构建链路瀑布数据
     this.buildWaterfall();
+  },
+
+  // 「通信参数」那一段实际会画出几行。
+  //
+  // 由来：这个数原先写死成「21项」。3GPP NTN 载波多出十来行物理层参数（PRB 数、重复次数、
+  // 传输块大小、两档 SNR 门限…），又少了载波速率 / 符号率 / 码片速率 / 误码率四行（对 OFDM 没有
+  // 这几个量，引擎刻意不出假读数），写死的数对哪一族都不对。逐项按 WXML 里那些 wx:if 的判据数一遍。
+  _commCount(r) {
+    const always = ['uplinkFrequencyResult', 'downlinkFrequencyResult', 'allocBandwidthResult',
+      'spectralEfficiencyResult', 'uplinkPolarizationResult', 'downlinkPolarizationResult',
+      'infoRateResult', 'modulationResult', 'modulationFactorResult', 'ebnoResult',
+      'fecResult', 'RXnoiseBW', 'marginResult'];
+    // 值为空即整行不出的那些（DVB 专有四项 + Es/N₀ 两项 + 3GPP 物理层十余项）
+    const maybe = ['berResult', 'esnoResult', 'ebnoActualResult', 'esnoActualResult',
+      'carrierRateResult', 'ChipRateResult', 'symbolRateResult',
+      'phyDescResult', 'phyDirTextResult', 'phyBandResult', 'phyMcsResult', 'phyScsResult',
+      'phyUnitsResult', 'phySpanResult', 'phyRepResult', 'phyTbsResult', 'phyCodeRateResult',
+      'phyBlerResult', 'noiseBwResult', 'snrThresholdResult', 'snrThresholdEffResult', 'snrActualResult'];
+    const has = (k) => { const v = r && r[k]; return v !== undefined && v !== null && v !== ''; };
+    return always.filter(has).length + maybe.filter(has).length;
   },
 
   // ============ 链路瀑布 ============

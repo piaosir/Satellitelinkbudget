@@ -3,6 +3,7 @@
 const { P676_PART1 } = require('./p676Data.js');
 const CLOUD_GRID = require('../data/cloudParamsGrid.js'); // ITU-R P.840-9 Lred 对数正态参数地图
 const { getRhoWs } = require('../data/waterVaporGrid.js'); // ITU-R P.836-6 地面水汽密度地图
+const ntnPhy = require('./ntnPhy.js'); // 3GPP NTN 物理层口径（占用带宽 / TBS / 信息速率 / 含重复的门限）
 // 基于 linkCalculator.js，针对 NGSO 链路做了以下调整：
 // 1. 绕过 GEO 专属的轨位/几何计算，直接使用用户输入的最低仰角
 // 2. 根据用户选择使用 “轨道高度” 或 “星地斜距” 计算链路距离
@@ -87,7 +88,7 @@ const CONSTANTS = {
 };
 
 // 调制因子 —— 取 constants.js 那份单一出处（同 linkCalculator.js，引擎不再各抄一份）
-const { MODULATION_FACTORS } = require('./constants.js');
+const { modFactorOf } = require('./constants.js');
 
 // ITU-R P.838 降雨衰减系数表 (完全按照 index.html)
 const P838_TABLE = {
@@ -379,7 +380,7 @@ function performCalculations(satParams, inputs) {
     ? parseFloat(satParams.sfdRef) : -82; // dBW/m² - SFD参考值
   
   // ============ 通信参数 ============
-  const infoRate = pickNum(inputs.infoRate, 2048); // kbps - 信息速率
+  let infoRate = pickNum(inputs.infoRate, 2048); // kbps - 信息速率（3GPP 的 snr 行由 phy 算，见下方 snrChain）
   const modulation = inputs.modulation || "QPSK";
   // FEC码率：支持分数和小数格式，保留原始输入用于显示
   const fecOriginal = String(inputs.fec || '0.75').trim();
@@ -542,18 +543,34 @@ function performCalculations(satParams, inputs) {
   const systemAvailability = (uplinkAvailability * rxDownlinkAvailability).toFixed(5);
   
   // ============ 调制与带宽计算 ============
-  const modulationFactor = MODULATION_FACTORS[modulation] || 2;
-  const carrierRate = infoRate / rsCode / fec; // 传输速率 (kbps)
-  const ChipRate = carrierRate * m; // 码片速率 (kbps)
-  const symbolRate = ChipRate / modulationFactor; // 符号速率 (ksps)
+  const modulationFactor = modFactorOf(modulation);
+  // ★ 3GPP NTN 的 snr 行不走下面这条 DVB 链，口径与 GEO 侧逐字一致（见 linkCalculator.js 同处注释、
+  //   推导见 utils/ntnPhy.js 文件头）：占用带宽 B_occ = N_RB×12×SCS 就是噪声带宽，信息速率由 TBS 算。
+  const snrChain = noiseRatioMode === 'snr'
+    ? ntnPhy.engineChain(inputs.phy, inputNoiseRatio, modulationFactor, fec)
+    : null;
+  if (snrChain && snrChain.error) throw new Error('3GPP 载波参数无效：' + snrChain.error);
+  if (snrChain) infoRate = snrChain.infoRate;
+  const carrierRate = snrChain ? null : infoRate / rsCode / fec; // 传输速率 (kbps)
+  const ChipRate = snrChain ? null : carrierRate * m; // 码片速率 (kbps)
+  // ★ snr 行这里放的是【占用带宽】而不是符号率：下游 noiseBW = symbolRate 就是噪声带宽
+  const symbolRate = snrChain ? snrChain.symbolRate : ChipRate / modulationFactor; // 符号速率 (ksps)
   // 分配带宽计算：保留三位小数
-  const allocBandwidth = Math.round(bandwidthFactor * symbolRate * 1000) / 1000; // 分配带宽 (kHz)
-  const k = (fec * rsCode * modulationFactor) / m; // 组合效率
+  const allocBandwidth = snrChain ? snrChain.allocBandwidth : Math.round(bandwidthFactor * symbolRate * 1000) / 1000; // 分配带宽 (kHz)
+  const k = snrChain ? snrChain.k : (fec * rsCode * modulationFactor) / m; // 组合效率
+  // 功率谱密度的参考带宽：snr 行按占用带宽（信道带宽含保护带，拿它算会把 PSD 低报 0.18~0.46 dB）
+  const psdBandwidth = snrChain ? snrChain.symbolRate : allocBandwidth; // kHz
   
   // 根据噪声比模式计算 ebno 和 esno
   let ebno, esno;
-  if (noiseRatioMode === 'esno') {
+  if (snrChain) {
+    // 门限值 = 每 RE SNR（已按 N_rep 折算）；Eb/N₀ 由占用带宽上的频谱效率反折
+    esno = snrChain.esno;
+    ebno = snrChain.ebno;
+  } else if (noiseRatioMode === 'esno' || noiseRatioMode === 'snr') {
     // 如果输入的是 Es/N0，需要转换为 Eb/N0
+    // ★ 标了 snr 却没有 phy（老档、或只改了口径还没填物理层参数）也走这一支：每 RE SNR 与 Es/N₀
+    //   数值上是同一个量；掉进下面的 Eb/N₀ 分支才是真错，那会把门限当成每比特信噪比，整条链错好几 dB。
     esno = inputNoiseRatio;
     ebno = esno - 10 * Math.log10(k);
   } else {
@@ -1040,7 +1057,7 @@ function performCalculations(satParams, inputs) {
   );
 
   // 地球站功率谱密度：EIRP - 10*log10(带宽Hz)
-  const stationPSD = stationEIRP - 10 * Math.log10(allocBandwidth * 1000);
+  const stationPSD = stationEIRP - 10 * Math.log10(psdBandwidth * 1000);
   
   // ============ ITU-R 功率谱密度门限计算 ============
   // 根据ITU Radio Regulations Article 21 和 ITU-R S.524-9
@@ -1361,11 +1378,11 @@ function performCalculations(satParams, inputs) {
   const txSidelobeEIRP = selectedPower + txSidelobeGain - feederLoss;
   
   // 发信站旁瓣功率谱密度：旁瓣EIRP - 10*log10(带宽Hz)
-  const txSidelobePSD = txSidelobeEIRP - 10 * Math.log10(allocBandwidth * 1000);
+  const txSidelobePSD = txSidelobeEIRP - 10 * Math.log10(psdBandwidth * 1000);
   
   // 卫星功率谱密度：卫星EIRP - 10*log10(带宽Hz)
   // 使用每载波占用的卫星EIRP
-  const satellitePSD = transponderOutputEIRP - 10 * Math.log10(allocBandwidth * 1000);
+  const satellitePSD = transponderOutputEIRP - 10 * Math.log10(psdBandwidth * 1000);
   
   // ============ 卫星到地面的PFD计算 ============
   // PFD (功率通量密度) = EIRP - 10*log10(4*π*d²) 单位: dBW/m²
@@ -1524,7 +1541,8 @@ function performCalculations(satParams, inputs) {
   
   // 转换为dBW/m²（每平方米）
   // 从4kHz参考带宽转换到实际载波带宽
-  const ituPfdLimitPerM2 = ituPfdLimit4kHz + 10 * Math.log10(allocBandwidth / 4);
+  // 与上面几个 PSD 同一把尺（psdBandwidth）；DVB 行 psdBandwidth ≡ allocBandwidth，一位不变
+  const ituPfdLimitPerM2 = ituPfdLimit4kHz + 10 * Math.log10(psdBandwidth / 4);
   
   // ============ 填充结果对象 ============
   // 误码率显示
@@ -1734,22 +1752,46 @@ function performCalculations(satParams, inputs) {
   results.uplinkFrequencyResult = uplinkFrequency.toFixed(2);
   results.downlinkFrequencyResult = downlinkFrequency.toFixed(2);
   // 极化方式显示值已在上方设置（使用 polarizationDisplayMap），此处不再重复赋值
-  results.infoRateResult = infoRate;
+  // 信息速率两个来源：DVB 行是表单里那个数，3GPP NTN 行由 TBS ÷ 时长算出来，收到 3 位并去尾零
+  results.infoRateResult = snrChain ? Number(infoRate.toFixed(3)) : infoRate;
   results.modulationResult = modulation;
   results.modulationFactorResult = modulationFactor;
-  results.berResult = `1×10${superscriptExp}`;
+  // ★ 3GPP 各表的门限按【BLER 10% 首传】给，误码率这一行对它既无意义又误导，改出「目标 BLER」
+  results.berResult = snrChain ? '' : `1×10${superscriptExp}`;
   results.ebnoResult = ebno.toFixed(2);
   results.esnoResult = esno.toFixed(2);
   // 实际 Eb/N₀ / Es/N₀：由实际合成 C/N 折算（门限值 + 链路余量）
   results.ebnoActualResult = (ebno + linkmargin).toFixed(2);
   results.esnoActualResult = (esno + linkmargin).toFixed(2);
+  // ===== 3GPP NTN（snr 口径）专有出参，与 GEO 侧及仿真平台同名同义 =====
+  results.snrThresholdResult = snrChain ? snrChain.thresholdTable.toFixed(2) : '';
+  results.snrThresholdEffResult = snrChain ? snrChain.esno.toFixed(2) : '';
+  results.snrActualResult = snrChain ? (snrChain.esno + linkmargin).toFixed(2) : '';
+  results.noiseBwResult = snrChain ? snrChain.symbolRate.toFixed(3) : '';
+  results.phyRepResult = snrChain ? String(snrChain.nRep) : '';
+  results.phyTbsResult = (snrChain && snrChain.tbsReported != null) ? String(snrChain.tbsReported) : '';
+  results.phyTbsUnitResult = snrChain ? snrChain.tbsUnit : '';
+  results.phyDescResult = snrChain ? ntnPhy.describe(snrChain.phy, 'zh') : '';
+  results.phyKindResult = snrChain ? snrChain.phy.kind : '';
+  results.phyDirResult = snrChain ? snrChain.phy.dir : '';
+  results.phyDirTextResult = snrChain ? ntnPhy.dirLabel(snrChain.phy, 'zh') : '';
+  results.phyScsResult = snrChain ? String(snrChain.phy.scs) : '';
+  results.phyUnitsResult = snrChain
+    ? String(snrChain.phy.kind === 'nr' ? snrChain.phy.nRb : snrChain.phy.nTones) : '';
+  results.phySpanResult = snrChain
+    ? (ntnPhy.nbUnitCount(snrChain.phy) == null ? '' : String(ntnPhy.nbUnitCount(snrChain.phy))) : '';
+  results.phyMcsResult = snrChain ? ntnPhy.mcsLabel(snrChain.phy, 'zh') : '';
+  results.phyBandResult = (snrChain && snrChain.phy.kind === 'nr') ? (snrChain.phy.band || '') : '';
+  results.phyBlerResult = snrChain ? (snrChain.blerTarget * 100).toFixed(0) : '';
+  results.phyCodeRateResult = (snrChain && snrChain.codeRate != null) ? snrChain.codeRate.toFixed(4) : '';
   // 帧效率显示：保持原始输入格式（分数或小数）
   results.rsCodeResult = rsCodeOriginal;
   // FEC码率显示：保持原始输入格式（分数或小数）
   results.fecResult = fecOriginal;
-  results.carrierRateResult = carrierRate.toFixed(2);
-  results.ChipRateResult = ChipRate.toFixed(2);
-  results.symbolRateResult = symbolRate.toFixed(2);
+  // DVB 换算链的三个读数：snr 行没有这三个量，一律留空不报假数
+  results.carrierRateResult = snrChain ? '' : carrierRate.toFixed(2);
+  results.ChipRateResult = snrChain ? '' : ChipRate.toFixed(2);
+  results.symbolRateResult = snrChain ? '' : symbolRate.toFixed(2);
   results.allocBandwidthResult = allocBandwidth;
   // 频谱效率 η = R_info(bps) / B_alloc(Hz) = infoRate(kbps) / allocBandwidth(kHz)
   const spectralEfficiency = (allocBandwidth > 0) ? (infoRate / allocBandwidth) : 0; // bps/Hz

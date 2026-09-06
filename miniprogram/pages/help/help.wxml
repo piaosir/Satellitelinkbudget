@@ -3,8 +3,8 @@
 
   <view class="hp-head">
     <text class="hp-title">使用帮助</text>
-    <text class="hp-sub">卫星链路计算与仿真系统 · v3.8.10</text>
-    <text class="hp-note-src">摘自《软件功能与使用指南》，并补充「仿真平台联动」一章</text>
+    <text class="hp-sub">卫星链路计算与仿真系统 · v3.8.11</text>
+    <text class="hp-note-src">摘自《软件功能与使用指南》，并补充「输入项逐项说明」「3GPP NTN 标准怎么配」「仿真平台联动」三章</text>
   </view>
 
   <view class="hp-toc">
@@ -75,6 +75,6 @@
   </view>
 
   <view class="hp-foot">
-    <text class="hp-foot-t">卫星链路计算与仿真系统 · v3.8.10</text>
+    <text class="hp-foot-t">卫星链路计算与仿真系统 · v3.8.11</text>
   </view>
 </view>

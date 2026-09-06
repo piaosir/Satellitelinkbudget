@@ -236,9 +236,12 @@ Page({
     // 获取链路性能指标
     const linkPerformance = this.getLinkPerformance(results, t);
     
-    // 根据noiseRatioMode确定显示的门限标签
-    const noiseRatioMode = linkParams.noiseRatioMode || 'ebno';
-    const noiseRatioLabel = noiseRatioMode === 'esno' ? 'Es/N₀' : 'Eb/N₀';
+    // 根据noiseRatioMode确定显示的门限标签。
+    // 'snr' 是 3GPP NTN 的口径：每资源元素 RE 的信噪比，噪声带宽取占用带宽（见 utils/ntnPhy.js）。
+    // ★ 这里读的是 linkParams 里那一份 —— 门限口径随链路走（一份配置的多条链路口径可以不同），
+    //   linkParams 里没有才回落到全局那一份（v3.8.11 之前只存全局，存量记录全走回落）。
+    const noiseRatioMode = linkParams.noiseRatioMode || (app.globalData && app.globalData.noiseRatioMode) || 'ebno';
+    const noiseRatioLabel = noiseRatioMode === 'snr' ? 'SNR' : (noiseRatioMode === 'esno' ? 'Es/N₀' : 'Eb/N₀');
     
     this.setData({
       linkNum: linkNum,

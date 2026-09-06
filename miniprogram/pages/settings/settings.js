@@ -144,9 +144,12 @@ Page({
     });
   },
 
-  // 使用帮助：整本《软件功能与使用指南》的页面版（含「仿真平台联动」一章），见 pages/help
-  showHelp() {
-    wx.navigateTo({ url: '/pages/help/help' });
+  // 使用帮助：整本《软件功能与使用指南》的页面版，见 pages/help。
+  // data-ch 给了章号就直达那一章（设置页里「链路参数怎么填」「3GPP NTN 标准怎么配」两个入口用），
+  // 没给就落在目录页从头看。绑定卡片里那条指路链接也走这个方法，不带章号。
+  showHelp(e) {
+    const ch = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.ch : '';
+    wx.navigateTo({ url: '/pages/help/help' + (ch ? '?ch=' + ch : '') });
   },
 
   // 意见反馈

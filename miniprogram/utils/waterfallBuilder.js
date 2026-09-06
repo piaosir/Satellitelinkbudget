@@ -40,6 +40,25 @@ const WF_DICT = {
   '门限 Es/N₀': 'Threshold Es/N₀',
   '载波噪声带宽': 'Carrier Noise Bandwidth',
   '系统余量': 'System Margin',
+  // —— 3GPP NTN 物理层（只在 3GPP 载波上出行，DVB 载波这些出参为空、自动剔除）——
+  '体制与配置': 'Radio Configuration',
+  '传输方向': 'Transmission Direction',
+  'MCS 档位': 'MCS Index',
+  'I_TBS 档位': 'I_TBS Index',
+  'NTN 频段': 'NTN Band',
+  '子载波间隔': 'Subcarrier Spacing',
+  'PRB 数': 'Number of PRBs',
+  '子载波数': 'Number of Subcarriers',
+  '子帧数': 'Number of Subframes',
+  'RU 数': 'Number of Resource Units',
+  '重复次数': 'Repetitions',
+  '传输块大小': 'Transport Block Size',
+  '有效码率': 'Effective Code Rate',
+  '目标 BLER': 'Target BLER',
+  '占用带宽': 'Occupied Bandwidth',
+  '门限 SNR（表值）': 'Threshold SNR (table)',
+  '门限 SNR（含重复）': 'Threshold SNR (with repetitions)',
+  'SNR': 'SNR',
   // —— 几何与天线 ——
   '城市': 'City',
   '频率': 'Frequency',
@@ -230,6 +249,68 @@ function createBuilder(ctx) {
     return { title: b._t(title), cols: 1, rows };
   };
 
+  // 载波与调制参数段（GEO / NGSO 共用一份）。
+  //
+  // 为什么要抽出来：3GPP NTN 载波要多报十来行物理层参数，而这一段原先在 GEO 与 NGSO 两处逐字重复；
+  // 加一行就得改两处，漏一处就是「同一条载波在 GEO 报表里有 PRB 数、NGSO 报表里没有」。
+  //
+  // 两族的行不必手工分流：DVB 载波的 phyXxxResult 一律为空串、3GPP 载波的载波速率/符号率/码片速率/
+  // 误码率一律为空串（引擎刻意不出这几个假读数，见 linkCalculator.js），而 _refSeg 会自动剔除无值行。
+  // 于是同一张清单摆下去，各族只留下自己有的那些行。
+  b._carrierSeg = function () {
+    const isNtn = !!results.phyKindResult;
+    const isNr = results.phyKindResult === 'nr';
+    return b._refSeg('载波与调制参数', [
+      ['体制与配置', 'phyDescResult', ''],
+      ['传输方向', 'phyDirTextResult', ''],
+      ['NTN 频段', 'phyBandResult', ''],
+      // 档位这一行两族叫法不同：NR 报「哪张 MCS 表 + 第几档」，NB-IoT 报 I_TBS。
+      // 标签随体制走，值都在 phyMcsResult 里（非 3GPP 时为空，整行自动消失）。
+      [isNr ? 'MCS 档位' : 'I_TBS 档位', 'phyMcsResult', ''],
+      ['子载波间隔', 'phyScsResult', 'kHz'],
+      // 同一个数在 NR 里是 PRB 数、在 NB-IoT 里是子载波数 —— 两者的物理含义不同（1 个 PRB = 12 个
+      // 子载波），共用一个标签会让人把 NB-IoT 的 12 子载波读成 12 个 PRB（差 12 倍带宽）
+      [isNr ? 'PRB 数' : '子载波数', 'phyUnitsResult', ''],
+      // 一个传输块摊在几个子帧（下行 NPDSCH）/ 几个资源单元（上行 NPUSCH）。NR 没有这个概念
+      [results.phyDirResult === 'ul' ? 'RU 数' : '子帧数', 'phySpanResult', ''],
+      ['重复次数', 'phyRepResult', ''],
+      ['传输块大小', 'phyTbsResult', 'bit'],
+      ['有效码率', 'phyCodeRateResult', ''],
+      ['目标 BLER', 'phyBlerResult', '%'],
+      ['载波带宽', 'allocBandwidthResult', 'kHz'],
+      // 占用带宽 = 门限那个 SNR 的噪声带宽（PRB 数 × 12 × 子载波间隔）。它与「载波带宽」不是
+      // 同一个数：后者含保护带，只用于转发器占用比
+      ['占用带宽', 'noiseBwResult', 'kHz'],
+      ['功率带宽', 'PowerBWResult', 'kHz'],
+      ['频谱效率', 'spectralEfficiencyResult', 'bit/s/Hz'],
+      ['信息速率', 'infoRateResult', 'kbps'],
+      ['载波速率', 'carrierRateResult', 'kbps'],
+      ['符号速率', 'symbolRateResult', 'ksps'],
+      ['码片速率', 'ChipRateResult', 'kcps'],
+      ['调制方式', 'modulationResult', ''],
+      ['调制因子', 'modulationFactorResult', ''],
+      ['FEC 码率', 'fecResult', ''],
+      ['误码率', 'berResult', ''],
+      // 3GPP 行报 SNR 两档：表值 = MODCOD 表里那一列；含重复 = 按 N_rep 与合并损失折算后、
+      // 真正拿去与合成 C/N 比的那个数。两者差 10lg(N_rep)，NB-IoT 重复几十上百次时差十几 dB，
+      // 只报一个数会让人以为链路余量算错了。DVB 行这两项为空，仍报 Eb/N₀ / Es/N₀。
+      ['门限 SNR（表值）', 'snrThresholdResult', 'dB'],
+      ['门限 SNR（含重复）', 'snrThresholdEffResult', 'dB'],
+      ['SNR', 'snrActualResult', 'dB'],
+      // Eb/N₀ 两族都报：3GPP 行的这个数由占用带宽上的频谱效率反折而来，CP / DMRS / 开销 / 重复
+      // 全都算在里面，正是与 DVB 载波横向比较时该看的那个量。
+      ['门限 Eb/N₀', 'ebnoResult', 'dB'],
+      // Es/N₀ 与每 RE SNR 在 3GPP 行上恒为同一个数，再摆一遍是同名两个数，故 3GPP 行不出这两项
+      [isNtn ? '_skip' : '门限 Es/N₀', isNtn ? '_none' : 'esnoResult', 'dB'],
+      ['Eb/N₀', 'ebnoActualResult', 'dB'],
+      [isNtn ? '_skip' : 'Es/N₀', isNtn ? '_none' : 'esnoActualResult', 'dB'],
+      ['载波噪声带宽', 'RXnoiseBW', 'dB-Hz'],
+      ['系统余量', 'marginResult', 'dB']
+    ]);
+  };
+
+
+
   // 级联单值行（三列布局）：value 路由到指定列 col（'up'|'down'|'total'）。
   // key 为 null 表示该格为计算检查点，值由 _cascadeTriSeg 沿链路累加后回填；
   // key 为数值时作为字面量原始值（用于 +228.6、噪声带宽、干扰损失等链路桥接项）。
@@ -290,26 +371,8 @@ function createBuilder(ctx) {
     if (r.linkmargin === undefined) return [];
     const segs = [];
 
-    // ① 载波与调制参数（链路级，单列）
-    segs.push(b._refSeg('载波与调制参数', [
-      ['载波带宽', 'allocBandwidthResult', 'kHz'],
-      ['功率带宽', 'PowerBWResult', 'kHz'],
-      ['频谱效率', 'spectralEfficiencyResult', 'bit/s/Hz'],
-      ['信息速率', 'infoRateResult', 'kbps'],
-      ['载波速率', 'carrierRateResult', 'kbps'],
-      ['符号速率', 'symbolRateResult', 'ksps'],
-      ['码片速率', 'ChipRateResult', 'kcps'],
-      ['调制方式', 'modulationResult', ''],
-      ['调制因子', 'modulationFactorResult', ''],
-      ['FEC 码率', 'fecResult', ''],
-      ['误码率', 'berResult', ''],
-      ['门限 Eb/N₀', 'ebnoResult', 'dB'],
-      ['门限 Es/N₀', 'esnoResult', 'dB'],
-      ['Eb/N₀', 'ebnoActualResult', 'dB'],
-      ['Es/N₀', 'esnoActualResult', 'dB'],
-      ['载波噪声带宽', 'RXnoiseBW', 'dB-Hz'],
-      ['系统余量', 'marginResult', 'dB']
-    ]));
+    // ① 载波与调制参数（链路级，单列）：清单与 3GPP 分流见 b._carrierSeg
+    segs.push(b._carrierSeg());
 
     // ② 几何与天线（上行 / 下行 双列）
     const geoSeg = b._dualSeg('几何与天线（上行 / 下行）', [
@@ -504,26 +567,8 @@ function createBuilder(ctx) {
     if (r.linkmargin === undefined) return [];
     const segs = [];
 
-    // ① 载波与调制参数（链路级，单列）
-    segs.push(b._refSeg('载波与调制参数', [
-      ['载波带宽', 'allocBandwidthResult', 'kHz'],
-      ['功率带宽', 'PowerBWResult', 'kHz'],
-      ['频谱效率', 'spectralEfficiencyResult', 'bit/s/Hz'],
-      ['信息速率', 'infoRateResult', 'kbps'],
-      ['载波速率', 'carrierRateResult', 'kbps'],
-      ['符号速率', 'symbolRateResult', 'ksps'],
-      ['码片速率', 'ChipRateResult', 'kcps'],
-      ['调制方式', 'modulationResult', ''],
-      ['调制因子', 'modulationFactorResult', ''],
-      ['FEC 码率', 'fecResult', ''],
-      ['误码率', 'berResult', ''],
-      ['门限 Eb/N₀', 'ebnoResult', 'dB'],
-      ['门限 Es/N₀', 'esnoResult', 'dB'],
-      ['Eb/N₀', 'ebnoActualResult', 'dB'],
-      ['Es/N₀', 'esnoActualResult', 'dB'],
-      ['载波噪声带宽', 'RXnoiseBW', 'dB-Hz'],
-      ['系统余量', 'marginResult', 'dB']
-    ]));
+    // ① 载波与调制参数（链路级，单列）：清单与 3GPP 分流见 b._carrierSeg
+    segs.push(b._carrierSeg());
 
     // ② 几何与天线（上行 / 下行 双列）。NGSO「对卫星仰角」为最低仰角
     // 注：NGSO 不含「极化角」——卫星位置时变，GEO 式极化偏转/方位反算不适用（恒为 0，已移除）

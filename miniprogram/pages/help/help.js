@@ -10,7 +10,7 @@ Page({
     toc: []
   },
 
-  onLoad() {
+  onLoad(options) {
     const chapters = CHAPTERS.map((c, i) => ({
       no: i + 1,
       title: c.title,
@@ -20,6 +20,12 @@ Page({
     this.setData({
       chapters: chapters,
       toc: chapters.map((c) => ({ no: c.no, title: c.title }))
+    }, () => {
+      // 直达某一章（设置页的「链路参数怎么填」「3GPP NTN 标准怎么配」两个入口带 ?ch=N 进来）。
+      // 复用 jump 而不是另写一段：它已经处理了「先展开、渲染完再量位置」那件事——
+      // 目标章原本收起，先量后展开会滚偏。
+      const n = Number(options && options.ch);
+      if (n >= 1 && n <= chapters.length) this.jumpTo(n - 1);
     });
   },
 
@@ -33,7 +39,10 @@ Page({
   // ★ 必须等 setData 渲染完成再量位置 —— 展开会改变它上面那些章节的高度吗？不会（只展开自己），
   //   但目标章节本身若原本收起、现在展开，节点高度变了，先量后展开会滚偏。故量位置放在回调里。
   jump(e) {
-    const i = Number(e.currentTarget.dataset.i);
+    this.jumpTo(Number(e.currentTarget.dataset.i));
+  },
+
+  jumpTo(i) {
     if (!(i >= 0)) return;
     this.setData({ ['chapters[' + i + '].open']: true }, () => {
       wx.createSelectorQuery()

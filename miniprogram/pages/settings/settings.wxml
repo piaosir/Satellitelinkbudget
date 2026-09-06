@@ -50,7 +50,7 @@
       </view>
       <view class="about-item">
         <text class="label">版本号</text>
-        <text class="value">v3.8.10</text>
+        <text class="value">v3.8.11</text>
       </view>
       <view class="about-item">
         <text class="label">开发者</text>
@@ -75,9 +75,20 @@
 
   <view class="card">
     <view class="card-title">帮助与反馈</view>
+    <!-- 「使用帮助」整本十四章，从头翻到「某一格该填多少」要滚很久。下面两条直达那两章 ——
+         它们是查阅型内容（一格一格对着填），与通读型的前几章用法完全不同，值得各占一个入口。
+         data-ch 是章号，help 页按它展开并滚过去（见 help.js 的 onLoad）。 -->
     <view class="action-list">
       <view class="action-item" bindtap="showHelp">
         <text class="action-label">使用帮助</text>
+        <text class="action-icon">→</text>
+      </view>
+      <view class="action-item" bindtap="showHelp" data-ch="6">
+        <text class="action-label">链路参数怎么填 · 逐项说明</text>
+        <text class="action-icon">→</text>
+      </view>
+      <view class="action-item" bindtap="showHelp" data-ch="7">
+        <text class="action-label">3GPP NTN 标准怎么配</text>
         <text class="action-icon">→</text>
       </view>
       <view class="action-item" bindtap="feedback">

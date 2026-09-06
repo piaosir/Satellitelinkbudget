@@ -506,7 +506,9 @@
         <view class="section-title-row">
           <view class="section-dot dot-cyan"></view>
           <text class="section-title">通信参数</text>
-          <text class="section-count">21项</text>
+          <!-- 项数现算：3GPP 载波多出十来行物理层参数、少了载波速率/符号率/码片速率/误码率四行，
+               写死的「21项」对哪一族都不对。见 results-detail.js 的 commCount -->
+          <text class="section-count">{{commCount}}项</text>
         </view>
         <text class="section-arrow {{expandedSections.comm ? 'expanded' : ''}}">›</text>
       </view>
@@ -549,7 +551,7 @@
             <text class="detail-label">调制因子</text>
             <text class="detail-value">{{results.modulationFactorResult}}</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'berResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('误码率', searchKeyword, results.berResult)}}" bindtap="toggleHighlight" data-param="berResult">
+          <view class="detail-item {{filter.includes(markedParams, 'berResult') ? 'marked' : ''}}" wx:if="{{results.berResult && filter.matchSearch('误码率', searchKeyword, results.berResult)}}" bindtap="toggleHighlight" data-param="berResult">
             <text class="detail-label">误码率</text>
             <text class="detail-value">{{results.berResult}}</text>
           </view>
@@ -557,7 +559,7 @@
             <text class="detail-label">门限 Eb/N₀</text>
             <text class="detail-value">{{results.ebnoResult}} dB</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'esnoResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('门限 Es/N₀', searchKeyword, results.esnoResult)}}" bindtap="toggleHighlight" data-param="esnoResult">
+          <view class="detail-item {{filter.includes(markedParams, 'esnoResult') ? 'marked' : ''}}" wx:if="{{results.esnoResult && filter.matchSearch('门限 Es/N₀', searchKeyword, results.esnoResult)}}" bindtap="toggleHighlight" data-param="esnoResult">
             <text class="detail-label">门限 Es/N₀</text>
             <text class="detail-value">{{results.esnoResult}} dB</text>
           </view>
@@ -573,21 +575,88 @@
             <text class="detail-label">FEC码率</text>
             <text class="detail-value">{{results.fecResult}}</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'carrierRateResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波速率', searchKeyword, results.carrierRateResult)}}" bindtap="toggleHighlight" data-param="carrierRateResult">
+          <view class="detail-item {{filter.includes(markedParams, 'carrierRateResult') ? 'marked' : ''}}" wx:if="{{results.carrierRateResult && filter.matchSearch('载波速率', searchKeyword, results.carrierRateResult)}}" bindtap="toggleHighlight" data-param="carrierRateResult">
             <text class="detail-label">载波速率</text>
             <text class="detail-value">{{results.carrierRateResult}} kbps</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'ChipRateResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('码片速率', searchKeyword, results.ChipRateResult)}}" bindtap="toggleHighlight" data-param="ChipRateResult">
+          <view class="detail-item {{filter.includes(markedParams, 'ChipRateResult') ? 'marked' : ''}}" wx:if="{{results.ChipRateResult && filter.matchSearch('码片速率', searchKeyword, results.ChipRateResult)}}" bindtap="toggleHighlight" data-param="ChipRateResult">
             <text class="detail-label">码片速率</text>
             <text class="detail-value">{{results.ChipRateResult}} kcps</text>
           </view>
-          <view class="detail-item {{filter.includes(markedParams, 'symbolRateResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('符号速率', searchKeyword, results.symbolRateResult)}}" bindtap="toggleHighlight" data-param="symbolRateResult">
+          <view class="detail-item {{filter.includes(markedParams, 'symbolRateResult') ? 'marked' : ''}}" wx:if="{{results.symbolRateResult && filter.matchSearch('符号速率', searchKeyword, results.symbolRateResult)}}" bindtap="toggleHighlight" data-param="symbolRateResult">
             <text class="detail-label">符号速率</text>
             <text class="detail-value">{{results.symbolRateResult}} ksps</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'noiseBW') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('载波噪声带宽', searchKeyword, results.RXnoiseBW)}}" bindtap="toggleHighlight" data-param="noiseBW">
             <text class="detail-label">载波噪声带宽</text>
             <text class="detail-value">{{results.RXnoiseBW}} dB-Hz</text>
+          </view>
+          <!-- ===== 3GPP NTN 物理层：这几项只在 3GPP 载波上有值（引擎对 DVB 载波一律出空串），
+               值为空的行整行不出，故这一块对 DVB 结果是隐形的 ===== -->
+          <view class="detail-item {{filter.includes(markedParams, 'phyDescResult') ? 'marked' : ''}}" wx:if="{{results.phyDescResult && filter.matchSearch('体制与配置', searchKeyword, results.phyDescResult)}}" bindtap="toggleHighlight" data-param="phyDescResult">
+            <text class="detail-label">体制与配置</text>
+            <text class="detail-value">{{results.phyDescResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phyDirTextResult') ? 'marked' : ''}}" wx:if="{{results.phyDirTextResult && filter.matchSearch('传输方向', searchKeyword, results.phyDirTextResult)}}" bindtap="toggleHighlight" data-param="phyDirTextResult">
+            <text class="detail-label">传输方向</text>
+            <text class="detail-value">{{results.phyDirTextResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phyBandResult') ? 'marked' : ''}}" wx:if="{{results.phyBandResult && filter.matchSearch('NTN 频段', searchKeyword, results.phyBandResult)}}" bindtap="toggleHighlight" data-param="phyBandResult">
+            <text class="detail-label">NTN 频段</text>
+            <text class="detail-value">{{results.phyBandResult}}</text>
+          </view>
+          <!-- 档位这一行两族叫法不同：NR 报「哪张 MCS 表 + 第几档」，NB-IoT 报 I_TBS -->
+          <view class="detail-item {{filter.includes(markedParams, 'phyMcsResult') ? 'marked' : ''}}" wx:if="{{results.phyMcsResult && filter.matchSearch('档位', searchKeyword, results.phyMcsResult)}}" bindtap="toggleHighlight" data-param="phyMcsResult">
+            <text class="detail-label">{{results.phyKindResult === 'nr' ? 'MCS 档位' : 'I_TBS 档位'}}</text>
+            <text class="detail-value">{{results.phyMcsResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phyScsResult') ? 'marked' : ''}}" wx:if="{{results.phyScsResult && filter.matchSearch('子载波间隔', searchKeyword, results.phyScsResult)}}" bindtap="toggleHighlight" data-param="phyScsResult">
+            <text class="detail-label">子载波间隔</text>
+            <text class="detail-value">{{results.phyScsResult}} kHz</text>
+          </view>
+          <!-- 同一个数在 NR 里是 PRB 数、在 NB-IoT 里是子载波数（1 个 PRB = 12 个子载波），标签必须分开 -->
+          <view class="detail-item {{filter.includes(markedParams, 'phyUnitsResult') ? 'marked' : ''}}" wx:if="{{results.phyUnitsResult && filter.matchSearch('PRB 数 子载波数', searchKeyword, results.phyUnitsResult)}}" bindtap="toggleHighlight" data-param="phyUnitsResult">
+            <text class="detail-label">{{results.phyKindResult === 'nr' ? 'PRB 数' : '子载波数'}}</text>
+            <text class="detail-value">{{results.phyUnitsResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phySpanResult') ? 'marked' : ''}}" wx:if="{{results.phySpanResult && filter.matchSearch('子帧数 RU 数', searchKeyword, results.phySpanResult)}}" bindtap="toggleHighlight" data-param="phySpanResult">
+            <text class="detail-label">{{results.phyDirResult === 'ul' ? 'RU 数' : '子帧数'}}</text>
+            <text class="detail-value">{{results.phySpanResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phyRepResult') ? 'marked' : ''}}" wx:if="{{results.phyRepResult && filter.matchSearch('重复次数', searchKeyword, results.phyRepResult)}}" bindtap="toggleHighlight" data-param="phyRepResult">
+            <text class="detail-label">重复次数</text>
+            <text class="detail-value">×{{results.phyRepResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phyTbsResult') ? 'marked' : ''}}" wx:if="{{results.phyTbsResult && filter.matchSearch('传输块大小', searchKeyword, results.phyTbsResult)}}" bindtap="toggleHighlight" data-param="phyTbsResult">
+            <text class="detail-label">传输块大小</text>
+            <text class="detail-value">{{results.phyTbsResult}} bit</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phyCodeRateResult') ? 'marked' : ''}}" wx:if="{{results.phyCodeRateResult && filter.matchSearch('有效码率', searchKeyword, results.phyCodeRateResult)}}" bindtap="toggleHighlight" data-param="phyCodeRateResult">
+            <text class="detail-label">有效码率</text>
+            <text class="detail-value">{{results.phyCodeRateResult}}</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'phyBlerResult') ? 'marked' : ''}}" wx:if="{{results.phyBlerResult && filter.matchSearch('目标 BLER', searchKeyword, results.phyBlerResult)}}" bindtap="toggleHighlight" data-param="phyBlerResult">
+            <text class="detail-label">目标 BLER</text>
+            <text class="detail-value">{{results.phyBlerResult}} %</text>
+          </view>
+          <!-- 占用带宽 = 门限那个 SNR 的噪声带宽；与「载波带宽」不是同一个数（后者含保护带） -->
+          <view class="detail-item {{filter.includes(markedParams, 'noiseBwResult') ? 'marked' : ''}}" wx:if="{{results.noiseBwResult && filter.matchSearch('占用带宽', searchKeyword, results.noiseBwResult)}}" bindtap="toggleHighlight" data-param="noiseBwResult">
+            <text class="detail-label">占用带宽</text>
+            <text class="detail-value">{{results.noiseBwResult}} kHz</text>
+          </view>
+          <!-- 表值与含重复的有效门限分两行：NB-IoT 重复几十上百次时两者差十几 dB，
+               只报一个数会让人以为链路余量算错了 -->
+          <view class="detail-item {{filter.includes(markedParams, 'snrThresholdResult') ? 'marked' : ''}}" wx:if="{{results.snrThresholdResult && filter.matchSearch('门限 SNR 表值', searchKeyword, results.snrThresholdResult)}}" bindtap="toggleHighlight" data-param="snrThresholdResult">
+            <text class="detail-label">门限 SNR（表值）</text>
+            <text class="detail-value">{{results.snrThresholdResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'snrThresholdEffResult') ? 'marked' : ''}}" wx:if="{{results.snrThresholdEffResult && filter.matchSearch('门限 SNR 含重复', searchKeyword, results.snrThresholdEffResult)}}" bindtap="toggleHighlight" data-param="snrThresholdEffResult">
+            <text class="detail-label">门限 SNR（含重复）</text>
+            <text class="detail-value">{{results.snrThresholdEffResult}} dB</text>
+          </view>
+          <view class="detail-item {{filter.includes(markedParams, 'snrActualResult') ? 'marked' : ''}}" wx:if="{{results.snrActualResult && filter.matchSearch('SNR', searchKeyword, results.snrActualResult)}}" bindtap="toggleHighlight" data-param="snrActualResult">
+            <text class="detail-label">SNR</text>
+            <text class="detail-value">{{results.snrActualResult}} dB</text>
           </view>
           <view class="detail-item {{filter.includes(markedParams, 'marginResult') ? 'marked' : ''}}" wx:if="{{filter.matchSearch('系统余量', searchKeyword, results.marginResult)}}" bindtap="toggleHighlight" data-param="marginResult">
             <text class="detail-label">系统余量</text>

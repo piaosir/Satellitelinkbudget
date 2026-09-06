@@ -5,6 +5,7 @@ const app = getApp();
 const { formatDateTime } = require('../../utils/formatter');
 const { buildWaterfallSegments, buildLinkSummary } = require('../../utils/waterfallBuilder');
 const satsimPack = require('../../utils/satsimPack');   // 仿真平台密钥导入（与频率计划页共用同一条通道）
+const { DVB_STANDARD_OPTIONS } = require('../../utils/constants');
 
 // 翻译文本（用于导出报告 - 云函数版本已内置翻译，此处仅保留UI显示用）
 const exportTranslations = {
@@ -1901,13 +1902,19 @@ Page({
     const calcKeys = Object.keys(calcResults).filter(k => typeof calcResults[k] === 'object');
     const cr = calcKeys.length > 0 ? calcResults[calcKeys[0]] : {};
     const v = (val) => (val !== undefined && val !== null && val !== '') ? String(val) : '--';
-    const dvbLabel = lp.dvbStandard === 'DVB-S' ? 'DVB-S' : lp.dvbStandard === 'DVB-S2' ? 'DVB-S2' : lp.dvbStandard === 'DVB-S2X' ? 'DVB-S2X' : '自定义';
+    // ★ 原先是一串三元判断，只认 DVB-S / S2 / S2X 三个，其余一律报「自定义」——
+    //   DVB-RCS2 与 3GPP 一族（现在共八张表）配出来的配置，摘要里全被写成「自定义」。
+    //   改为查标准选项表，认不出才是真的自定义。
+    const dvbOpt = DVB_STANDARD_OPTIONS.find(o => o.value === lp.dvbStandard);
+    const dvbLabel = (dvbOpt && dvbOpt.value !== 'custom') ? dvbOpt.label : '自定义';
     const isForward = lp.calcMode === 'forward';
     const lastLabel = isForward ? '功放功率' : '链路余量';
     const lastValue = isForward ? (v(lp.inputPaPower) + 'W') : (v(lp.margin) + 'dB');
     const upcDisplay = lp.uplinkPowerControl === '自定义' ? '自定义(' + v(lp.upcValue) + 'dB)' : v(lp.uplinkPowerControl);
-    const noiseMode = config.noiseRatioMode || 'ebno';
-    const noiseLabel = noiseMode === 'esno' ? 'Es/N₀门限' : 'Eb/N₀门限';
+    // 门限口径优先取这条链路自己存的那一份（一份配置的多条链路口径可以不同：1 号槽 DVB-S2 的
+    // Es/N₀、2 号槽 NR-NTN 的每 RE SNR），槽里没有才回落到配置级 —— 存量配置全走回落。
+    const noiseMode = lp.noiseRatioMode || config.noiseRatioMode || 'ebno';
+    const noiseLabel = noiseMode === 'snr' ? 'SNR门限' : (noiseMode === 'esno' ? 'Es/N₀门限' : 'Eb/N₀门限');
 
     // NGSO 适配
     const isNGSO = sat.orbitType === 'NGSO';

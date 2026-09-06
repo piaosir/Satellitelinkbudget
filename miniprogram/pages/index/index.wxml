@@ -1459,18 +1459,220 @@
         </view>
       </view>
 
+      <!-- 3GPP NTN 物理层参数：选了 3GPP 一族的标准才出。
+           占用带宽 = PRB 数 × 12 × 子载波间隔（NB-IoT 上行 = 子载波数 × 子载波间隔），它就是门限那个
+           SNR 的噪声带宽 —— 没有这几项，3GPP 的门限无处安放，只能被当 Es/N₀ 硬算。
+           每一格的取值方法写在「使用帮助 → 链路预算逐项说明 / NTN 标准怎么配」两章，版面上不写字。 -->
+      <!-- 旧档提示：v3.8.11 之前的 3GPP 配置按 Es/N₀ 存的，门限表也停在旧版本。
+           不自动改（静默换掉一份存档的算法，用户无从知道结论何时变了），只在这里说明怎么对齐。 -->
+      <view class="ntn-legacy" wx:if="{{ntn.legacy}}">
+        这份配置存于 3GPP 口径修正之前：门限按 Es/N₀ 存、走的是 DVB 那条换算链，表数据也停在旧版本。
+        重新选一次上面的 MODCOD，即整条载波对齐到本版（门限改按每资源元素 SNR，占用带宽由物理层参数算）。
+        算过的历史结果不受影响。
+      </view>
+
+      <view class="ntn-block" wx:if="{{ntn.on}}">
+        <view class="ntn-head">
+          <text class="ntn-head-t">3GPP 物理层 · {{ntn.kindText}}</text>
+          <text class="ntn-head-s">{{ntn.descText}}</text>
+        </view>
+
+        <!-- ===== NR ===== -->
+        <block wx:if="{{ntn.isNr}}">
+          <view class="grid-3">
+            <view class="form-group">
+              <text class="form-label">方向</text>
+              <picker wx:if="{{!ntn.dirLocked}}" mode="selector" range="{{ntn.dirOptions}}"
+                      value="{{ntn.dirIndex}}" bindchange="onNtnDirChange">
+                <view class="form-picker">{{ntn.dirText}}</view>
+              </picker>
+              <view wx:else class="form-picker form-picker-lock">{{ntn.dirText}}</view>
+            </view>
+            <view class="form-group">
+              <text class="form-label">NTN 频段</text>
+              <picker mode="selector" range="{{ntn.bandOptions}}" range-key="label"
+                      value="{{ntn.bandIndex}}" bindchange="onNtnBandChange">
+                <view class="form-picker">{{ntn.bandOptions[ntn.bandIndex].label}}</view>
+              </picker>
+            </view>
+            <view class="form-group">
+              <text class="form-label">子载波间隔<text class="form-label-unit">(kHz)</text></text>
+              <picker mode="selector" range="{{ntn.scsOptions}}" range-key="label"
+                      value="{{ntn.scsIndex}}" bindchange="onNtnScsChange">
+                <view class="form-picker">{{ntn.scsOptions[ntn.scsIndex].label}}</view>
+              </picker>
+            </view>
+          </view>
+
+          <view class="grid-3">
+            <view class="form-group">
+              <text class="form-label">信道带宽</text>
+              <picker mode="selector" range="{{ntn.bwOptions}}" range-key="label"
+                      value="{{ntn.bwIndex}}" bindchange="onNtnBwChange">
+                <view class="form-picker">{{ntn.bwOptions[ntn.bwIndex].label}}</view>
+              </picker>
+            </view>
+            <view class="form-group">
+              <text class="form-label">PRB 数</text>
+              <input class="form-input {{focusedField === 'nRb' ? 'input-focused' : ''}}"
+                     type="digit" placeholder="25" value="{{ntn.nRb}}"
+                     data-field="nRb" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+            <view class="form-group">
+              <text class="form-label">重复次数</text>
+              <input class="form-input {{focusedField === 'nRep' ? 'input-focused' : ''}}"
+                     type="digit" placeholder="1" value="{{ntn.nRep}}"
+                     data-field="nRep" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+          </view>
+
+          <view class="grid-3" wx:if="{{ntn.isTbs}}">
+            <view class="form-group">
+              <text class="form-label">符号数</text>
+              <input class="form-input" type="digit" placeholder="12" value="{{ntn.nSymb}}"
+                     data-field="nSymb" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+            <view class="form-group">
+              <text class="form-label">DMRS<text class="form-label-unit">(RE/PRB)</text></text>
+              <input class="form-input" type="digit" placeholder="12" value="{{ntn.nDmrs}}"
+                     data-field="nDmrs" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+            <view class="form-group">
+              <text class="form-label">其他开销<text class="form-label-unit">(RE/PRB)</text></text>
+              <input class="form-input" type="digit" placeholder="0" value="{{ntn.nOh}}"
+                     data-field="nOh" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+          </view>
+
+          <view class="grid-3">
+            <view class="form-group">
+              <text class="form-label">层数</text>
+              <input class="form-input" type="digit" placeholder="1" value="{{ntn.layers}}"
+                     data-field="layers" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+            <view class="form-group">
+              <text class="form-label">合并损失<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input" type="digit" placeholder="0" value="{{ntn.combLossDb}}"
+                     data-field="combLossDb" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+            <view class="form-group">
+              <text class="form-label">速率模型</text>
+              <picker mode="selector" range="{{ntn.rateModelOptions}}" range-key="label"
+                      value="{{ntn.rateModelIndex}}" bindchange="onNtnRateModelChange">
+                <view class="form-picker">{{ntn.rateModelOptions[ntn.rateModelIndex].label}}</view>
+              </picker>
+            </view>
+          </view>
+        </block>
+
+        <!-- ===== NB-IoT ===== -->
+        <block wx:else>
+          <view class="grid-3">
+            <view class="form-group">
+              <text class="form-label">方向</text>
+              <view class="form-picker form-picker-lock">{{ntn.dirText}}</view>
+            </view>
+            <view class="form-group">
+              <text class="form-label">子载波间隔<text class="form-label-unit">(kHz)</text></text>
+              <picker wx:if="{{!ntn.scsLocked}}" mode="selector" range="{{ntn.scsOptions}}" range-key="label"
+                      value="{{ntn.scsIndex}}" bindchange="onNtnScsChange">
+                <view class="form-picker">{{ntn.scsOptions[ntn.scsIndex].label}}</view>
+              </picker>
+              <view wx:else class="form-picker form-picker-lock">{{ntn.scsOptions[ntn.scsIndex].label}}</view>
+            </view>
+            <view class="form-group">
+              <text class="form-label">子载波数</text>
+              <picker wx:if="{{!ntn.toneLocked}}" mode="selector" range="{{ntn.toneOptions}}" range-key="label"
+                      value="{{ntn.toneIndex}}" bindchange="onNtnToneChange">
+                <view class="form-picker">{{ntn.toneOptions[ntn.toneIndex].label}}</view>
+              </picker>
+              <view wx:else class="form-picker form-picker-lock">{{ntn.toneOptions[ntn.toneIndex].label}}</view>
+            </view>
+          </view>
+
+          <view class="grid-3">
+            <view class="form-group" wx:if="{{ntn.opModeOn}}">
+              <text class="form-label">部署模式</text>
+              <picker mode="selector" range="{{ntn.opModeOptions}}" range-key="label"
+                      value="{{ntn.opModeIndex}}" bindchange="onNtnOpModeChange">
+                <view class="form-picker">{{ntn.opModeOptions[ntn.opModeIndex].label}}</view>
+              </picker>
+            </view>
+            <view class="form-group">
+              <text class="form-label">{{ntn.spanLabel}}</text>
+              <picker mode="selector" range="{{ntn.spanOptions}}" range-key="label"
+                      value="{{ntn.spanIndex}}" bindchange="onNtnSpanChange">
+                <view class="form-picker">{{ntn.spanOptions[ntn.spanIndex].label}}</view>
+              </picker>
+            </view>
+            <view class="form-group">
+              <text class="form-label">重复次数</text>
+              <input class="form-input {{focusedField === 'nRep' ? 'input-focused' : ''}}"
+                     type="digit" placeholder="1" value="{{ntn.nRep}}"
+                     data-field="nRep" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+            <view class="form-group" wx:if="{{!ntn.opModeOn}}">
+              <text class="form-label">合并损失<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input" type="digit" placeholder="0" value="{{ntn.combLossDb}}"
+                     data-field="combLossDb" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+          </view>
+
+          <view class="grid-3" wx:if="{{ntn.opModeOn}}">
+            <view class="form-group">
+              <text class="form-label">合并损失<text class="form-label-unit">(dB)</text></text>
+              <input class="form-input" type="digit" placeholder="0" value="{{ntn.combLossDb}}"
+                     data-field="combLossDb" data-focus-area="carrier" adjust-position="{{true}}" cursor-spacing="120"
+                     bindinput="onNtnNumInput" bindfocus="onInputFocus"
+                     selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
+            </view>
+          </view>
+        </block>
+
+        <!-- 只读读数：占用带宽就是门限那个 SNR 的噪声带宽；频谱效率按信道带宽算，与计算结果同口径 -->
+        <view class="ntn-out">
+          <view class="ntn-out-i"><text class="ntn-out-l">占用带宽</text><text class="ntn-out-v">{{ntn.out.bOcc}} kHz</text></view>
+          <view class="ntn-out-i"><text class="ntn-out-l">信道带宽</text><text class="ntn-out-v">{{ntn.out.bCh}} kHz</text></view>
+          <view class="ntn-out-i"><text class="ntn-out-l">信息速率</text><text class="ntn-out-v">{{ntn.out.rate}} kbps</text></view>
+          <view class="ntn-out-i"><text class="ntn-out-l">TBS</text><text class="ntn-out-v">{{ntn.out.tbs}} bit</text></view>
+          <view class="ntn-out-i"><text class="ntn-out-l">频谱效率</text><text class="ntn-out-v">{{ntn.out.se}} bps/Hz</text></view>
+        </view>
+        <view class="ntn-err" wx:if="{{ntn.out.error}}">{{ntn.out.error}}</view>
+      </view>
+
+
       <!-- 第一行：核心参数 4列 -->
       <view class="grid-4">
         <view class="form-group">
           <view class="form-label-row">
             <text class="form-label">信息速率<text class="form-label-unit">(kbps)</text></text>
           </view>
-          <input class="form-input {{focusedField === 'infoRate' ? 'input-focused' : ''}}" 
+          <!-- 3GPP 行：信息速率由 TBS ÷ 时长算出（见上方物理层面板），填进来也不参与计算，故置灰只读 -->
+          <input class="form-input {{ntn.on ? 'input-readonly' : ''}} {{focusedField === 'infoRate' ? 'input-focused' : ''}}" 
                  type="text"
                  placeholder="2048" 
                  value="{{linkParams.infoRate}}"
                  data-field="infoRate"
                data-focus-area="carrier"
+               disabled="{{ntn.on}}"
                adjust-position="{{true}}"
                cursor-spacing="120"
                  bindinput="onLinkParamChange" bindfocus="onInputFocus" selection-start="{{inputSelectAll ? 0 : -1}}" selection-end="{{inputSelectAll ? 999 : -1}}" />
@@ -1509,7 +1711,7 @@
 
         <view class="form-group">
           <view class="form-label-row">
-            <text class="form-label">{{noiseRatioMode === 'ebno' ? 'Eb/N₀' : 'Es/N₀'}}门限<text class="form-label-unit">(dB)</text></text>
+            <text class="form-label">{{noiseRatioMode === 'snr' ? 'SNR' : (noiseRatioMode === 'ebno' ? 'Eb/N₀' : 'Es/N₀')}}门限<text class="form-label-unit">(dB)</text></text>
             <view class="unit-toggle" bindtap="toggleEbnoEsno"><view class="unit-toggle-icon"></view></view>
           </view>
           <input class="form-input {{focusedField === 'ebno' ? 'input-focused' : ''}}" 

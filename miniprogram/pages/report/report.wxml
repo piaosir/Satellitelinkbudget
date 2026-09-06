@@ -49,7 +49,7 @@
           <view class="param-entry"><text class="p-label">{{t.allocBandwidth}}</text><text class="p-value">{{results.allocBandwidthResult}}<text class="p-unit"> kHz</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.uplinkFreq}}</text><text class="p-value">{{results.uplinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
           <view class="param-entry"><text class="p-label">{{t.downlinkFreq}}</text><text class="p-value">{{results.downlinkFrequencyResult}}<text class="p-unit"> GHz</text></text></view>
-          <view class="param-entry"><text class="p-label">{{noiseRatioLabel}} {{t.threshold}}</text><text class="p-value">{{noiseRatioLabel === 'Es/N₀' ? results.esnoResult : results.ebnoResult}}<text class="p-unit"> dB</text></text></view>
+          <view class="param-entry"><text class="p-label">{{noiseRatioLabel}} {{t.threshold}}</text><text class="p-value">{{noiseRatioLabel === 'SNR' ? results.snrThresholdEffResult : (noiseRatioLabel === 'Es/N₀' ? results.esnoResult : results.ebnoResult)}}<text class="p-unit"> dB</text></text></view>
         </view>
       </view>
 
