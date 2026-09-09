@@ -1,5 +1,6 @@
 // settings.js
 const satsimBox = require('../../utils/satsimBox.js');
+const satsimApp = require('../../utils/satsimApp.js');   // 平台安装包固定下载地址 + 最新版本
 
 // 「清除缓存」要保住的键：认证码是【长期收件地址】，平台侧记着它往里投。
 // 一旦被清掉又生成新的，所有已绑定的平台就都成了死地址 —— 而平台侧毫不知情，
@@ -13,6 +14,9 @@ const KEEP_KEYS = ['satsimCh', 'satsimPlatforms', 'satsimChSyncedV2', 'satsimChO
 
 Page({
   data: {
+    downloadUrl: satsimApp.DOWNLOAD_URL,
+    latestText: '',      // 「最新版本 v1.4.6 · 218 MB · 2026-09-07」；取不到就空着不显示
+    devQrOpen: false,    // 开发者微信二维码弹层（「关于系统 · 开发者」行点开）
     ch: '',
     chFmt: '',
     otherFmt: '',        // 云端记着的另一个码（本机与云端分裂时才有）
@@ -21,8 +25,22 @@ Page({
     syncMsg: ''
   },
 
-  onLoad() { this.refreshBinding(); },
+  onLoad() { this.refreshBinding(); this.loadLatest(); },
   onShow() { this.setData({ platforms: satsimBox.knownPlatforms() }); },
+
+  // 平台最新版本（先缓存后云函数；失败静默，只是不显示那一行）
+  async loadLatest() {
+    const v = await satsimApp.latest();
+    const t = satsimApp.latestText(v);
+    if (t) this.setData({ latestText: t });
+  },
+
+  copyDownload() {
+    wx.setClipboardData({
+      data: this.data.downloadUrl,
+      success: () => wx.showToast({ title: '已复制，在电脑浏览器打开', icon: 'none', duration: 2200 })
+    });
+  },
 
   async refreshBinding() {
     // ensureCh：本地 → 云端 → 现生成。云端那一步保证换手机 / 清过缓存后拿回的是【同一个码】
@@ -152,11 +170,9 @@ Page({
     wx.navigateTo({ url: '/pages/help/help' + (ch ? '?ch=' + ch : '') });
   },
 
-  // 意见反馈
-  feedback() {
-    wx.showToast({
-      title: '功能开发中',
-      icon: 'none'
-    });
-  }
+  // 开发者微信二维码弹层。加好友靠 image 的长按系统菜单（「打开名片」），这里只管开关。
+  // 「客服」「意见反馈」两个按钮走 button open-type="contact"（小程序客服），不经 JS。
+  showDevQr() { this.setData({ devQrOpen: true }); },
+  hideDevQr() { this.setData({ devQrOpen: false }); },
+  noop() {}
 });

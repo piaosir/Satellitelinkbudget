@@ -103,6 +103,51 @@
   border-left: 3px solid #1a1a1a;
 }
 
+/* —— 卫星仿真平台：固定下载地址 —— */
+
+.dl-intro {
+  display: block;
+  padding: 0 0 8rpx;
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: #4a4a4a;
+}
+
+.dl-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 20rpx 16rpx 18rpx;
+  margin: 8rpx 0 4rpx;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6rpx;
+}
+
+.dl-box:active {
+  background: #f0f0f0;
+}
+
+/* 地址用等宽：与卡片的衬线规则（.bind-card text，特指度 0,1,1）打架，故加一层类压过去 */
+.bind-card .dl-url {
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: #1a1a1a;
+  word-break: break-all;
+  font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.dl-copy {
+  font-size: 20rpx;
+  color: #6a6a6a;
+}
+
+.dl-meta {
+  padding: 12rpx 0 0;
+  font-size: 22rpx;
+  color: #6a6a6a;
+}
+
 .action-label.danger {
   color: #d9534f;
 }
@@ -133,6 +178,47 @@
   color: #1a1a1a;
   font-weight: 600;
   font-family: 'Courier New', 'Consolas', monospace;
+}
+
+/* 「开发者」行：值位做成黑色细描边按钮 —— 白底、1px 墨线、4rpx 圆角（与 .btn-secondary 同角，线色取墨色而非
+   浅灰，浅灰在这张卡上像个禁用的输入框），字用本卡「值」的 Courier 粗体，按下整颗反白（墨底白字）。
+   实心黑块试过一版嫌重、已弃。只有按钮可点：按钮长什么样就点哪里，标签不接事件。
+   行本身补 align-items: center —— .about-item 没写对齐（默认 stretch），标签会贴顶、与按钮不齐 */
+.about-item-dev {
+  align-items: center;
+  padding: 8rpx 0;
+}
+
+.dev-btn {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  height: 52rpx;
+  padding: 0 18rpx 0 22rpx;
+  background: #ffffff;
+  border: 1px solid #1a1a1a;
+  border-radius: 4rpx;
+}
+
+.dev-btn-t,
+.dev-btn-i {
+  font-size: 24rpx;
+  line-height: 1;
+  color: #1a1a1a;
+}
+
+.dev-btn-t {
+  font-weight: 600;
+  font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.dev-btn-hover {
+  background: #1a1a1a;
+}
+
+.dev-btn-hover .dev-btn-t,
+.dev-btn-hover .dev-btn-i {
+  color: #ffffff;
 }
 
 .action-list {
@@ -166,5 +252,81 @@
 .action-icon {
   font-size: 24rpx;
   color: #6a6a6a;
+}
+
+/* 小程序客服按钮：open-type="contact" 只能挂在 button 上，把 button 的默认皮（灰底、圆角、左右 14px 内边距、
+   ::after 描边、居中）全部剥掉，与 .action-item 同一行式。选择器带元素名压过 button 的 UA 样式 */
+button.action-item {
+  width: 100%;
+  margin: 0;
+  padding: 20rpx 0;
+  background: transparent;
+  border-radius: 0;
+  line-height: inherit;
+  text-align: left;
+  font-size: 24rpx;
+  font-weight: normal;
+  color: #1a1a1a;
+}
+
+button.action-item::after {
+  border: none;
+}
+
+.action-item-hover {
+  background: #fafafa;
+}
+
+/* —— 开发者微信二维码弹层 —— */
+
+.qr-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.qr-card {
+  width: 520rpx;
+  padding: 32rpx 32rpx 24rpx;
+  background: #ffffff;
+  border-radius: 12rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.qr-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: "Times New Roman", "Songti SC", "SimSun", serif;
+}
+
+.qr-img {
+  width: 420rpx;
+  display: block;
+}
+
+.qr-hint {
+  font-size: 22rpx;
+  color: #6a6a6a;
+}
+
+.qr-close {
+  margin-top: 8rpx;
+  padding: 12rpx 40rpx;
+  font-size: 24rpx;
+  color: #1a1a1a;
+  border: 1px solid #e0e0e0;
+  border-radius: 6rpx;
+}
+
+.qr-close:active {
+  background: #fafafa;
 }
 

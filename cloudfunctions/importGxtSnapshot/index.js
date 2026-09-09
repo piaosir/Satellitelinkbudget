@@ -22,6 +22,21 @@ cloud.init({ env: 'cloud1-8gjv5ekx41d6fb76' });   // 与小程序 app.js 的 wx.
 // 仿真平台约定的下载基址：腾讯云 COS 桶 update-1385987144 / ap-beijing 的 updates/gxt/ 前缀
 // （复用发布用的 updates/ 前缀——本就匿名可读，故无需额外配置桶策略）
 const COS_BASE = 'https://update-1385987144.cos.ap-beijing.myqcloud.com/updates/gxt/';
+// 仿真平台安装包所在目录：自动更新清单 latest.yml 就在这里（同样匿名公读）
+const UPDATES_BASE = 'https://update-1385987144.cos.ap-beijing.myqcloud.com/updates/';
+
+// 仿真平台当前发布版本：读 electron-updater 的 latest.yml。只取 version / path / size / releaseDate
+// 四个字段，正则逐行抠、不引 yaml 依赖。小程序「仿真平台」页拿来在固定下载地址旁标版本与大小。
+async function latestRelease() {
+  let text;
+  try { text = await httpsGetText(UPDATES_BASE + 'latest.yml'); }
+  catch (e) { return { success: false, errMsg: '读取版本清单失败：' + e.message }; }
+  const pick = (k) => { const m = new RegExp('^' + k + ':\\s*(.+?)\\s*$', 'm').exec(text); return m ? m[1].replace(/^['"]|['"]$/g, '') : ''; };
+  const size = /^\s+size:\s*(\d+)/m.exec(text);
+  const version = pick('version');
+  if (!version) return { success: false, errMsg: '版本清单格式不正确' };
+  return { success: true, data: { version: version, path: pick('path'), size: size ? Number(size[1]) : 0, releaseDate: pick('releaseDate') } };
+}
 
 // 密钥归一：去分隔符、大写。密钥字母表为 A-Z2-9（去 I L O 0 1），长度 8
 function normalizeKey(raw) {
@@ -143,6 +158,7 @@ exports.main = async (event) => {
   const act = event && event.action;
   if (act === 'box') return await boxList(event.ch);
   if (act === 'boxMsg') return await boxMsg(event.ch, event.pid, event.mid);
+  if (act === 'latest') return await latestRelease();
 
   const key = normalizeKey(event && event.key);
   if (!/^[A-Z0-9]{8}$/.test(key)) return { success: false, errMsg: '密钥格式不正确（应为 8 位字母数字）' };

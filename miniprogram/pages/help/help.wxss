@@ -277,6 +277,41 @@
   color: #4a4a4a;
 }
 
+/* 链接块：标签 + 地址 + 一句怎么用；整块可点（复制） */
+.hp-link {
+  display: flex;
+  flex-direction: column;
+  gap: 4rpx;
+  margin: 12rpx 0;
+  padding: 14rpx 16rpx;
+  background: #fafafa;
+  border: 1px solid #e0e0e0;
+  border-radius: 6rpx;
+}
+
+.hp-link:active {
+  background: #f0f0f0;
+}
+
+.hp-link-l {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.hp-link-v {
+  font-size: 21rpx;
+  line-height: 1.5;
+  color: #1a1a1a;
+  word-break: break-all;
+  font-family: 'Courier New', 'Consolas', monospace;
+}
+
+.hp-link-h {
+  font-size: 20rpx;
+  color: #6a6a6a;
+}
+
 /* —— 页脚 —— */
 .hp-foot {
   padding: 36rpx 0 0;

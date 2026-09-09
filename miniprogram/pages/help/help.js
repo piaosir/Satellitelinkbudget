@@ -57,6 +57,16 @@ Page({
     });
   },
 
+  // 链接块（t:'link'）：小程序打不开外部网页，点一下复制到剪贴板，由用户在电脑浏览器里打开
+  copyLink(e) {
+    const v = e && e.currentTarget && e.currentTarget.dataset ? e.currentTarget.dataset.v : '';
+    if (!v) return;
+    wx.setClipboardData({
+      data: String(v),
+      success: () => wx.showToast({ title: '已复制，在电脑浏览器打开', icon: 'none', duration: 2200 })
+    });
+  },
+
   expandAll() {
     const next = {};
     const open = !this.data.chapters.every((c) => c.open);   // 有一章没开就是「全部展开」，全开了才是「全部收起」

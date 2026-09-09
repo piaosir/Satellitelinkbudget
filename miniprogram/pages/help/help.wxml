@@ -3,7 +3,7 @@
 
   <view class="hp-head">
     <text class="hp-title">使用帮助</text>
-    <text class="hp-sub">卫星链路计算与仿真系统 · v3.8.11</text>
+    <text class="hp-sub">卫星链路计算与仿真系统 · v3.8.12</text>
     <text class="hp-note-src">摘自《软件功能与使用指南》，并补充「输入项逐项说明」「3GPP NTN 标准怎么配」「仿真平台联动」三章</text>
   </view>
 
@@ -32,6 +32,13 @@
         <text wx:if="{{b.t === 'h'}}" class="hp-h">{{b.v}}</text>
 
         <text wx:elif="{{b.t === 'p'}}" class="hp-p">{{b.v}}</text>
+
+        <!-- 链接块：小程序打不开外部网页，整块可点 = 复制地址 -->
+        <view wx:elif="{{b.t === 'link'}}" class="hp-link" bindtap="copyLink" data-v="{{b.v}}">
+          <text class="hp-link-l">{{b.label}}</text>
+          <text class="hp-link-v">{{b.v}}</text>
+          <text class="hp-link-h" wx:if="{{b.hint}}">{{b.hint}}</text>
+        </view>
 
         <view wx:elif="{{b.t === 'ul'}}" class="hp-list">
           <view class="hp-li" wx:for="{{b.v}}" wx:key="index" wx:for-item="li">
@@ -75,6 +82,6 @@
   </view>
 
   <view class="hp-foot">
-    <text class="hp-foot-t">卫星链路计算与仿真系统 · v3.8.11</text>
+    <text class="hp-foot-t">卫星链路计算与仿真系统 · v3.8.12</text>
   </view>
 </view>

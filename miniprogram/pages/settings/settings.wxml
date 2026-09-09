@@ -1,5 +1,24 @@
 <!--settings.wxml-->
 <view class="container">
+  <!-- 卫星仿真平台（Windows 桌面端）：固定下载地址。小程序打不开外部网页，只能复制到电脑浏览器里开；
+       版本 / 大小那一行来自云函数代拉的 latest.yml，旧云函数或没网时不出现（见 utils/satsimApp.js） -->
+  <view class="card bind-card">
+    <view class="card-title">卫星仿真平台</view>
+    <view class="dl-intro">Windows 桌面端 · GSO / NGSO 链路预算、干扰分析、频率计划、覆盖与星座仿真。算好的链路配置、频率计划、覆盖图与星座可发送到本小程序。</view>
+    <view class="dl-box" bindtap="copyDownload">
+      <text class="dl-url">{{ downloadUrl }}</text>
+      <text class="dl-copy">点击复制下载地址 · 在电脑浏览器打开</text>
+    </view>
+    <view class="dl-meta" wx:if="{{ latestText }}">{{ latestText }}</view>
+    <!-- 客服：微信官方的小程序客服会话（button open-type="contact"），与「帮助与反馈」里的「意见反馈」是同一个会话 -->
+    <view class="action-list">
+      <button class="action-item" open-type="contact" session-from="satsim" hover-class="action-item-hover">
+        <text class="action-label">客服</text>
+        <text class="action-icon">→</text>
+      </button>
+    </view>
+  </view>
+
   <!-- 仿真平台绑定：本机的认证码 = 长期收件地址，给电脑上的仿真平台记下来。
        bind-card 只为把整块换成衬线字（见 settings.wxss 开头），不带任何布局含义 -->
   <view class="card bind-card">
@@ -50,11 +69,17 @@
       </view>
       <view class="about-item">
         <text class="label">版本号</text>
-        <text class="value">v3.8.11</text>
+        <text class="value">v3.8.12</text>
       </view>
-      <view class="about-item">
+      <!-- 「开发者」行：右侧是一颗黑色细描边按钮（白底、1px 墨线、4rpx 圆角、Courier 粗体，与本卡「值」同字），
+           点开开发者微信二维码弹层。面上不写「加微信」三个字（2026-09-10 用户定）；同日要求做成明显的按钮样式，
+           实心黑块试过一版嫌重、已弃。只有按钮可点、标签不接事件 -->
+      <view class="about-item about-item-dev">
         <text class="label">开发者</text>
-        <text class="value">ppx</text>
+        <view class="dev-btn" bindtap="showDevQr" hover-class="dev-btn-hover">
+          <text class="dev-btn-t">ppx</text>
+          <text class="dev-btn-i">→</text>
+        </view>
       </view>
     </view>
   </view>
@@ -91,10 +116,24 @@
         <text class="action-label">3GPP NTN 标准怎么配</text>
         <text class="action-icon">→</text>
       </view>
-      <view class="action-item" bindtap="feedback">
+      <!-- 小程序客服：微信官方通道，点一下进入与开发者的会话（开发者在公众平台「客服」绑定客服人员后
+           用网页版 mpkf.weixin.qq.com 或「客服小助手」小程序回复）。必须是 button + open-type="contact"，
+           样式重置成与 action-item 同一行式，见 settings.wxss 的 button.action-item -->
+      <button class="action-item" open-type="contact" session-from="settings" hover-class="action-item-hover">
         <text class="action-label">意见反馈</text>
         <text class="action-icon">→</text>
-      </view>
+      </button>
+    </view>
+  </view>
+
+  <!-- 开发者微信二维码：从「关于系统 · 开发者」行点开。长按图片弹出系统菜单，其中「打开名片」直达添加好友
+       （image 的 show-menu-by-longpress，基础库 ≥ 2.7.0）。图片文件 images/dev-wechat-qr.png -->
+  <view class="qr-mask" wx:if="{{ devQrOpen }}" bindtap="hideDevQr">
+    <view class="qr-card" catchtap="noop">
+      <text class="qr-title">开发者</text>
+      <image class="qr-img" src="/images/dev-wechat-qr.png" mode="widthFix" show-menu-by-longpress="{{ true }}" />
+      <text class="qr-hint">长按二维码 → 打开名片</text>
+      <view class="qr-close" bindtap="hideDevQr">关闭</view>
     </view>
   </view>
 </view>

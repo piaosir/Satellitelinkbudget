@@ -128,8 +128,8 @@
           <view class="option-icon icon-satsim-bind"></view>
         </view>
         <view class="visual-option-content">
-          <text class="visual-option-title">仿真平台绑定</text>
-          <text class="visual-option-desc">绑定电脑上的仿真平台，发来的内容自动同步</text>
+          <text class="visual-option-title">仿真平台</text>
+          <text class="visual-option-desc">Windows 桌面端下载；绑定后发来的内容自动同步</text>
         </view>
         <view class="visual-option-arrow">›</view>
       </view>
