@@ -69,7 +69,7 @@
         </view>
         <view class="visual-option-content">
           <text class="visual-option-title">卫星覆盖</text>
-          <text class="visual-option-desc">查看当前卫星的覆盖范围</text>
+          <text class="visual-option-desc">覆盖范围、仰角线与航行 / 飞行航迹</text>
         </view>
         <view class="visual-option-arrow">›</view>
       </view>

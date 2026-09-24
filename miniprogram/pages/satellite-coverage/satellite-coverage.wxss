@@ -385,6 +385,351 @@ page {
 .import-row {
   margin-bottom: 10px;
 }
+
+/* ==================== 航迹弹窗 ==================== */
+.traj-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* ＋航行 / ＋飞行 / ＋密钥导入 */
+.traj-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.traj-scroll {
+  max-height: 48vh;
+}
+/* 一行 = 勾选框 + 航迹头图标（与地图上同一枚）+ 名称 / 线样 + 读数 + 三个操作 */
+.traj-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 2px;
+  border-bottom: 1px solid #f1f2f4;
+}
+.traj-row:last-child {
+  border-bottom: 0;
+}
+.traj-chk {
+  position: relative;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 3px;
+  background: #ffffff;
+}
+.traj-chk.on {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+.traj-chk.on::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.traj-glyph {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+}
+.traj-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.traj-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.traj-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 手机上手绘的那几条（与「自定义」卫星同款小标） */
+.traj-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #2563eb;
+  background: #eff6ff;
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+/* 正在描绘的那一行 */
+.traj-row.editing {
+  background: #f5f9ff;
+}
+.traj-op.on {
+  font-weight: 600;
+}
+.traj-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* 线样：航迹线本色，虚线航迹画成虚线 */
+.traj-swatch {
+  flex-shrink: 0;
+  width: 18px;
+  height: 0;
+  border-top-width: 3px;
+  border-top-style: solid;
+  border-radius: 1px;
+}
+.traj-swatch.dash {
+  border-top-style: dashed;
+}
+.traj-sub {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+/* 四个操作两行两列（定宽格，「编辑中」三个字也放得下） */
+.traj-ops {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  width: 88px;
+}
+.traj-ops .traj-op {
+  width: 44px;
+  padding: 3px 0;
+  text-align: center;
+  box-sizing: border-box;
+}
+.traj-op {
+  padding: 4px 6px;
+  font-size: 12px;
+  color: #2563eb;
+}
+.traj-op.del {
+  color: #ef4444;
+}
+/* 未显示的行压暗但仍可读：列表是「收到过哪些航迹」的全貌，不只列显示中的 */
+.traj-row.off .traj-glyph,
+.traj-row.off .traj-name,
+.traj-row.off .traj-swatch,
+.traj-row.off .traj-sub {
+  opacity: 0.45;
+}
+
+/* ==================== 手绘航迹 ==================== */
+/* 手绘层：盖在地图上、压在横幅 / 底部按钮 / 悬浮栏之下，透明，只接手指 */
+.tj-draw-layer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 90;
+  background: transparent;
+}
+/* 描绘横幅：与悬浮按钮同一套深色半透明底 */
+.tj-banner {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-sizing: border-box;
+}
+.tj-banner-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.tj-banner-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tj-banner-sub {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.72);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.tj-banner-ops {
+  display: flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+.tj-bop {
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.tj-bop:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+.tj-bop.on {
+  background: rgba(37, 99, 235, 0.9);
+  border-color: rgba(37, 99, 235, 0.9);
+}
+.tj-bop.off {
+  opacity: 0.4;
+}
+.tj-bop.del {
+  color: #fca5a5;
+  border-color: rgba(252, 165, 165, 0.5);
+}
+.tj-bop.end {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+/* 「航点」面板 */
+.tj-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.tj-label {
+  flex-shrink: 0;
+  width: 32px;
+  font-size: 12px;
+  color: #6b7280;
+}
+/* 复合选择器：.elevation-input-single 在本文件后面才声明（width:100%、height:40px），单类名压不过它 */
+.elevation-input-single.tj-input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 36px;
+}
+.tj-colors {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.tj-color {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+.tj-color.on {
+  box-shadow: 0 0 0 2px #ffffff, 0 0 0 3.5px #1f2937;
+}
+.tj-color-def {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+  border-radius: 11px;
+}
+.tj-color-def.on {
+  color: #2563eb;
+  border-color: #2563eb;
+}
+.tj-wp-title {
+  display: block;
+  width: auto;
+  margin-bottom: 4px;
+}
+.tj-wp-scroll {
+  max-height: 34vh;
+}
+.tj-wp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  border-bottom: 1px solid #f1f2f4;
+  font-variant-numeric: tabular-nums;
+}
+.tj-wp-row.sel {
+  background: #eff6ff;
+}
+.tj-wp-no {
+  flex-shrink: 0;
+  width: 28px;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: right;
+}
+.tj-wp-ll {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  color: #1f2937;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tj-wp-km {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #6b7280;
+}
+.tj-wp-gap {
+  padding: 6px 0;
+  font-size: 11px;
+  color: #9ca3af;
+  text-align: center;
+  border-bottom: 1px solid #f1f2f4;
+}
+.tj-wp-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+.coverage-btn.tj-wp-addbtn {
+  flex: 0 0 64px;
+  height: 36px;
+}
 .import-btn {
   display: inline-block;
   padding: 6px 14px;

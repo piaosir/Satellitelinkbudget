@@ -2190,12 +2190,14 @@ Page({
     let cr = { total: 0, cloud: 0, local: 0 };
     let pr = { total: 0, added: 0, replaced: 0 };
     let sr = { total: 0, failed: 0 };
+    let tr = { total: 0, failed: 0 };
     try {
       cr = await satsimPack.importConfigs(pack);
       pr = satsimPack.importPlans(pack);
       // 包里有什么就落什么（见 utils/satsimPack.js 头）：这里是「什么都能导」的那个入口，
-      // 只挑配置与计划的话，同一个密钥里的星座会被静默丢掉，而清单上明明列着。
+      // 只挑配置与计划的话，同一个密钥里的星座 / 航迹会被静默丢掉，而清单上明明列着。
       sr = satsimPack.importSatSets(pack);
+      tr = satsimPack.importTrajs(pack);
     } catch (e) {
       wx.hideLoading();
       wx.showModal({ title: '导入失败', content: (e && e.message) || '未知错误', showCancel: false });
@@ -2207,11 +2209,13 @@ Page({
     if (cr.total) parts.push('配置 ' + cr.total + ' 份' + (cr.local ? '（' + cr.local + ' 份存本地）' : ''));
     if (pr.total) parts.push('频率计划 ' + pr.total + ' 份' + (pr.replaced ? '（覆盖 ' + pr.replaced + '）' : ''));
     if (sr.total) parts.push('星座 ' + (sr.total - sr.failed) + ' 份' + (sr.failed ? '（' + sr.failed + ' 份存不下）' : ''));
+    if (tr.total) parts.push('航迹 ' + (tr.total - tr.failed) + ' 条' + (tr.failed ? '（' + tr.failed + ' 条未能导入）' : ''));
     wx.showModal({
       title: '已导入',
       content: (parts.join('，') || '包里没有可导入的内容')
         + (pr.total ? '\n频率计划在「工具栏 → 频率计划」查看。' : '')
         + (sr.total ? '\n星座在「工具栏 → 星座地图」查看。' : '')
+        + (tr.total ? '\n航迹在「工具栏 → 卫星覆盖 → 航迹」查看。' : '')
         + (cr.total ? '\n配置里的计算结果为平台计算值' + (pack.from ? '（' + pack.from + '）' : '') + '，本地重算后会覆盖。' : ''),
       showCancel: false,
       success: () => this.loadConfigs()

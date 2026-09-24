@@ -118,6 +118,8 @@ Page({
     if (r.cfg) parts.push(r.cfg + ' 份链路配置');
     if (r.plan) parts.push(r.plan + ' 份频率计划');
     if (r.gxt) parts.push(r.gxt + ' 份覆盖快照');
+    if (r.set) parts.push(r.set + ' 份星座');
+    if (r.traj) parts.push(r.traj + ' 条航迹');
     let msg = parts.length ? '已同步 ' + parts.join(' · ') : '';
     if (r.left) msg += (msg ? '，' : '') + '还有 ' + r.left + ' 件待同步';
     if (r.failed) msg += (msg ? '，' : '') + r.failed + ' 件失败';

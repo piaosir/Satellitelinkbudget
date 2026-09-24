@@ -2,6 +2,19 @@
 // 卫星覆盖图页面 - 使用原生map组件展示卫星覆盖范围
 
 const app = getApp();
+const satsimPack = require('../../utils/satsimPack.js');
+// 航迹层（仿真平台发来的航行 / 飞行航迹）：几何与 marker 在 trajLayer，图标现画在 tjIcon。
+// 与覆盖图、仰角线、搜索标记各走各的数组（tjLines / tjMarkers），在 wxml 里用 utils.cat 拼给 map ——
+// 本页那一串按颜色 / id 段筛 polylines、markers 的老逻辑（清除、换星、存取缓存）一处都碰不到它。
+const trajLayer = require('./trajLayer.js');
+const tjIcon = require('./tjIcon.js');
+// 手绘航迹（见「手绘航迹」一节）
+const TJ_DRAW_MIN2 = 14 * 14;   // 「手绘」按住拖动：屏上每走 14 px 落一个航点（平台 POLY_DRAW_MIN2 同值）
+const TJ_TAP_GUARD = 300;       // 点了航点 / 气泡 / 搜索标记之后这么久（ms）里的地图 tap 不落点（同一下点击的第二个事件）
+const TJ_TOUCH_FRESH = 1500;    // 点在地名上（poitap）：按下后这么久（ms）以内，按下处的屏幕点才算这一下的落点
+const TJ_PROJ_WAIT = 600;       // iOS 原生换算（fromScreenLocation）等这么久（ms）还没回齐就退回 getRegion
+const TJ_UNDO_MAX = 40;         // 「撤销」能退的步数
+const TJ_SHEET_ALL = 400;       // 「航点」面板逐行列出的上限：再多只列两头
 // 旧内置卫星目录 coverageIndex.js 已切断：覆盖数据唯一来源为「密钥导入」的波束快照。
 // 波束逐条持久化在本地缓存（gxtBeam_<id> + 索引 gxtBeamIds），onLoad 时 _loadImportedBeams() 读回，
 // 当前卫星+类型下的波束由 _beamsForCurrent()/refreshBeamList() 现算，不再有独立的目录索引。
@@ -151,11 +164,32 @@ Page({
 
     // 密钥导入 → 波束（数据唯一来源）
     showImportPopup: false,    // 密钥导入弹窗
+    importMode: 'beam',        // 弹窗的来路：'beam' 波束面板 /「traj」航迹面板（只影响标题与波束名那一格）
     importKeyInput: '',        // 密钥输入框（归一后的 8 位，无分隔符）
     otpCells: [],              // 8 位分格渲染单元（含中间只读“-”分隔）
     importKeyFocus: false,     // 分格输入是否聚焦（控制光标/高亮）
     importBeamName: '',        // 导入时可填的波束名
-    importing: false           // 导入进行中
+    importing: false,          // 导入进行中
+
+    // 航迹层（仿真平台发来的航行 / 飞行航迹）
+    tjLines: [],               // 航迹线（wxml 里拼在 polylines 之后，压在覆盖线之上）
+    tjMarkers: [],             // 航点圆点 / 航迹头图标（id 从 trajLayer.ID_BASE 起）
+    showTrajPopup: false,      // 航迹面板
+    trajRows: [],              // 面板列表行 { id, name, sub, on, color, dash, icon, local, editing }
+    trajOn: 0,                 // 显示中的条数（底部「航迹」按钮据此高亮）
+    trajAllOn: false,
+
+    // 手绘航迹（平台「标记 → 轨迹」的描绘态搬到手机上：点地图逐点加 / 「手绘」按住拖动连续加）
+    tjEdit: null,              // 描绘横幅 { id, title, sub, sel, canUndo }；null = 不在描绘
+    tjFree: false,             // 「手绘」开着：手绘层盖住地图接手指（地图此时不能拖动）
+    tjLive: [],                // 手指还按着的那一笔（只这一截随手重画，收笔并进航迹、清空）
+    showTjEditPopup: false,    // 「航点」面板（平台侧栏的航迹卡：名称 / 颜色 / 航点列表 / 按经纬度加点）
+    tjSheet: null,             // 面板内容 { name, n, color, rows:[{ k, i, no, ll, km } | { k, gap }] }
+    tjWpLat: '',
+    tjWpLon: '',
+    tjWpInto: '',              // 航点列表滚到哪一行（加点后滚到末尾）
+    // 逐条颜色（平台航迹卡上那枚取色块；手机上给一排常用色）。前两枚是平台航行 / 飞行的出厂色
+    tjPalette: ['#ff6a4a', '#5ad1ff', '#ffd24a', '#4ade80', '#2563eb', '#a855f7', '#ec4899', '#1a1a1a']
   },
 
   onLoad(options) {
@@ -173,12 +207,15 @@ Page({
       console.error('获取胶囊按钮位置失败:', e);
     }
     
-    // 检测平台（安卓的 map label textAlign:'center' 不生效，需手动补偿 anchorX）
+    // 检测平台（安卓的 map label textAlign:'center' 不生效，需手动补偿 anchorX；
+    // iOS 的屏幕点 → 经纬度走地图原生换算，见 _mapProjector）
     try {
       const deviceInfo = wx.getDeviceInfo();
       this._isAndroid = deviceInfo.platform === 'android';
+      this._isIOS = deviceInfo.platform === 'ios';
     } catch (e) {
       this._isAndroid = false;
+      this._isIOS = false;
     }
 
     // 载入用户持久化的自定义卫星（追加到内置列表尾部，供下方按名/索引定位）
@@ -235,7 +272,11 @@ Page({
 
     // 消化仿真平台自动同步过来的覆盖快照（见 utils/satsimBox.js 的待消化队列）。
     // 必须在 _loadImportedBeams 之后：新波束要追加到已有的那批后面。
-    this._drainSatsimGxt();
+    const nGxt = this._drainSatsimGxt(true);
+
+    // 航迹层：恢复上次显示着的那几条；后台同步期间新到的打开并定位过去（地图就绪后再定位，见 _flushTrajFit）
+    const nTraj = this._initTrajs();
+    this._syncToast(nGxt, nTraj);
 
     // 初始化覆盖数据状态（刷新当前卫星+类型下的波束列表）
     this.updateCoverageDataStatus();
@@ -257,13 +298,29 @@ Page({
     let box = null;
     try { box = require('../../utils/satsimBox'); } catch (e) { return; }
     if (!box.getCh()) return;                    // 没绑定过，不发任何请求
-    try { await box.syncNow({ force: true }); } catch (e) { /* 没网就用已排队的 */ }
-    this._drainSatsimGxt();
+    // 一轮最多拉 12 件（satsimBox 的 MAX_PER_ROUND）。平台一次勾几十条航迹就是几十件，
+    // 而这一页正是收件处、人就在前台等着看 —— 接着拉完（封顶 5 轮），不留一半等下次进页
+    for (let round = 0; round < 5; round++) {
+      let r = null;
+      try { r = await box.syncNow({ force: true }); } catch (e) { break; /* 没网就用已排队的 */ }
+      if (!r || !r.left) break;
+    }
+    this._syncToast(this._drainSatsimGxt(true), this._takeFreshTrajs());
+  },
+
+  // 同步落地的一句话：覆盖与航迹同一轮到的并成一条（两条 toast 前后脚，后一条会把前一条顶掉）
+  _syncToast(nGxt, nTraj) {
+    const parts = [];
+    if (nGxt) parts.push(nGxt + ' 份平台覆盖');
+    if (nTraj) parts.push(nTraj + ' 条航迹');
+    if (!parts.length) return;
+    setTimeout(() => wx.showToast({ title: '已同步 ' + parts.join('、'), icon: 'none', duration: 2000 }), 600);
   },
 
   onReady() {
     // 获取地图上下文
     this.mapCtx = wx.createMapContext('coverageMap');
+    this._flushTrajFit();
   },
 
   // 构建地图标签配置（兼容 iOS/Android 居中对齐）
@@ -290,11 +347,16 @@ Page({
   onHide() {
     // 页面隐藏时保存所有设置（包括搜索标记和线条）
     this.saveCoverageSettings();
+    // 手绘到一半切走：这一笔先收下（描绘态本身留着，回来接着画）
+    if (this._tjStroke) this._tjStrokeEnd(this._tjStroke);
   },
 
   onUnload() {
     // 页面卸载时保存所有设置
     this.saveCoverageSettings();
+    // 描绘收尾：没有航点的航迹丢弃（与「结束」同口径）
+    this._tjEndEdit();
+    if (this._tjTapTimer) { clearTimeout(this._tjTapTimer); this._tjTapTimer = null; }
   },
 
   // 获取用户位置
@@ -323,6 +385,10 @@ Page({
       },
       complete: () => {
         this.setData({ loading: false });
+        // 首屏视野到这里才落定（成功 / 失败两路都先 updateMapDisplay 居中到卫星）。等着定位到新航迹的
+        // 现在再定位 —— 早于这一步 includePoints，会被那次居中的 setData 盖掉
+        this._viewReady = true;
+        this._flushTrajFit();
       }
     });
   },
@@ -1252,7 +1318,10 @@ Page({
       
       // 更新覆盖数据状态（这会从新卫星的缓存加载设置）
       this.updateCoverageDataStatus();
-      
+
+      // 航迹不随卫星换（它是另一层），但读数气泡里的「仰角」是对当前卫星算的，跟着重出一遍
+      this._renderTrajs();
+
       // 加载完缓存后，检查是否需要重绘仰角线
       // 注意：如果新卫星有缓存的仰角线状态，使用缓存的状态
       // 否则使用之前卫星的状态
@@ -1518,10 +1587,11 @@ Page({
   // 后台同步够不着，而把那段逻辑复制一份到 satsimBox 里就是第二份真相。故那边只排队，这边取走。
   //
   // ★ 幂等：按消息 id（srcMid）替换而不是追加 —— 平台改一次覆盖重发一次，这里要覆盖那一份。
-  _drainSatsimGxt() {
+  // quiet：不自己出 toast，只返回消化了几份（本页的两处调用与航迹并成一条，见 _syncToast）
+  _drainSatsimGxt(quiet) {
     let queue = [];
-    try { queue = require('../../utils/satsimBox').takeGxtQueue(); } catch (e) { return; }
-    if (!queue.length) return;
+    try { queue = require('../../utils/satsimBox').takeGxtQueue(); } catch (e) { return 0; }
+    if (!queue.length) return 0;
 
     const list = this._importedBeams || [];
     const eaten = [];
@@ -1563,8 +1633,9 @@ Page({
     try { require('../../utils/satsimBox').clearGxtQueue(eaten); } catch (e) { /* 清不掉下次重来，幂等安全 */ }
     if (n) {
       this.refreshBeamList();
-      setTimeout(() => wx.showToast({ title: '已同步 ' + n + ' 份平台覆盖', icon: 'none', duration: 2000 }), 600);
+      if (!quiet) setTimeout(() => wx.showToast({ title: '已同步 ' + n + ' 份平台覆盖', icon: 'none', duration: 2000 }), 600);
     }
+    return n;
   },
 
   // 平台指定的目标星 → 本地列表里的名字。列表里没有就【按送来的轨位登记成自定义卫星】，
@@ -1730,7 +1801,7 @@ Page({
   // —— 密钥导入弹窗（把一份覆盖快照导入为「当前卫星+类型」下的一个波束）——
   showImportPanel() {
     if (!this.data.currentSatellite) { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
-    this.setData({ showImportPopup: true, showSatellitePopup: false, importKeyInput: '', otpCells: this._buildOtpCells(''), importKeyFocus: false, importBeamName: '' });
+    this.setData({ showImportPopup: true, importMode: 'beam', showSatellitePopup: false, importKeyInput: '', otpCells: this._buildOtpCells(''), importKeyFocus: false, importBeamName: '' });
   },
   hideImportPanel() { this.setData({ showImportPopup: false, importKeyFocus: false }); },
   // 分格渲染：8 个格子 + 第 4/5 格之间一个只读“-”；active=下一个待输入格（满 8 位时无）
@@ -1756,7 +1827,8 @@ Page({
   _normalizeKey(raw) { return String(raw == null ? '' : raw).toUpperCase().replace(/[^A-Z0-9]/g, ''); },
   confirmImport() {
     const sat = this.data.currentSatellite;
-    if (!sat) { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
+    // 航迹那一路不挂卫星；覆盖快照要挂到「当前卫星 + 类型」下，到拿回来发现是快照时再拦
+    if (!sat && this.data.importMode !== 'traj') { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
     const key = this._normalizeKey(this.data.importKeyInput);
     if (!/^[A-Z0-9]{8}$/.test(key)) { wx.showToast({ title: '请输入 8 位密钥', icon: 'none' }); return; }
     if (this.data.importing) return;
@@ -1771,12 +1843,13 @@ Page({
         const r = res && res.result;
         console.log('[导入] 云函数返回：', r);
         if (r && r.success && r.data) {
-          // 云函数自 2026-08 起同时放行仿真平台的多件包（链路配置 / 频率计划）。那类密钥不是覆盖
-          // 快照，喂进 _mergeSnapshotToBeamData 只会得到空等值线、报一句「导入为空」——说清楚该去哪导。
+          // 仿真平台的多件包（航迹 / 链路配置 / 频率计划 / 星座）：包里有什么就落什么（见 utils/satsimPack.js 头），
+          // 航迹当场打开并定位。以前这里一律拒收指路 —— 航迹的收件处就在本页，不能再往外推。
           if (r.data.kind === 'satsim-pack') {
-            wx.showModal({ title: '密钥用错了地方', content: '这个密钥装的是链路配置 / 频率计划 / 星座，不是覆盖快照。请到「我的配置 → 导入」「工具栏 → 频率计划」或「工具栏 → 星座地图 → 导入」输入。', showCancel: false });
+            this._importPlatformPack(r.data);
             return;
           }
+          if (!sat) { wx.showToast({ title: '请先选择卫星', icon: 'none' }); return; }
           // 云函数内联返回快照数据 → 合并为一个波束的数据
           const bd = this._mergeSnapshotToBeamData(r.data);
           if (!bd.contours.length && !bd.polygons.length) { wx.showModal({ title: '导入为空', content: '该密钥的快照没有可用的覆盖等值线或多边形。', showCancel: false }); return; }
@@ -3693,9 +3766,15 @@ Page({
    * 标记点击事件 - 删除搜索标记
    */
   onMarkerTap(e) {
+    // 航迹的航点 / 航迹头：点开的是读数气泡（callout BYCLICK，地图自己弹），不是「删除标记」。
+    // 描绘中点的是正在画的那条的航点 = 选中它（见 _onTjMarkerTap）
+    const tapped = e && e.detail && e.detail.markerId != null ? e.detail.markerId : (e && e.markerId);
+    if (tapped >= trajLayer.ID_BASE) { this._onTjMarkerTap(tapped); return; }
     const markerId = e.markerId;
     // 只处理搜索标记（id >= 2000）
     if (markerId >= 2000) {
+      // 描绘中点到搜索标记：这一下是「删标记」，别再落一个航点（有的机型点 marker 也报地图 tap）
+      if (this._tjEdit) this._tjSwallowTap();
       wx.showModal({
         title: '删除标记',
         content: '确定要删除这个标记吗？',
@@ -3723,7 +3802,10 @@ Page({
       this._touchStartX = touch.clientX;
       this._touchStartY = touch.clientY;
       this._touchMoved = false;
-      
+
+      // 描绘中不放长按标点：按得稍久的一下「点」会变成一个搜索标记，而不是航点
+      if (this._tjEdit) return;
+
       // 设置长按定时器（500ms）
       this._longTapTimer = setTimeout(() => {
         if (!this._touchMoved) {
@@ -3768,59 +3850,33 @@ Page({
   handleMapLongTap(clientX, clientY) {
     // 提供触觉反馈
     wx.vibrateShort({ type: 'medium' });
-    
-    // 不做偏移补偿，直接使用触摸坐标
-    const adjustedY = clientY;
-    
-    // 获取地图组件的位置信息
-    const query = wx.createSelectorQuery();
-    query.select('#coverageMap').boundingClientRect().exec((res) => {
-      if (!res || !res[0]) {
+
+    // 屏幕点 → 经纬度：与手绘航迹同一个换算（iOS 走地图原生换算 —— 按 getRegion 两角插值在 iOS 上
+    // 标记落不到手指处，见 _mapProjector）
+    this._mapProjector((proj, mapRect) => {
+      const ll = proj && proj(clientX, clientY);
+      if (ll) {
+        this.addLongTapMarker(ll.latitude, ll.longitude);
+        return;
+      }
+      if (!mapRect || !this.mapCtx) {
         console.log('无法获取地图组件位置');
         return;
       }
-      
-      const mapRect = res[0];
-      // 计算触摸点相对于地图的位置（0-1范围），使用偏移后的Y坐标
+      // 降级：使用简单计算
       const relX = (clientX - mapRect.left) / mapRect.width;
-      const relY = (adjustedY - mapRect.top) / mapRect.height;
-      
-      // 使用 mapContext.getRegion 获取准确的视野范围
-      if (this.mapCtx) {
-        this.mapCtx.getRegion({
-          success: (region) => {
-            // region 包含 southwest 和 northeast 两个角的坐标
-            const sw = region.southwest;
-            const ne = region.northeast;
-            
-            // 使用Mercator投影修正纬度计算（地图使用Web Mercator投影，纬度在屏幕上非线性分布）
-            const latToMercY = (lat) => Math.log(Math.tan(Math.PI / 4 + lat * Math.PI / 360));
-            const mercYToLat = (y) => (2 * Math.atan(Math.exp(y)) - Math.PI / 2) * 180 / Math.PI;
-            const swMercY = latToMercY(sw.latitude);
-            const neMercY = latToMercY(ne.latitude);
-            const mercY = neMercY - relY * (neMercY - swMercY);
-            const latitude = mercYToLat(mercY);
-            const longitude = sw.longitude + relX * (ne.longitude - sw.longitude);
-            
-            // 添加标记
-            this.addLongTapMarker(latitude, longitude);
-          },
-          fail: () => {
-            // 降级：使用简单计算
-            const centerLat = this.data.latitude;
-            const centerLng = this.data.longitude;
-            const scale = this.data.scale;
-            
-            const latRange = 360 / Math.pow(2, scale - 1) * (mapRect.height / mapRect.width);
-            const lngRange = 360 / Math.pow(2, scale - 1);
-            
-            const latitude = centerLat + (0.5 - relY) * latRange;
-            const longitude = centerLng + (relX - 0.5) * lngRange;
-            
-            this.addLongTapMarker(latitude, longitude);
-          }
-        });
-      }
+      const relY = (clientY - mapRect.top) / mapRect.height;
+      const centerLat = this.data.latitude;
+      const centerLng = this.data.longitude;
+      const scale = this.data.scale;
+
+      const latRange = 360 / Math.pow(2, scale - 1) * (mapRect.height / mapRect.width);
+      const lngRange = 360 / Math.pow(2, scale - 1);
+
+      const latitude = centerLat + (0.5 - relY) * latRange;
+      const longitude = centerLng + (relX - 0.5) * lngRange;
+
+      this.addLongTapMarker(latitude, longitude);
     });
   },
 
@@ -4374,6 +4430,828 @@ Page({
     } catch (e) {
       console.error('加载绘制内容失败:', e);
     }
+  },
+
+  // ============================================================================
+  // 航迹层：仿真平台「标记 → 轨迹」发来的、手机上手绘的航行 / 飞行航迹
+  // ============================================================================
+  // 数据在 utils/satsimPack.js（索引 + 一条一键 + 显示中的 id + 刚到的 id）；几何 / marker 在 trajLayer.js；
+  // 图标在 tjIcon.js。本页只管：哪几条显示、面板、定位、密钥导入、描绘（见下方「手绘航迹」一节）。
+  // ★ 航迹与卫星无关（不像波束挂在「卫星 + 类型」下），换卫星、清覆盖、画仰角线都不动它；
+  //   读数气泡里的「仰角」是对当前卫星算的，换星时重出一遍（见 onSatelliteChange）。
+
+  // 进页：恢复显示集 + 后台同步期间新到的那几条打开。返回新到的条数（onLoad 与覆盖快照并成一条 toast）
+  _initTrajs() {
+    tjIcon.prune();
+    this._tjGeo = {};
+    this._tjHits = {};
+    // 上次手绘到一半应用被杀留下的 0 点残行（第一个航点落下才入库，退空了又没来得及「结束」）
+    try { satsimPack.pruneEmptyTrajs(); } catch (e) { /* 清不掉只是列表里多一行 0 点 */ }
+    this._tjShown = new Set(satsimPack.readTrajShown());
+    return this._takeFreshTrajs();
+  },
+
+  // 新到的航迹：打开、定位过去（地图没就绪就等，见 _flushTrajFit）。没有新到的也刷一遍列表 ——
+  // 同一条重发只改了名字 / 样式时 fresh 照样有它，但删了又发、改了名这些都得反映到面板上。
+  // 描绘中不抢视野：人正对着地图落点，视野一跳手底下就全乱了（新到的照样打开，列表里点「定位」过去）
+  _takeFreshTrajs() {
+    if (!this._tjShown) return 0;
+    const got = satsimPack.takeFreshTrajs();
+    for (const id of got) this._tjShown.add(id);
+    if (got.length) satsimPack.writeTrajShown(Array.from(this._tjShown));
+    this._refreshTrajs();
+    if (got.length && !this.data.pickMode && !this._tjEdit) this._fitTrajs(got);
+    return got.length;
+  },
+
+  // 一条航迹的内容 + 几何（按导入时刻缓存：换星 / 开关别的航迹都不重算大圆与 GCJ 偏移）
+  _trajEntry(row) {
+    const hit = this._tjGeo[row.id];
+    if (hit && hit.ts === row.ts) { hit.tr.name = row.name; return hit; }
+    const body = satsimPack.loadTraj(row.id);
+    if (!body) return null;
+    const tr = {
+      id: row.id, name: row.name, kind: row.kind, pts: body.pts, style: body.style || {},
+      n0: body.n0 || 0, cruiseAltM: body.cruiseAltM || 0
+    };
+    const e = { ts: row.ts, tr: tr, g: trajLayer.geometryOf(tr) };
+    this._tjGeo[row.id] = e;
+    return e;
+  },
+
+  // 面板行 + 地图层一起刷
+  _refreshTrajs() {
+    if (!this._tjShown) return;
+    const index = satsimPack.readTrajIndex();
+    const alive = new Set(index.map((r) => r.id));
+    for (const id of Array.from(this._tjShown)) if (!alive.has(id)) this._tjShown.delete(id);
+    for (const id of Object.keys(this._tjGeo)) if (!alive.has(id)) delete this._tjGeo[id];
+    const rows = [];
+    for (const r of index) {
+      const e = this._trajEntry(r);
+      const st = e ? trajLayer.styleOf(e.tr) : null;
+      const n = r.n0 > r.n ? r.n0 : r.n;
+      const cum = e ? e.g.cum : [];
+      rows.push({
+        id: r.id,
+        name: r.name,
+        // 航行 / 飞行不再写字：行首那枚船 / 飞机图标就是它
+        sub: n + ' 点 · ' + (e ? trajLayer.fmtKm(cum[cum.length - 1] || 0) : '—'),
+        on: this._tjShown.has(r.id),
+        color: '#' + (st ? st.line : 'FF6A4A'),
+        dash: !!(st && st.dash),
+        // 列表里的小图标就是地图上航迹头那一枚（同形状同色，同一张图）
+        icon: st ? tjIcon.vehicleIcon(r.kind === 'flight' ? 'plane' : 'ship', '#' + st.icon, 22) : '',
+        local: !!r.local,
+        editing: !!(this._tjEdit && this._tjEdit.id === r.id)
+      });
+    }
+    const on = rows.filter((x) => x.on).length;
+    this.setData({ trajRows: rows, trajOn: on, trajAllOn: rows.length > 0 && on === rows.length });
+    this._renderTrajs(index);
+  },
+
+  // 显示中的那几条 → tjLines / tjMarkers
+  _renderTrajs(index) {
+    if (!this._tjShown) return;
+    const list = [];
+    for (const r of (index || satsimPack.readTrajIndex())) {
+      if (!this._tjShown.has(r.id)) continue;
+      const e = this._trajEntry(r);
+      if (e) list.push(e.tr);
+    }
+    const sat = this.data.currentSatellite;
+    const satLon = sat ? Number(sat.position) : NaN;
+    const ed = this._tjEdit;
+    const ov = trajLayer.buildOverlay(list, {
+      geo: (tr) => this._tjGeo[tr.id].g,
+      vehicleIcon: tjIcon.vehicleIcon,
+      dotIcon: tjIcon.dotIcon,
+      selIcon: tjIcon.ringIcon,
+      blank: '/images/transparent.png',
+      elevOf: isFinite(satLon) ? (lat, lon) => this.calculateElevationAngle(lat, lon, satLon) : null,
+      isAndroid: !!this._isAndroid,
+      edit: ed ? { id: ed.id, sel: ed.sel } : null
+    });
+    this._tjHits = ov.hits;
+    this.setData({ tjLines: ov.lines, tjMarkers: ov.markers });
+  },
+
+  // 把视野收到这几条航迹上。首屏视野落定之前先挂着（定位回调里那次居中到卫星的 setData 会把它盖掉）
+  _fitTrajs(ids) {
+    this._tjFitIds = (this._tjFitIds || []).concat(ids || []);
+    this._flushTrajFit();
+  },
+  _flushTrajFit() {
+    const ids = this._tjFitIds;
+    if (!ids || !ids.length || !this.mapCtx || !this._viewReady || !this._tjGeo) return;
+    this._tjFitIds = null;
+    const pts = trajLayer.fitPoints(ids.map((id) => this._tjGeo[id] && this._tjGeo[id].g).filter(Boolean));
+    if (!pts.length) return;
+    if (pts.length === 1) { this.setData({ latitude: pts[0].latitude, longitude: pts[0].longitude, scale: 10 }); return; }
+    // 上边让开悬浮操作栏、下边让开底部按钮组
+    const top = (this.data.navBarTop || 24) + (this.data.navBarHeight || 32) + 28;
+    this.mapCtx.includePoints({ points: pts, padding: [top, 40, 150, 40] });
+  },
+
+  // —— 航迹面板 ——
+  showTrajPanel() {
+    this._refreshTrajs();                     // 后台同步可能刚落了新的，打开时现刷
+    this.setData({ showTrajPopup: true });
+  },
+  hideTrajPanel() { this.setData({ showTrajPopup: false }); },
+
+  // 点整行 = 显示 / 隐藏这一条（勾选状态跨会话保留）。藏起正在描绘的那条 = 先结束描绘（看不见的线上不落点）
+  onTrajToggle(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    if (this._tjShown.has(id)) {
+      if (this._tjEdit && this._tjEdit.id === id) this._tjEndEdit();
+      this._tjShown.delete(id);
+    } else this._tjShown.add(id);
+    satsimPack.writeTrajShown(Array.from(this._tjShown));
+    this._refreshTrajs();
+  },
+  toggleAllTrajs() {
+    const rows = this.data.trajRows || [];
+    const allOn = rows.length > 0 && rows.every((r) => r.on);
+    if (allOn && this._tjEdit) this._tjEndEdit();
+    this._tjShown = new Set(allOn ? [] : rows.map((r) => r.id));
+    satsimPack.writeTrajShown(Array.from(this._tjShown));
+    this._refreshTrajs();
+  },
+  // 定位：没显示的顺手打开，收起面板，视野收到这一条上
+  onTrajLocate(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    if (!this._tjShown.has(id)) {
+      this._tjShown.add(id);
+      satsimPack.writeTrajShown(Array.from(this._tjShown));
+      this._refreshTrajs();
+    }
+    this.setData({ showTrajPopup: false });
+    this._fitTrajs([id]);
+  },
+  onTrajRename(e) {
+    const id = e.currentTarget.dataset.id;
+    const row = (this.data.trajRows || []).find((r) => r.id === id);
+    if (!row) return;
+    wx.showModal({
+      title: '重命名航迹',
+      editable: true,
+      placeholderText: '航迹名称',
+      content: row.name,
+      success: (r) => {
+        if (!r.confirm) return;
+        const nm = (r.content || '').trim();
+        if (!nm) { wx.showToast({ title: '名称不能为空', icon: 'none' }); return; }
+        satsimPack.renameTraj(id, nm);
+        this._refreshTrajs();
+      }
+    });
+  },
+  onTrajDelete(e) {
+    const id = e.currentTarget.dataset.id;
+    const row = (this.data.trajRows || []).find((r) => r.id === id);
+    if (!row) return;
+    wx.showModal({
+      title: '移除航迹',
+      content: '确定移除航迹「' + row.name + '」？',
+      confirmText: '移除',
+      confirmColor: '#d9534f',
+      success: (r) => {
+        if (!r.confirm) return;
+        if (this._tjEdit && this._tjEdit.id === id) this._tjEndEdit();
+        satsimPack.removeTraj(id);
+        this._tjShown.delete(id);
+        delete this._tjGeo[id];
+        this._refreshTrajs();
+      }
+    });
+  },
+
+  // ============================================================================
+  // 手绘航迹：平台「标记 → 轨迹」的描绘态搬到手机上
+  // ============================================================================
+  // 平台：侧栏「+航行 / +飞行」新建一条并进入描绘 → 右键逐点加、左键按住沿路径连续加（屏上每走 14 px 一个点）
+  //       → 横幅「撤销上点 / 结束」，空航迹直接丢弃；航迹卡上改名、逐条改色、删航点、按经纬度加点，「调点」拖航点。
+  // 手机上一一对应：
+  //   · 点地图 = 右键加点（地图照常能拖、能缩放）；点在地名上也落在手指处，不吸到地名标注的锚点上；
+  //   · 「手绘」开关 = 左键按住拖动：开着时一层透明手绘层盖住地图接手指，同样每走 14 px 落一个点。
+  //     手指被手绘层接走了，地图此时拖不动 —— 关掉即恢复（wxml 里另把地图的拖动 / 缩放一并关了兜底：
+  //     万一有机型把手指透给了底下的地图，地图跟着手跑，起笔时取的换算就作废了）；
+  //   · 「调点」：map 的 marker 拖不动 → 点航点选中、再点地图把它挪过去；
+  //   · 航迹卡 → 横幅「航点」面板。
+  // ★ 航点一律按 WGS-84 存（与平台发来的同一口径）：点地图拿到的是底图坐标（国内 GCJ-02），落点前反解
+  //   （trajLayer.toWaypoint），画回去时 geometryOf 再偏回来 —— 线正好落在手指点的位置上。
+  //   手指的屏幕点（手绘、点在地名上）换底图坐标见 _mapProjector：iOS 走地图原生换算，不信 getRegion 的两角。
+  // ★★ 存储与平台发来的同一套（satsimPack：索引 + 一条一键），行上记 local。新建的在第一个航点落下时才入库，
+  //    0 点的航迹不进列表；「结束」时已退空的整条移除（平台 endTraj 同口径）。平台发来的那几条也能接着画 / 改点，
+  //    平台重发同一条照旧整条覆盖。
+  //
+  // 描绘态 this._tjEdit = { id, sel, undo, draft }：
+  //   sel   选中的航点下标（-1 = 没选）；undo 航点快照栈（一步一份，一笔手绘整笔一份）；
+  //   draft 还没入库的新航迹 { ts:0, tr, g }（入库后改由 _tjGeo 缓存持有，与别的航迹同一条路）。
+  // ★★★ 每一步（点一下、收一笔、删 / 改 / 挪一点）当场落盘，saveTraj 同时刷新行上 ts 与缓存。
+  //    手指按着的那一笔不进航迹：航点攒在 this._tjStroke.wps，屏上只重画这一截（tjLive），收笔才并进去 ——
+  //    所以任何时候航迹的航点与它的几何缓存都是对得上的，划动中哪里触发整层重画都安全。
+
+  // —— 进出描绘 ——
+  // 面板「＋航行 / ＋飞行」：新建一条（自动名与平台同规则）并进入描绘
+  onTrajNew(e) {
+    const kind = e.currentTarget.dataset.kind === 'flight' ? 'flight' : 'sea';
+    this._tjEndEdit();
+    const tr = {
+      id: satsimPack.newLocalTrajId(), name: satsimPack.trajAutoName(kind), kind: kind,
+      pts: [], style: {}, n0: 0, cruiseAltM: 0
+    };
+    this._tjEdit = { id: tr.id, sel: -1, undo: [], draft: { ts: 0, tr: tr, g: trajLayer.geometryOf(tr) } };
+    this.setData({ showTrajPopup: false, tjFree: false });
+    this._tjBanner();
+    wx.showToast({ title: '点地图加航点；开「手绘」可按住拖动连续加点', icon: 'none', duration: 2600 });
+  },
+
+  // 行上「编辑」：接着画已有的一条（平台发来的也行）。没显示的顺手打开，视野收到它上面
+  onTrajEdit(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    if (this._tjEdit && this._tjEdit.id === id) { this.setData({ showTrajPopup: false }); return; }
+    this._tjEndEdit();
+    if (!satsimPack.readTrajIndex().some((r) => r.id === id)) return;
+    this._tjEdit = { id: id, sel: -1, undo: [], draft: null };
+    if (!this._tjShown.has(id)) {
+      this._tjShown.add(id);
+      satsimPack.writeTrajShown(Array.from(this._tjShown));
+    }
+    this.setData({ showTrajPopup: false, tjFree: false });
+    this._refreshTrajs();
+    this._tjBanner();
+    this._fitTrajs([id]);
+  },
+
+  // 横幅「结束」
+  tjEnd() { this._tjEndEdit(); },
+
+  // 收尾：手指还按着的那一笔先收下；已退空的整条移除（还没入库的新航迹本来就不在库里）
+  _tjEndEdit() {
+    const ed = this._tjEdit;
+    if (!ed) return;
+    if (this._tjStroke) this._tjStrokeEnd(this._tjStroke);
+    this._tjCommitName();
+    if (this._tjTapTimer) { clearTimeout(this._tjTapTimer); this._tjTapTimer = null; }
+    if (this._tjRenderTimer) { clearTimeout(this._tjRenderTimer); this._tjRenderTimer = null; }
+    this._tjEdit = null;
+    const row = satsimPack.readTrajIndex().find((r) => r.id === ed.id);
+    if (row && !(row.n > 0)) {
+      satsimPack.removeTraj(ed.id);
+      if (this._tjShown) this._tjShown.delete(ed.id);
+      if (this._tjGeo) delete this._tjGeo[ed.id];
+    }
+    this.setData({ tjEdit: null, tjFree: false, tjLive: [], showTjEditPopup: false, tjSheet: null });
+    this._refreshTrajs();
+  },
+
+  // 正在描绘的那条：入库了的走缓存（与别的航迹同一条路），还没入库的是 draft
+  _tjEditEntry() {
+    const ed = this._tjEdit;
+    if (!ed) return null;
+    if (ed.draft) return ed.draft;
+    const row = satsimPack.readTrajIndex().find((r) => r.id === ed.id);
+    return row ? this._trajEntry(row) : null;
+  },
+
+  // 航点动过一步之后（点一下、收一笔、删 / 改 / 挪一点、改色）：重算几何，当场落盘并整层刷新（列表读数、横幅）。
+  // 新建的在第一个航点落下时入库
+  _tjChanged(en) {
+    const ed = this._tjEdit;
+    if (!ed || !en) return;
+    en.g = trajLayer.geometryOf(en.tr);
+    en.tr.n0 = 0;
+    if (ed.draft && !en.tr.pts.length) { this._tjBanner(); return; }
+    let row = null;
+    try {
+      row = satsimPack.saveTraj(en.tr);
+    } catch (err) {
+      console.error('[航迹] 保存失败：', err);
+      wx.showToast({ title: '存储空间不足，这一步没存上', icon: 'none' });
+    }
+    if (row) {
+      en.ts = row.ts;
+      this._tjGeo[row.id] = en;
+      if (ed.draft) {
+        ed.draft = null;
+        this._tjShown.add(row.id);
+        satsimPack.writeTrajShown(Array.from(this._tjShown));
+      }
+    }
+    this._refreshTrajs();
+    this._tjBanner();
+  },
+
+  // 划动中的重画：只重画这一笔（tjLive），一帧最多一次（手指一秒能走出几十个点）
+  _tjScheduleLive() {
+    if (this._tjRenderTimer) return;
+    this._tjRenderTimer = setTimeout(() => {
+      this._tjRenderTimer = null;
+      const s = this._tjStroke;
+      if (s) this.setData({ tjLive: trajLayer.strokeLines(s.en.tr, s.wps) });
+      this._tjBanner();
+    }, 60);
+  },
+
+  // 横幅：没选点时报「哪条 · 几点 · 多长」（手指按着时连这一笔一起报），选了点报「第几点 · 坐标 · 距起点」
+  _tjBanner() {
+    const ed = this._tjEdit;
+    if (!ed) { if (this.data.tjEdit) this.setData({ tjEdit: null }); return; }
+    const en = this._tjEditEntry();
+    if (!en) { this._tjEndEdit(); return; }             // 描绘中被别处移除了
+    const pts = en.tr.pts, n = pts.length, cum = en.g.cum;
+    const st = this._tjStroke && this._tjStroke.en === en ? this._tjStroke : null;
+    if (ed.sel >= n) ed.sel = -1;
+    const s = ed.sel;
+    this.setData({
+      tjEdit: {
+        id: ed.id,
+        sel: s,
+        title: s >= 0 ? ('第 ' + (s + 1) + ' / ' + n + ' 点')
+          : ((en.tr.kind === 'flight' ? '飞行' : '航行') + '轨迹「' + en.tr.name + '」'),
+        sub: s >= 0 ? (trajLayer.fmtLL(pts[s][1], pts[s][0]) + ' · 距起点 ' + trajLayer.fmtKm(cum[s] || 0))
+          : ((n + (st ? st.wps.length : 0)) + ' 点 · ' + trajLayer.fmtKm((cum[n - 1] || 0) + (st ? st.m : 0))),
+        canUndo: ed.undo.length > 0 || n > 0
+      }
+    });
+  },
+
+  // —— 撤销 ——
+  _tjPushUndo(en) {
+    const ed = this._tjEdit;
+    if (!ed || !en) return;
+    ed.undo.push(en.tr.pts.slice());                     // 浅拷贝够用：航点只整个替换，从不原地改 [lon, lat]
+    if (ed.undo.length > TJ_UNDO_MAX) ed.undo.shift();
+  },
+  // 横幅「撤销」：退回上一步（一笔手绘整笔退）。这次描绘里还没动过时，按平台「撤销上点」退掉末航点
+  tjUndo() {
+    const ed = this._tjEdit;
+    if (!ed || this._tjStroke) return;
+    const en = this._tjEditEntry();
+    if (!en) return;
+    if (ed.undo.length) en.tr.pts = ed.undo.pop();
+    else if (en.tr.pts.length) en.tr.pts = en.tr.pts.slice(0, -1);
+    else return;
+    ed.sel = -1;
+    this._tjChanged(en);
+  },
+
+  // —— 点地图落点 ——
+  // 地图 tap（2.9.0 起带经纬度）。不带的老基础库：拿按下那一刻的屏幕点按视野现算
+  onMapTap(e) {
+    if (!this._tjEdit || this.data.tjFree) return;
+    const d = (e && e.detail) || {};
+    if (typeof d.latitude === 'number' && typeof d.longitude === 'number') {
+      const ll = { latitude: d.latitude, longitude: d.longitude };
+      this._tjTap((put) => put(ll));
+      return;
+    }
+    const x = this._touchStartX, y = this._touchStartY;
+    if (typeof x !== 'number' || typeof y !== 'number') return;
+    this._tjTap((put) => this._tjScreenToMap(x, y, put));
+  },
+  // 点在地名 / 兴趣点上：地图报 poitap 而不是 tap（iOS 上只报 poitap），带的是【那个兴趣点】的坐标 ——
+  // 地名标注几十 px 宽，点在字上航点就被吸到标注的锚点上，与手指差出一截。故按按下那一刻的屏幕点现算，
+  // 与点在空白处落在同一处；按下的位置不可考（没收到 touchstart、按下后拖过、隔得太久）才退回兴趣点坐标
+  onMapPoiTap(e) {
+    if (!this._tjEdit || this.data.tjFree) return;
+    const d = (e && e.detail) || {};
+    const poi = typeof d.latitude === 'number' && typeof d.longitude === 'number'
+      ? { latitude: d.latitude, longitude: d.longitude } : null;
+    const x = this._touchStartX, y = this._touchStartY;
+    const fresh = typeof x === 'number' && typeof y === 'number' && !this._touchMoved &&
+      Date.now() - (this._touchStartTime || 0) < TJ_TOUCH_FRESH;
+    if (fresh) this._tjTap((put) => this._tjScreenToMap(x, y, (ll) => put(ll || poi)));
+    else if (poi) this._tjTap((put) => put(poi));
+  },
+  // 点在气泡上（航点读数 / 搜索标记）：那是在看读数，不落点
+  onMapCalloutTap() { if (this._tjEdit) this._tjSwallowTap(); },
+
+  // 同一下点击，地图可能报两个事件（marker + tap、poi + tap，视机型而定）：落点延后一拍，
+  // 这一拍里来了 marker / 气泡点击就作罢（_tjSwallowTap），来了第二个 tap / poitap 只算一次。
+  // where(put)：交出这一下的底图坐标（可以是异步现算的；put(null) = 作罢）
+  _tjTap(where) {
+    if (Date.now() - (this._tjSwallowAt || 0) < TJ_TAP_GUARD || this._tjTapTimer) return;
+    this._tjTapTimer = setTimeout(() => {
+      this._tjTapTimer = null;
+      if (!this._tjEdit || Date.now() - (this._tjSwallowAt || 0) < TJ_TAP_GUARD) return;
+      where((ll) => {
+        if (!ll || !this._tjEdit || Date.now() - (this._tjSwallowAt || 0) < TJ_TAP_GUARD) return;
+        this._tjApplyTap(ll.latitude, ll.longitude);
+      });
+    }, 90);
+  },
+  _tjSwallowTap() {
+    this._tjSwallowAt = Date.now();
+    if (this._tjTapTimer) { clearTimeout(this._tjTapTimer); this._tjTapTimer = null; }
+  },
+
+  // 落点：选着航点 = 把它挪到这里（平台「调点」拖动的手机版，挪完即放开）；没选 = 末尾加一个
+  _tjApplyTap(mapLat, mapLon) {
+    const ed = this._tjEdit;
+    const en = this._tjEditEntry();
+    if (!ed || !en) return;
+    const wp = trajLayer.toWaypoint(mapLat, mapLon);
+    this._tjPushUndo(en);
+    if (ed.sel >= 0 && ed.sel < en.tr.pts.length) {
+      en.tr.pts[ed.sel] = wp;
+      ed.sel = -1;
+    } else {
+      en.tr.pts.push(wp);
+    }
+    this._tjChanged(en);
+  },
+
+  // 点航点：正在描绘的那条的航点 = 选中（再点同一个 = 放开）；别的航迹的只弹读数气泡（地图自己弹）
+  _onTjMarkerTap(mid) {
+    const ed = this._tjEdit;
+    if (!ed) return;
+    this._tjSwallowTap();
+    const h = this._tjHits && this._tjHits[mid];
+    if (!h || h.tid !== ed.id || this.data.tjFree) return;
+    ed.sel = ed.sel === h.i ? -1 : h.i;
+    if (ed.sel >= 0 && !this._tjSelTip) {
+      this._tjSelTip = true;
+      wx.showToast({ title: '再点地图，把它挪过去', icon: 'none', duration: 1800 });
+    }
+    this._renderTrajs();
+    this._tjBanner();
+  },
+  // 横幅「删除此点」「取消」（选着航点时）
+  tjDelSel() {
+    const ed = this._tjEdit;
+    const en = this._tjEditEntry();
+    if (!ed || !en || !(ed.sel >= 0 && ed.sel < en.tr.pts.length)) return;
+    this._tjPushUndo(en);
+    en.tr.pts.splice(ed.sel, 1);
+    ed.sel = -1;
+    this._tjChanged(en);
+  },
+  tjClearSel() {
+    const ed = this._tjEdit;
+    if (!ed || ed.sel < 0) return;
+    ed.sel = -1;
+    this._renderTrajs();
+    this._tjBanner();
+  },
+
+  // —— 「手绘」：按住拖动连续加点（平台左键按住沿路径加点）——
+  toggleTjFree() {
+    const ed = this._tjEdit;
+    if (!ed) return;
+    const on = !this.data.tjFree;
+    if (!on && this._tjStroke) this._tjStrokeEnd(this._tjStroke);
+    ed.sel = -1;
+    this.setData({ tjFree: on });
+    if (on) {
+      this._mapProjector(() => {});           // 先备一份换算：起笔后换算还没回来就被强制收笔时（_tjStrokeEnd）用它
+      if (!this._tjFreeTip) {
+        this._tjFreeTip = true;
+        wx.showToast({ title: '按住拖动连续加点；关掉「手绘」才能拖动地图', icon: 'none', duration: 2400 });
+      }
+    }
+    this._renderTrajs();
+    this._tjBanner();
+  },
+  // 屏幕点（touch 的 clientX / clientY）→ 底图坐标（国内 GCJ-02）的换算，按当下的视野现取：
+  // cb(proj, rect)，proj(x, y) → { latitude, longitude } | null；换算取不到时 proj 为 null（量到的地图矩形照样给，
+  // 长按标点的降级要用）。取到的留一份在 _lastProj。地图矩形也每次现量：本页 pageOrientation: auto，横竖屏一转旧尺寸就错了。
+  // ★ iOS：地图原生 fromScreenLocation 换出视野里三个点，在墨卡托平面上定仿射（trajLayer.projectorOf）。
+  //   iOS 上按 getRegion 两角插值，航点、长按标记都落不到手指处（缩得越小偏得越多）；原生换算不经 region，
+  //   地图万一转了也照样对。取不到（老基础库没有 fromScreenLocation）再退回 getRegion。
+  //   其它平台仍按 getRegion 两角（trajLayer.regionProjector）—— 那边一直对得上，也省得碰各端 fromScreenLocation 的像素口径
+  _mapProjector(cb) {
+    wx.createSelectorQuery().select('#coverageMap').boundingClientRect((rect) => {
+      const map = this.mapCtx;
+      if (!rect || !(rect.width > 0) || !(rect.height > 0)) { cb(null, null); return; }
+      if (!map) { cb(null, rect); return; }
+      const done = (proj) => { if (proj) this._lastProj = proj; cb(proj, rect); };
+      const byRegion = () => map.getRegion({
+        success: (r) => done(trajLayer.regionProjector(r, rect)),
+        fail: () => done(null)
+      });
+      if (!this._isIOS || typeof map.fromScreenLocation !== 'function') { byRegion(); return; }
+      // 视野中心、中心往右 / 往下四分之一屏（地图左上角起算）：不共线，且离图边都远 ——
+      // 贴着图边的点，原生换算有可能按「不在可视区内」拒掉
+      const at = [[rect.width / 2, rect.height / 2], [rect.width * 0.75, rect.height / 2], [rect.width / 2, rect.height * 0.75]];
+      const refs = [];
+      let left = at.length;
+      // 回调迟迟不来也别把这一笔挂住（挂住了屏上什么都不画）：到点退回 getRegion
+      const timer = setTimeout(() => { if (left > 0) { left = 0; byRegion(); } }, TJ_PROJ_WAIT);
+      const got = (i, r) => {
+        if (left <= 0) return;
+        if (r) refs[i] = { x: rect.left + at[i][0], y: rect.top + at[i][1], latitude: r.latitude, longitude: r.longitude };
+        if (--left) return;
+        clearTimeout(timer);
+        const proj = trajLayer.projectorOf(refs);
+        if (proj) done(proj); else byRegion();
+      };
+      at.forEach((p, i) => map.fromScreenLocation({
+        x: p[0], y: p[1],
+        success: (r) => got(i, r),
+        fail: () => got(i, null)
+      }));
+    }).exec();
+  },
+  // 屏幕点 → 底图坐标（视野现取）
+  _tjScreenToMap(x, y, cb) {
+    this._mapProjector((proj) => cb(proj ? proj(x, y) : null));
+  },
+
+  // 起笔：按下处就是第一个点（平台 'start' 同样落点）—— 所以「手绘」开着时点一下也是加一个点。
+  // 这一笔的航点先攒在 s.wps（屏上只重画这一截，见 _tjScheduleLive），收笔时整笔并进航迹、落盘一次
+  onTjDrawStart(e) {
+    const ed = this._tjEdit;
+    const t = e && e.touches && e.touches[0];
+    if (!ed || !t || e.touches.length > 1) return;       // 第二根手指落下不起新笔，这一笔照旧跟着第一根
+    if (this._tjStroke) this._tjStrokeEnd(this._tjStroke);
+    const en = this._tjEditEntry();
+    if (!en) return;
+    if (ed.sel >= 0) { ed.sel = -1; this._renderTrajs(); }
+    const s = {
+      en: en, tid: t.identifier, xy: [[t.clientX, t.clientY]], done: 0, wps: [], m: 0,
+      lx: t.clientX, ly: t.clientY, proj: null, ended: false, dead: false
+    };
+    this._tjStroke = s;
+    // 换算每笔现取：两笔之间可能搜过地名、点过定位，地图挪过了
+    this._mapProjector((proj) => {
+      if (this._tjStroke !== s || s.proj || s.dead) return;
+      s.proj = proj || this._lastProj || null;
+      if (!s.proj) s.dead = true;
+      this._tjStrokeFlush(s);
+    });
+  },
+  onTjDrawMove(e) {
+    const s = this._tjStroke;
+    if (!s || s.ended) return;
+    const t = this._tjTouch(e && e.touches, s.tid);
+    if (!t) return;
+    const dx = t.clientX - s.lx, dy = t.clientY - s.ly;
+    if (dx * dx + dy * dy < TJ_DRAW_MIN2) return;
+    s.lx = t.clientX; s.ly = t.clientY;
+    s.xy.push([t.clientX, t.clientY]);
+    this._tjStrokeFlush(s);
+  },
+  onTjDrawEnd(e) {
+    const s = this._tjStroke;
+    if (!s) return;
+    // 抬起的是后落下的那根手指：这一笔还没完
+    const ch = e && e.changedTouches;
+    if (ch && ch.length && !this._tjTouch(ch, s.tid)) return;
+    s.ended = true;
+    this._tjStrokeFlush(s);
+  },
+  _tjTouch(list, id) {
+    for (let i = 0; list && i < list.length; i++) if (list[i].identifier === id) return list[i];
+    return null;
+  },
+  // 强制收笔（结束描绘 / 关「手绘」/ 页面隐藏 / 又起一笔）：换算还没取回来就用上一次的
+  _tjStrokeEnd(s) {
+    s.ended = true;
+    if (!s.proj && !s.dead) {
+      s.proj = this._lastProj || null;
+      if (!s.proj) s.dead = true;
+    }
+    this._tjStrokeFlush(s);
+  },
+  // 已取到换算的屏幕点换成航点攒进这一笔（顺带累计这一笔的航程给横幅）；收笔时整笔并进航迹
+  _tjStrokeFlush(s) {
+    if (!s.dead) {
+      if (!s.proj) return;                                // 换算还没回来：回来时（起笔里的回调）接着走
+      const pts = s.en.tr.pts;
+      while (s.done < s.xy.length) {
+        const p = s.xy[s.done++];
+        const ll = s.proj(p[0], p[1]);
+        if (!ll) continue;
+        const wp = trajLayer.toWaypoint(ll.latitude, ll.longitude);
+        const prev = s.wps.length ? s.wps[s.wps.length - 1] : pts[pts.length - 1];
+        if (prev) s.m += trajLayer.geodesicM(prev[1], prev[0], wp[1], wp[0]);
+        s.wps.push(wp);
+      }
+    }
+    if (!s.ended) { if (s.wps.length) this._tjScheduleLive(); return; }
+    if (this._tjStroke === s) this._tjStroke = null;
+    if (this._tjRenderTimer) { clearTimeout(this._tjRenderTimer); this._tjRenderTimer = null; }
+    if (this.data.tjLive.length) this.setData({ tjLive: [] });
+    if (!s.wps.length || !this._tjEdit) { this._tjBanner(); return; }
+    this._tjPushUndo(s.en);                               // 一笔一份快照：「撤销」整笔退
+    s.en.tr.pts = s.en.tr.pts.concat(s.wps);
+    this._tjChanged(s.en);
+  },
+
+  // —— 「航点」面板（平台侧栏的航迹卡）——
+  showTjEditPanel() {
+    if (!this._tjEdit) return;
+    if (this._tjStroke) this._tjStrokeEnd(this._tjStroke);
+    this._tjNameDraft = null;
+    this._tjSheet();
+    this.setData({ showTjEditPopup: true, tjWpLat: '', tjWpLon: '' });
+  },
+  hideTjEditPanel() {
+    this._tjCommitName();
+    this.setData({ showTjEditPopup: false });
+  },
+  // 面板内容。航点多了只列两头（前 200 + 后 200，中间一行报省了几点）：几千点的航行日志逐行列出来，
+  // 一次 setData 就是几百 KB，真机上面板要卡好几秒才弹得出来
+  _tjSheet(toEnd) {
+    const en = this._tjEditEntry();
+    if (!en) return;
+    const pts = en.tr.pts, n = pts.length, cum = en.g.cum;
+    const row = (i) => ({ k: 'p' + i, i: i, no: i + 1, ll: trajLayer.fmtLL(pts[i][1], pts[i][0]), km: trajLayer.fmtKm(cum[i] || 0) });
+    const rows = [];
+    if (n <= TJ_SHEET_ALL) {
+      for (let i = 0; i < n; i++) rows.push(row(i));
+    } else {
+      const h = TJ_SHEET_ALL / 2;
+      for (let i = 0; i < h; i++) rows.push(row(i));
+      rows.push({ k: 'gap', gap: n - TJ_SHEET_ALL });
+      for (let i = n - h; i < n; i++) rows.push(row(i));
+    }
+    this.setData({
+      tjSheet: { name: en.tr.name, n: n, color: String((en.tr.style && en.tr.style.line) || '').toLowerCase(), rows: rows },
+      tjWpInto: toEnd && n ? 'tjwp' + (n - 1) : ''
+    });
+  },
+
+  // 名称：输入时只记着，失焦 / 收起面板 / 结束描绘时落（平台发来的那条改过名就钉住，见 satsimPack.renameTraj）
+  onTjNameInput(e) { this._tjNameDraft = e.detail.value; },
+  onTjNameBlur() { this._tjCommitName(); },
+  _tjCommitName() {
+    const v = this._tjNameDraft;
+    this._tjNameDraft = null;
+    const ed = this._tjEdit;
+    if (v == null || !ed) return;
+    const en = this._tjEditEntry();
+    if (!en) return;
+    const nm = String(v).trim();
+    if (!nm) { this._tjSheet(); return; }                 // 清空不算改名：原名填回去
+    if (nm === en.tr.name) return;
+    if (ed.draft) ed.draft.tr.name = nm;
+    else if (satsimPack.renameTraj(ed.id, nm)) en.tr.name = nm;
+    this._refreshTrajs();
+    this._tjBanner();
+  },
+
+  // 逐条颜色：线 / 航点 / 图标三样一起跟它走（平台 trajStyleOf 的「自带色」口径）；「默认」回到航行 / 飞行出厂色
+  onTjColor(e) {
+    const c = String(e.currentTarget.dataset.c || '').toLowerCase();
+    const en = this._tjEditEntry();
+    if (!en) return;
+    const st = Object.assign({}, en.tr.style || {});
+    if (c) { st.line = c; st.dot = c; st.icon = c; } else { delete st.line; delete st.dot; delete st.icon; }
+    en.tr.style = st;
+    this._tjChanged(en);
+    this._tjSheet();
+  },
+
+  // 点行 = 在图上选中这一点（收起面板、地图移过去），再点地图把它挪到新位置
+  onTjWpPick(e) {
+    const i = Number(e.currentTarget.dataset.i);
+    const ed = this._tjEdit;
+    const en = this._tjEditEntry();
+    if (!ed || !en || !en.tr.pts[i]) return;
+    this._tjCommitName();
+    ed.sel = i;
+    this.setData({ showTjEditPopup: false, tjFree: false });
+    this._renderTrajs();
+    this._tjBanner();
+    this._tjPanTo(en.tr.pts[i]);
+  },
+  // 行上「改」：直接改这一点的经纬度（WGS-84，与读数同一个口径）
+  onTjWpEdit(e) {
+    const i = Number(e.currentTarget.dataset.i);
+    const en = this._tjEditEntry();
+    if (!en || !en.tr.pts[i]) return;
+    const p = en.tr.pts[i];
+    wx.showModal({
+      title: '第 ' + (i + 1) + ' 点（纬度, 经度）',
+      editable: true,
+      placeholderText: '纬度, 经度（南纬 / 西经为负）',
+      content: p[1] + ', ' + p[0],
+      success: (r) => {
+        if (!r.confirm) return;
+        const ll = this._tjParseLL(r.content);
+        if (!ll) { wx.showToast({ title: '格式：纬度, 经度', icon: 'none' }); return; }
+        const cur = this._tjEditEntry();
+        if (!cur || !cur.tr.pts[i]) return;
+        this._tjPushUndo(cur);
+        cur.tr.pts[i] = trajLayer.waypointOf(ll.lat, ll.lon);
+        this._tjChanged(cur);
+        this._tjSheet();
+      }
+    });
+  },
+  onTjWpDel(e) {
+    const i = Number(e.currentTarget.dataset.i);
+    const ed = this._tjEdit;
+    const en = this._tjEditEntry();
+    if (!ed || !en || !en.tr.pts[i]) return;
+    this._tjPushUndo(en);
+    en.tr.pts.splice(i, 1);
+    if (ed.sel === i) ed.sel = -1; else if (ed.sel > i) ed.sel--;
+    this._tjChanged(en);
+    this._tjSheet();
+  },
+  onTjWpLatInput(e) { this.setData({ tjWpLat: e.detail.value }); },
+  onTjWpLonInput(e) { this.setData({ tjWpLon: e.detail.value }); },
+  // 按经纬度加点（平台航迹卡「纬 / 经 / 加点」）
+  onTjWpAdd() {
+    const lat = this._tjNum(this.data.tjWpLat), lon = this._tjNum(this.data.tjWpLon);
+    if (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) {
+      wx.showToast({ title: '纬度 -90~90，经度 -180~180', icon: 'none' });
+      return;
+    }
+    const ed = this._tjEdit;
+    const en = this._tjEditEntry();
+    if (!ed || !en) return;
+    this._tjPushUndo(en);
+    en.tr.pts.push(trajLayer.waypointOf(lat, lon));
+    ed.sel = -1;
+    this._tjChanged(en);
+    this.setData({ tjWpLat: '', tjWpLon: '' });
+    this._tjSheet(true);
+  },
+  _tjNum(v) {
+    const s = String(v == null ? '' : v).trim();
+    return s ? Number(s) : NaN;
+  },
+  _tjParseLL(s) {
+    const a = String(s || '').trim().split(/[\s,，;；]+/).filter(Boolean);
+    if (a.length !== 2) return null;
+    const lat = Number(a[0]), lon = Number(a[1]);
+    return lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 ? { lat: lat, lon: lon } : null;
+  },
+  // 地图中心移到某航点（先偏到底图坐标）
+  _tjPanTo(p) {
+    const d = trajLayer.wgs2gcj(p[1], p[0]);
+    const fallback = () => this.setData({ latitude: d.latitude, longitude: d.longitude });
+    if (this.mapCtx && this.mapCtx.moveToLocation) {
+      this.mapCtx.moveToLocation({ latitude: d.latitude, longitude: d.longitude, fail: fallback });
+    } else {
+      fallback();
+    }
+  },
+
+  // 航迹面板里的「＋ 密钥导入」：与波束那一路同一个弹窗、同一条云函数，只换标题、去掉波束名那一格
+  showTrajImport() {
+    this.setData({
+      showTrajPopup: false, showImportPopup: true, importMode: 'traj',
+      importKeyInput: '', otpCells: this._buildOtpCells(''), importKeyFocus: false, importBeamName: ''
+    });
+  },
+
+  // 密钥拉回来的是仿真平台多件包：先出清单确认，再逐类落地（与「我的配置 → 平台密钥」同口径），
+  // 航迹当场打开并定位；别的类型落到各自的页面，结果里说清在哪看
+  async _importPlatformPack(pack) {
+    const items = Array.isArray(pack && pack.items) ? pack.items : [];
+    if (!items.length) { wx.showModal({ title: '导入为空', content: '包里没有可导入的内容。', showCancel: false }); return; }
+    const ok = await new Promise((resolve) => {
+      wx.showModal({
+        title: pack.name || '仿真平台数据',
+        content: satsimPack.describePack(pack) + '\n' + satsimPack.listPack(pack),
+        confirmText: '导入',
+        success: (r) => resolve(!!r.confirm),
+        fail: () => resolve(false)
+      });
+    });
+    if (!ok) return;
+    wx.showLoading({ title: '导入中...', mask: true });
+    let res = null;
+    try {
+      res = await satsimPack.importAll(pack);
+    } catch (e) {
+      wx.hideLoading();
+      wx.showModal({ title: '导入失败', content: (e && e.message) || '未知错误', showCancel: false });
+      return;
+    }
+    wx.hideLoading();
+    this.setData({ showImportPopup: false, importKeyInput: '', otpCells: this._buildOtpCells(''), importKeyFocus: false });
+    this._takeFreshTrajs();                   // 本页就在前台：新到的航迹当场打开并定位
+
+    const t = res.traj, parts = [];
+    if (t.total) parts.push('航迹 ' + (t.total - t.failed) + ' 条' + (t.failed ? '（' + t.failed + ' 条未能导入）' : ''));
+    if (res.cfg.total) parts.push('链路配置 ' + res.cfg.total + ' 份' + (res.cfg.local ? '（' + res.cfg.local + ' 份存本地）' : ''));
+    if (res.plan.total) parts.push('频率计划 ' + res.plan.total + ' 份');
+    if (res.set.total) parts.push('星座 ' + (res.set.total - res.set.failed) + ' 份');
+    const others = res.cfg.total + res.plan.total + res.set.total;
+    if (!others && t.total && !t.failed) {
+      wx.showToast({ title: '已导入 ' + t.total + ' 条航迹', icon: 'none', duration: 2000 });
+      return;
+    }
+    wx.showModal({
+      title: '已导入',
+      content: (parts.join('，') || '包里没有可导入的内容')
+        + (res.cfg.total ? '\n链路配置在「我的配置」查看。' : '')
+        + (res.plan.total ? '\n频率计划在「工具栏 → 频率计划」查看。' : '')
+        + (res.set.total ? '\n星座在「工具栏 → 星座地图」查看。' : ''),
+      showCancel: false
+    });
   },
 
   // 返回上一页

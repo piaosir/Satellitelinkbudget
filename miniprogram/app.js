@@ -495,6 +495,8 @@ App({
       if (r.cfg) parts.push(r.cfg + ' 份配置');
       if (r.plan) parts.push(r.plan + ' 份频率计划');
       if (r.gxt) parts.push(r.gxt + ' 份覆盖');
+      if (r.set) parts.push(r.set + ' 份星座');
+      if (r.traj) parts.push(r.traj + ' 条航迹');
       setTimeout(() => {
         wx.showToast({ title: '已同步 ' + parts.join(' · '), icon: 'none', duration: 2400 });
       }, 1200);

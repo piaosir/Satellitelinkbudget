@@ -18,6 +18,18 @@ function includes(arr, item) {
   return false;
 }
 
+/**
+ * 两个覆盖物数组拼给 map（航迹层 tjLines / tjMarkers 拼在覆盖图那一套之后）。
+ * 分开存、到模板里才拼：页面里按颜色 / id 段筛 polylines、markers 的老逻辑就碰不到航迹层。
+ * 一边为空时原样返回另一边，不造新数组。
+ */
+function cat(a, b) {
+  if (!b || !b.length) return a || [];
+  if (!a || !a.length) return b;
+  return a.concat(b);
+}
+
 module.exports = {
-  includes: includes
+  includes: includes,
+  cat: cat
 };

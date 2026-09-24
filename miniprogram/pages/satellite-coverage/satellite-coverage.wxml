@@ -1,8 +1,9 @@
 <!--satellite-coverage.wxml-->
 <wxs src="./utils.wxs" module="utils" />
 <view class="container">
-  <!-- 地图组件 -->
-  <map 
+  <!-- 地图组件。旋转关死：原先属性写 true、setting 写 0，两者打架（屏幕点换经纬度按北朝上算，转了就偏）。
+       「手绘」开着时锁住拖动 / 缩放：手绘层底下的地图不许跟着手指跑 -->
+  <map
     id="coverageMap"
     class="coverage-map"
     latitude="{{latitude}}"
@@ -11,22 +12,48 @@
     min-scale="{{3}}"
     max-scale="{{20}}"
     circles="{{circles}}"
-    markers="{{markers}}"
-    polyline="{{polylines}}"
+    markers="{{utils.cat(markers, tjMarkers)}}"
+    polyline="{{utils.cat(utils.cat(polylines, tjLines), tjLive)}}"
     polygons="{{polygons}}"
     show-location="{{showCurrentLocation}}"
-    enable-zoom="{{true}}"
-    enable-scroll="{{true}}"
-    enable-rotate="{{true}}"
+    enable-zoom="{{!(tjEdit && tjFree)}}"
+    enable-scroll="{{!(tjEdit && tjFree)}}"
+    enable-rotate="{{false}}"
     enable-poi="{{true}}"
     enable-satellite="{{enableSatellite}}"
     setting="{{mapSetting}}"
     bindmarkertap="onMarkerTap"
+    bindtap="onMapTap"
+    bindpoitap="onMapPoiTap"
+    bindcallouttap="onMapCalloutTap"
     bindtouchstart="onMapTouchStart"
     bindtouchend="onMapTouchEnd"
     bindtouchmove="onMapTouchMove">
   </map>
-  
+
+  <!-- 手绘层：描绘中开着「手绘」时盖住地图接手指，按住拖动连续加航点（地图此时拖不动，关掉即恢复） -->
+  <view class="tj-draw-layer" wx:if="{{tjEdit && tjFree}}"
+        catchtouchstart="onTjDrawStart" catchtouchmove="onTjDrawMove"
+        catchtouchend="onTjDrawEnd" catchtouchcancel="onTjDrawEnd"></view>
+
+  <!-- 描绘横幅（平台 traj-banner）：没选点时 撤销 / 手绘 / 航点 / 结束；选着航点时 删除此点 / 取消 -->
+  <view class="tj-banner" wx:if="{{tjEdit}}" style="top: {{navBarTop + navBarHeight + 10}}px;">
+    <view class="tj-banner-info">
+      <text class="tj-banner-title">{{tjEdit.title}}</text>
+      <text class="tj-banner-sub">{{tjEdit.sub}}</text>
+    </view>
+    <view class="tj-banner-ops" wx:if="{{tjEdit.sel >= 0}}">
+      <view class="tj-bop del" bindtap="tjDelSel">删除此点</view>
+      <view class="tj-bop" bindtap="tjClearSel">取消</view>
+    </view>
+    <view class="tj-banner-ops" wx:else>
+      <view class="tj-bop {{tjEdit.canUndo ? '' : 'off'}}" bindtap="tjUndo">撤销</view>
+      <view class="tj-bop {{tjFree ? 'on' : ''}}" bindtap="toggleTjFree">手绘</view>
+      <view class="tj-bop" bindtap="showTjEditPanel">航点</view>
+      <view class="tj-bop end" bindtap="tjEnd">结束</view>
+    </view>
+  </view>
+
   <!-- 悬浮操作栏 - 与主界面风格一致 -->
   <view class="floating-action-bar" style="top: {{navBarTop}}px; height: {{navBarHeight}}px; left: {{navBarRight}}px;">
     <!-- 返回按钮 -->
@@ -67,6 +94,11 @@
       <!-- 自定义覆盖值按钮 (仅在有覆盖数据时显示) -->
       <view class="bottom-btn {{showCoverageContours ? '' : 'disabled'}} {{isLoadingCoverageData || isSwitchingSatellite ? 'loading' : ''}}" bindtap="showCustomValuePanel" wx:if="{{showCoverageContours}}">
         <text class="bottom-btn-text">{{isLoadingCoverageData ? '加载中' : '自定义'}}</text>
+      </view>
+
+      <!-- 航迹按钮（仿真平台发来的航行 / 飞行航迹；有显示中的就高亮） -->
+      <view class="bottom-btn {{trajOn > 0 ? 'active' : ''}}" bindtap="showTrajPanel">
+        <text class="bottom-btn-text">航迹</text>
       </view>
     </view>
 
@@ -448,14 +480,100 @@
   </view>
   <view class="coverage-popup-mask custom-sat-mask {{showCustomSatPopup ? 'show' : ''}}" wx:if="{{showCustomSatPopup}}" bindtap="hideCustomSatPanel"></view>
 
-  <!-- 密钥导入弹窗 -->
+  <!-- 航迹弹窗：仿真平台发来的 / 手机上手绘的航行 / 飞行航迹。点整行显示 / 隐藏，行上四个操作 -->
+  <view class="coverage-popup traj-popup {{showTrajPopup ? 'show' : ''}}" wx:if="{{showTrajPopup}}">
+    <view class="coverage-popup-header">
+      <text class="coverage-popup-title">航迹</text>
+      <view class="traj-header-actions">
+        <text class="coverage-section-toggle" wx:if="{{trajRows.length > 1}}" bindtap="toggleAllTrajs">{{trajAllOn ? '全部隐藏' : '全部显示'}}</text>
+        <text class="coverage-popup-close" bindtap="hideTrajPanel">✕</text>
+      </view>
+    </view>
+    <view class="coverage-popup-body">
+      <view class="traj-head">
+        <text class="import-btn" data-kind="sea" bindtap="onTrajNew">＋ 航行</text>
+        <text class="import-btn" data-kind="flight" bindtap="onTrajNew">＋ 飞行</text>
+        <text class="import-btn" bindtap="showTrajImport">＋ 密钥导入</text>
+      </view>
+      <scroll-view scroll-y class="traj-scroll">
+        <view class="traj-row {{item.on ? '' : 'off'}} {{item.editing ? 'editing' : ''}}" wx:for="{{trajRows}}" wx:key="id" data-id="{{item.id}}" bindtap="onTrajToggle">
+          <view class="traj-chk {{item.on ? 'on' : ''}}"></view>
+          <image wx:if="{{item.icon}}" class="traj-glyph" src="{{item.icon}}" mode="aspectFit"></image>
+          <view class="traj-main">
+            <view class="traj-name-wrap">
+              <text class="traj-name">{{item.name}}</text>
+              <text wx:if="{{item.local}}" class="traj-badge">本机</text>
+            </view>
+            <view class="traj-meta">
+              <view class="traj-swatch {{item.dash ? 'dash' : ''}}" style="border-top-color: {{item.color}};"></view>
+              <text class="traj-sub">{{item.sub}}</text>
+            </view>
+          </view>
+          <!-- 四个操作排成两行两列：一字排开时名字只剩三四个字、读数也被截掉 -->
+          <view class="traj-ops">
+            <text class="traj-op {{item.editing ? 'on' : ''}}" data-id="{{item.id}}" catchtap="onTrajEdit">{{item.editing ? '编辑中' : '编辑'}}</text>
+            <text class="traj-op" data-id="{{item.id}}" catchtap="onTrajLocate">定位</text>
+            <text class="traj-op" data-id="{{item.id}}" catchtap="onTrajRename">改名</text>
+            <text class="traj-op del" data-id="{{item.id}}" catchtap="onTrajDelete">移除</text>
+          </view>
+        </view>
+        <view class="beam-empty" wx:if="{{trajRows.length === 0}}">暂无航迹。</view>
+      </scroll-view>
+    </view>
+  </view>
+  <view class="coverage-popup-mask {{showTrajPopup ? 'show' : ''}}" wx:if="{{showTrajPopup}}" bindtap="hideTrajPanel"></view>
+
+  <!-- 「航点」面板（描绘横幅打开；平台侧栏的航迹卡）：名称 / 颜色 / 航点列表（点行 = 在图上选中，改坐标、删点）/ 按经纬度加点 -->
+  <view class="coverage-popup tj-edit-popup {{showTjEditPopup ? 'show' : ''}}" wx:if="{{showTjEditPopup && tjSheet}}">
+    <view class="coverage-popup-header">
+      <text class="coverage-popup-title">编辑航迹</text>
+      <text class="coverage-popup-close" bindtap="hideTjEditPanel">✕</text>
+    </view>
+    <view class="coverage-popup-body">
+      <view class="tj-field">
+        <text class="tj-label">名称</text>
+        <input class="elevation-input-single tj-input" type="text" maxlength="40" value="{{tjSheet.name}}"
+               bindinput="onTjNameInput" bindblur="onTjNameBlur" bindconfirm="onTjNameBlur" />
+      </view>
+      <view class="tj-field">
+        <text class="tj-label">颜色</text>
+        <view class="tj-colors">
+          <text class="tj-color-def {{tjSheet.color ? '' : 'on'}}" data-c="" bindtap="onTjColor">默认</text>
+          <view wx:for="{{tjPalette}}" wx:key="*this" class="tj-color {{tjSheet.color === item ? 'on' : ''}}"
+                style="background: {{item}};" data-c="{{item}}" bindtap="onTjColor"></view>
+        </view>
+      </view>
+      <text class="tj-label tj-wp-title">航点（{{tjSheet.n}}）</text>
+      <scroll-view scroll-y class="tj-wp-scroll" scroll-into-view="{{tjWpInto}}">
+        <block wx:for="{{tjSheet.rows}}" wx:key="k">
+          <view wx:if="{{item.gap}}" class="tj-wp-gap">… 中间 {{item.gap}} 点 …</view>
+          <view wx:else id="tjwp{{item.i}}" class="tj-wp-row {{tjEdit.sel === item.i ? 'sel' : ''}}" data-i="{{item.i}}" bindtap="onTjWpPick">
+            <text class="tj-wp-no">{{item.no}}</text>
+            <text class="tj-wp-ll">{{item.ll}}</text>
+            <text class="tj-wp-km">{{item.km}}</text>
+            <text class="traj-op" data-i="{{item.i}}" catchtap="onTjWpEdit">改</text>
+            <text class="traj-op del" data-i="{{item.i}}" catchtap="onTjWpDel">删</text>
+          </view>
+        </block>
+        <view class="beam-empty" wx:if="{{!tjSheet.n}}">暂无航点。</view>
+      </scroll-view>
+      <view class="tj-wp-add">
+        <input class="elevation-input-single tj-input" type="text" placeholder="纬度" value="{{tjWpLat}}" bindinput="onTjWpLatInput" />
+        <input class="elevation-input-single tj-input" type="text" placeholder="经度" value="{{tjWpLon}}" bindinput="onTjWpLonInput" />
+        <view class="coverage-btn coverage-btn-confirm tj-wp-addbtn" bindtap="onTjWpAdd">加点</view>
+      </view>
+    </view>
+  </view>
+  <view class="coverage-popup-mask {{showTjEditPopup ? 'show' : ''}}" wx:if="{{showTjEditPopup && tjSheet}}" bindtap="hideTjEditPanel"></view>
+
+  <!-- 密钥导入弹窗（波束面板与航迹面板共用：同一条云函数，包里有什么就落什么） -->
   <view class="coverage-popup {{showImportPopup ? 'show' : ''}}" wx:if="{{showImportPopup}}">
     <view class="coverage-popup-header">
-      <text class="coverage-popup-title">导入覆盖数据</text>
+      <text class="coverage-popup-title">{{importMode === 'traj' ? '导入航迹' : '导入覆盖数据'}}</text>
       <text class="coverage-popup-close" bindtap="hideImportPanel">✕</text>
     </view>
     <view class="coverage-popup-body">
-      <view class="import-tip">在仿真平台点「导出 › 发送到小程序」生成密钥后在此输入。导入的覆盖将作为「{{currentSatellite.name}} · {{selectedType === 'GT' ? 'G/T' : 'EIRP'}}」下的一个波束。</view>
+      <view class="import-tip" wx:if="{{importMode !== 'traj'}}">在仿真平台点「导出 › 发送覆盖图到小程序」生成密钥后在此输入。导入的覆盖将作为「{{currentSatellite.name}} · {{selectedType === 'GT' ? 'G/T' : 'EIRP'}}」下的一个波束。</view>
       <!-- 8 位密钥分格输入（验证码风格：中间只读“-”分隔，隐形 input 覆盖全区承接键盘/粘贴/退格） -->
       <view class="otp-field {{importKeyFocus ? 'is-focused' : ''}}" bindtap="focusOtp">
         <block wx:for="{{otpCells}}" wx:key="id">
@@ -471,7 +589,7 @@
                bindinput="onImportKeyInput" bindfocus="onOtpFocus" bindblur="onOtpBlur" />
       </view>
       <view class="otp-hint">8 位字母 / 数字，如 ABCD-2345</view>
-      <input type="text" class="elevation-input-single import-name-input" placeholder="波束名称（可选，默认取快照名）" value="{{importBeamName}}" bindinput="onImportNameInput" />
+      <input wx:if="{{importMode !== 'traj'}}" type="text" class="elevation-input-single import-name-input" placeholder="波束名称（可选，默认取快照名）" value="{{importBeamName}}" bindinput="onImportNameInput" />
       <view class="coverage-actions">
         <view class="coverage-btn coverage-btn-cancel" bindtap="hideImportPanel">取消</view>
         <view class="coverage-btn coverage-btn-confirm {{importing ? 'disabled' : ''}}" bindtap="confirmImport">{{importing ? '导入中...' : '导入'}}</view>

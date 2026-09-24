@@ -251,7 +251,7 @@ Page({
       wx.showModal({
         title: '包里没有星座',
         content: '这个密钥装的是 ' + satsimPack.describePack(pack)
-          + '。链路配置请到「我的配置 → 导入」，频率计划请到「工具栏 → 频率计划」输入。',
+          + '。链路配置请到「我的配置 → 导入」，频率计划请到「工具栏 → 频率计划」，航迹请到「工具栏 → 卫星覆盖 → 航迹」输入。',
         showCancel: false
       });
       return;

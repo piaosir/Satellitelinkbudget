@@ -320,11 +320,11 @@ function clearGxtQueue(ids) {
  * 拉一轮。
  * @param {object} opts { force 忽略节流 }
  * @returns {Promise<{ok:boolean, reason?:string, n:number, cfg:number, plan:number, gxt:number,
- *                    set:number, left:number, platforms:Array, error?:string}>}
+ *                    set:number, traj:number, left:number, platforms:Array, error?:string}>}
  */
 async function syncNow(opts) {
   const force = !!(opts && opts.force);
-  const empty = { ok: false, n: 0, cfg: 0, plan: 0, gxt: 0, set: 0, left: 0, platforms: [] };
+  const empty = { ok: false, n: 0, cfg: 0, plan: 0, gxt: 0, set: 0, traj: 0, left: 0, platforms: [] };
 
   const ch = getCh();
   if (!ch) return Object.assign({}, empty, { reason: 'nobind' });
@@ -348,7 +348,7 @@ async function syncNow(opts) {
   const fresh = all.filter((m) => isFresh(m, seen));
   if (!fresh.length) {
     pruneSeen(seen, all);
-    return { ok: true, n: 0, cfg: 0, plan: 0, gxt: 0, set: 0, left: 0, platforms: platforms };
+    return { ok: true, n: 0, cfg: 0, plan: 0, gxt: 0, set: 0, traj: 0, left: 0, platforms: platforms };
   }
 
   // 老的先落：同一份内容若在一轮里出现多次（不该发生，但索引是平台写的，不做此假设），
@@ -356,7 +356,7 @@ async function syncNow(opts) {
   fresh.sort((a, b) => (a.ts || 0) - (b.ts || 0));
   const round = fresh.slice(0, MAX_PER_ROUND);
 
-  let cfg = 0, plan = 0, gxt = 0, set = 0, failed = 0;
+  let cfg = 0, plan = 0, gxt = 0, set = 0, traj = 0, failed = 0;
   for (const m of round) {
     let snap = null;
     try {
@@ -376,7 +376,10 @@ async function syncNow(opts) {
         // 卫星集直接落地（不像覆盖快照那样要排队）：它不依赖任何页面状态，
         // 星座地图读的就是这份存储 —— 后台同步完，用户下次进图直接看得到。
         const sr = satsimPack.importSatSets(snap);
+        // 航迹同卫星集：不依赖页面状态，直接落地；「卫星覆盖」页进来时按 fresh 标志打开并定位到新到的那几条
+        const tr = satsimPack.importTrajs(snap);
         cfg += cr.total; plan += pr.total; set += sr.total;
+        traj += tr.total - tr.failed; failed += tr.failed;
       } else if (snap.kind === 'gxt-snapshot') {
         // 存不下时照样往下走记 seen：存储满 / 单件超上限是持久状态，重拉每轮都会再失败一次，只烧流量
         if (queueGxt(m, snap)) gxt++; else failed++;
@@ -394,8 +397,8 @@ async function syncNow(opts) {
 
   return {
     ok: true,
-    n: cfg + plan + gxt + set,
-    cfg: cfg, plan: plan, gxt: gxt, set: set,
+    n: cfg + plan + gxt + set + traj,
+    cfg: cfg, plan: plan, gxt: gxt, set: set, traj: traj,
     failed: failed,
     left: Math.max(0, fresh.length - round.length),
     platforms: platforms
