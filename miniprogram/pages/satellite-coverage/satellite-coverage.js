@@ -5237,7 +5237,7 @@ Page({
     const t = res.traj, parts = [];
     if (t.total) parts.push('航迹 ' + (t.total - t.failed) + ' 条' + (t.failed ? '（' + t.failed + ' 条未能导入）' : ''));
     if (res.cfg.total) parts.push('链路配置 ' + res.cfg.total + ' 份' + (res.cfg.local ? '（' + res.cfg.local + ' 份存本地）' : ''));
-    if (res.plan.total) parts.push('频率计划 ' + res.plan.total + ' 份');
+    if (res.plan.total) parts.push('频率计划 ' + (res.plan.total - res.plan.failed) + ' 份' + (res.plan.failed ? '（' + res.plan.failed + ' 份存不下）' : ''));
     if (res.set.total) parts.push('星座 ' + (res.set.total - res.set.failed) + ' 份');
     const others = res.cfg.total + res.plan.total + res.set.total;
     if (!others && t.total && !t.failed) {
@@ -5248,7 +5248,7 @@ Page({
       title: '已导入',
       content: (parts.join('，') || '包里没有可导入的内容')
         + (res.cfg.total ? '\n链路配置在「我的配置」查看。' : '')
-        + (res.plan.total ? '\n频率计划在「工具栏 → 频率计划」查看。' : '')
+        + (res.plan.total > res.plan.failed ? '\n频率计划在「工具栏 → 频率计划」查看。' : '')
         + (res.set.total ? '\n星座在「工具栏 → 星座地图」查看。' : ''),
       showCancel: false
     });

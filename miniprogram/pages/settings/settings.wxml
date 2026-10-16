@@ -69,7 +69,7 @@
       </view>
       <view class="about-item">
         <text class="label">版本号</text>
-        <text class="value">v3.8.13</text>
+        <text class="value">v3.8.14</text>
       </view>
       <!-- 「开发者」行：右侧是一颗黑色细描边按钮（白底、1px 墨线、4rpx 圆角、Courier 粗体，与本卡「值」同字），
            点开开发者微信二维码弹层。面上不写「加微信」三个字（2026-09-10 用户定）；同日要求做成明显的按钮样式，

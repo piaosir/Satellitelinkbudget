@@ -165,7 +165,9 @@ Page({
     const r = satsimPack.importPlans(pack);
     this.setData({ showKey: false, keyFocus: false, keyInput: '' });
     this.refreshList();
-    wx.showToast({ title: '已导入 ' + r.total + ' 份' + (r.replaced ? '（覆盖 ' + r.replaced + '）' : ''), icon: 'none', duration: 2000 });
+    const n = r.total - r.failed;
+    if (!n) { wx.showModal({ title: '导入失败', content: '本机存不下这 ' + r.failed + ' 份频率计划', showCancel: false }); return; }
+    wx.showToast({ title: '已导入 ' + n + ' 份' + (r.replaced ? '（覆盖 ' + r.replaced + '）' : '') + (r.failed ? '，' + r.failed + ' 份存不下' : ''), icon: 'none', duration: 2000 });
   },
 
   onPlanTap(e) {

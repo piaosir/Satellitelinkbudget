@@ -2188,7 +2188,7 @@ Page({
 
     wx.showLoading({ title: '导入中...', mask: true });
     let cr = { total: 0, cloud: 0, local: 0 };
-    let pr = { total: 0, added: 0, replaced: 0 };
+    let pr = { total: 0, added: 0, replaced: 0, failed: 0 };
     let sr = { total: 0, failed: 0 };
     let tr = { total: 0, failed: 0 };
     try {
@@ -2207,13 +2207,14 @@ Page({
 
     const parts = [];
     if (cr.total) parts.push('配置 ' + cr.total + ' 份' + (cr.local ? '（' + cr.local + ' 份存本地）' : ''));
-    if (pr.total) parts.push('频率计划 ' + pr.total + ' 份' + (pr.replaced ? '（覆盖 ' + pr.replaced + '）' : ''));
+    const prNote = [pr.replaced ? '覆盖 ' + pr.replaced : '', pr.failed ? pr.failed + ' 份存不下' : ''].filter(Boolean).join('，');
+    if (pr.total) parts.push('频率计划 ' + (pr.total - pr.failed) + ' 份' + (prNote ? '（' + prNote + '）' : ''));
     if (sr.total) parts.push('星座 ' + (sr.total - sr.failed) + ' 份' + (sr.failed ? '（' + sr.failed + ' 份存不下）' : ''));
     if (tr.total) parts.push('航迹 ' + (tr.total - tr.failed) + ' 条' + (tr.failed ? '（' + tr.failed + ' 条未能导入）' : ''));
     wx.showModal({
       title: '已导入',
       content: (parts.join('，') || '包里没有可导入的内容')
-        + (pr.total ? '\n频率计划在「工具栏 → 频率计划」查看。' : '')
+        + (pr.total > pr.failed ? '\n频率计划在「工具栏 → 频率计划」查看。' : '')
         + (sr.total ? '\n星座在「工具栏 → 星座地图」查看。' : '')
         + (tr.total ? '\n航迹在「工具栏 → 卫星覆盖 → 航迹」查看。' : '')
         + (cr.total ? '\n配置里的计算结果为平台计算值' + (pack.from ? '（' + pack.from + '）' : '') + '，本地重算后会覆盖。' : ''),

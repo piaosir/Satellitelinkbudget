@@ -2,6 +2,7 @@
 // 配置管理云函数 - 负责配置的云端保存、读取、删除和分享
 
 const cloud = require('wx-server-sdk');
+const crypto = require('crypto');
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
 const db = cloud.database();
@@ -178,27 +179,52 @@ exports.main = async (event, context) => {
 // 没有它就只能靠「新增」，于是平台每同步一次就在手机上多堆一份同名配置 —— 自动同步就成了灾难。
 // ★ 刻意不用 configName 当身份：名字里带着发信站→收信站，改个站名就变成另一份，
 //   而改站名恰恰是「同一条链路被改了」最常见的形态。srcId 缺失时【退回新增】，不猜。
+//
+// ★★ 唯一性：首存不再「先查后加」—— 两路前后脚都查到「没有」就各 add 一条，而集合上没有唯一约束。
+//    老版本小程序的 App.onShow 与页面 onShow 并发同步、同一账号两台设备同时同步，都走得进这条缝。
+//    改成按 (openid, srcId) 定死 _id 再 doc(id).set（有则整条替换、无则创建）：几路同时首存也只剩一条。
+// ★★★ 已经落成多份的（上面那条缝留下的）在下一次同步时收成一份：留定死 _id 的那条，没有就留最早建的；
+//     其余的分享记录改挂到留下的这条（分享码照常能用），然后删掉。几路并发收拢挑中的是同一条，不会互删。
+const syncDocId = (openid, srcId) => 'sync_' + crypto.createHash('sha1').update(String(openid) + '\n' + String(srcId)).digest('hex').slice(0, 32);
+const ageOf = (row) => { const t = row && row.createTime; const v = t == null ? NaN : new Date(t).getTime(); return isFinite(v) ? v : Infinity; };
+
 async function syncSaveConfig(openid, data) {
   const srcId = String((data && data.srcId) || '');
   if (!srcId) return await saveConfig(openid, data);
 
-  const r = await db.collection('user_configs').where({ openid, srcId }).limit(1).get();
-  const row = r.data && r.data[0];
-  if (!row) return await saveConfig(openid, data);
+  const coll = db.collection('user_configs');
+  const id = syncDocId(openid, srcId);
+  const r = await coll.where({ openid, srcId }).limit(100).get();
+  const rows = (r && r.data) || [];
+  const fields = {
+    satelliteParams: data.satelliteParams || {},
+    linkParams: data.linkParams || {},
+    calculationResults: data.calculationResults || {},
+    noiseRatioMode: data.noiseRatioMode || 'ebno',
+    markedParams: data.markedParams || [],
+    highlightedRows: data.highlightedRows || [],
+    updateTime: db.serverDate()
+  };
 
-  await db.collection('user_configs').doc(row._id).update({
-    data: {
-      configName: data.configName || row.configName,
-      satelliteParams: data.satelliteParams || {},
-      linkParams: data.linkParams || {},
-      calculationResults: data.calculationResults || {},
-      noiseRatioMode: data.noiseRatioMode || 'ebno',
-      markedParams: data.markedParams || [],
-      highlightedRows: data.highlightedRows || [],
-      updateTime: db.serverDate()
-    }
-  });
-  return { success: true, configId: row._id, replaced: true, message: '配置已更新' };
+  if (!rows.length) {
+    if (!data.configName) throw new Error('配置名称不能为空');
+    await coll.doc(id).set({
+      data: Object.assign({ openid, srcId, configName: data.configName, createTime: db.serverDate() }, fields)
+    });
+    return { success: true, configId: id, message: '配置已保存到云端' };
+  }
+
+  const keep = rows.find((x) => x._id === id)
+    || rows.slice().sort((a, b) => (ageOf(a) - ageOf(b)) || (String(a._id) < String(b._id) ? -1 : 1))[0];
+  await coll.doc(keep._id).update({ data: Object.assign({ configName: data.configName || keep.configName }, fields) });
+  for (const dup of rows) {
+    if (dup._id === keep._id) continue;
+    try {
+      await db.collection('shared_configs').where({ configId: dup._id, openid }).update({ data: { configId: keep._id } });
+    } catch (e) { /* 没分享过 / 集合还没建 */ }
+    try { await coll.doc(dup._id).remove(); } catch (e) { /* 并发的另一路已经删了 */ }
+  }
+  return { success: true, configId: keep._id, replaced: true, merged: rows.length - 1, message: '配置已更新' };
 }
 
 // 保存配置到云端

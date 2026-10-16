@@ -316,6 +316,15 @@ function clearGxtQueue(ids) {
 // ============================================================================
 // 同步
 // ============================================================================
+const idle = () => ({ ok: false, n: 0, cfg: 0, plan: 0, gxt: 0, set: 0, traj: 0, left: 0, platforms: [] });
+const noop = () => {};
+
+// 在途的那一轮（按认证码记）。App.onShow 与页面 onShow 前后脚各调一次是常态 —— 回前台时正停在
+// 我的配置 / 频率计划 / 星座地图 / 卫星覆盖页，或冷启直接进了这几页。两轮各拉各的清单、各判各的
+// fresh、各落各的，同一 srcId 就在云端落两份（configManager 的 syncSave 先查后加，两路都查到「没有」）。
+// 故同一时刻只跑一轮，后来的搭同一个 promise。
+let _inflight = null;   // { ch, p }
+
 /**
  * 拉一轮。
  * @param {object} opts { force 忽略节流 }
@@ -324,30 +333,52 @@ function clearGxtQueue(ids) {
  */
 async function syncNow(opts) {
   const force = !!(opts && opts.force);
-  const empty = { ok: false, n: 0, cfg: 0, plan: 0, gxt: 0, set: 0, traj: 0, left: 0, platforms: [] };
-
   const ch = getCh();
-  if (!ch) return Object.assign({}, empty, { reason: 'nobind' });
+  if (!ch) return Object.assign(idle(), { reason: 'nobind' });
+
+  // 搭车（force 也搭）：在途的那一轮就是一次真同步 —— 被节流掉的调用不会登记成在途
+  if (_inflight && _inflight.ch === ch) return _inflight.p;
 
   const last = Number(wx.getStorageSync(KEY_LAST) || 0);
-  if (!force && Date.now() - last < MIN_INTERVAL_MS) return Object.assign({}, empty, { ok: true, reason: 'throttled' });
+  if (!force && Date.now() - last < MIN_INTERVAL_MS) return Object.assign(idle(), { ok: true, reason: 'throttled' });
+  // ★ 节流时刻在【发起】时就记，不等清单拉回来：拉清单这一两秒里再来的自动同步若看到的还是旧时刻，
+  //   就会另起一轮。没拉成也算一次 —— 断网时每次切回前台都去撞一次墙没有意义（force 不受限）。
+  wx.setStorageSync(KEY_LAST, Date.now());
 
+  // 认证码换过（换绑 / 重置）而旧码那一轮还没收完：排在它后面跑，不并发、也不搭它的车
+  const prev = _inflight ? _inflight.p : null;
+  const me = { ch: ch, p: null };
+  const done = () => { if (_inflight === me) _inflight = null; };
+  me.p = (prev ? prev.then(noop, noop) : Promise.resolve())
+    .then(() => syncRound(ch))
+    .then((r) => { done(); return r; }, (e) => { done(); throw e; });
+  _inflight = me;
+  return me.p;
+}
+
+async function syncRound(ch) {
   let list;
   try {
     list = await fetchList(ch);
   } catch (e) {
-    return Object.assign({}, empty, { reason: 'net', error: String((e && e.message) || e) });
+    // 拉不全（403 / 5xx / 超时 / 损坏，见云函数 boxList）：什么都不动，尤其不修剪 seen
+    return Object.assign(idle(), { reason: 'net', error: String((e && e.message) || e) });
   }
-  wx.setStorageSync(KEY_LAST, Date.now());
+  // 拉取途中认证码被换掉了：换绑 / 重置已经清过 seen 与平台清单，旧码的结果一个字都别写回去
+  const stale = () => getCh() !== ch;
+  if (stale()) return Object.assign(idle(), { ok: true, reason: 'stale' });
 
   const platforms = (list && Array.isArray(list.platforms)) ? list.platforms : [];
   wx.setStorageSync(KEY_PLAT, platforms);
 
+  // ★ 只有【拉全了】的清单才能拿来修剪 seen（见 pruneSeen）。新云函数拉全时标 complete、拉不全直接报失败；
+  //   老云函数没有这个字段，且会把 403 / 5xx / 损坏吞成「空清单、成功」—— 分不出真假，一律不修剪。
+  const complete = !!(list && list.complete === true);
   const all = (list && Array.isArray(list.msgs)) ? list.msgs : [];
   const seen = readSeen();
   const fresh = all.filter((m) => isFresh(m, seen));
   if (!fresh.length) {
-    pruneSeen(seen, all);
+    if (complete) pruneSeen(seen, all);
     return { ok: true, n: 0, cfg: 0, plan: 0, gxt: 0, set: 0, traj: 0, left: 0, platforms: platforms };
   }
 
@@ -372,14 +403,16 @@ async function syncNow(opts) {
       if (snap.kind === 'satsim-pack') {
         // eslint-disable-next-line no-await-in-loop
         const cr = await satsimPack.importConfigs(snap);
+        // 存不下的计划 / 星座 / 航迹各自计入 failed、不往外抛，照样往下走记 seen（同覆盖快照，见下）
         const pr = satsimPack.importPlans(snap);
         // 卫星集直接落地（不像覆盖快照那样要排队）：它不依赖任何页面状态，
         // 星座地图读的就是这份存储 —— 后台同步完，用户下次进图直接看得到。
         const sr = satsimPack.importSatSets(snap);
         // 航迹同卫星集：不依赖页面状态，直接落地；「卫星覆盖」页进来时按 fresh 标志打开并定位到新到的那几条
         const tr = satsimPack.importTrajs(snap);
-        cfg += cr.total; plan += pr.total; set += sr.total;
-        traj += tr.total - tr.failed; failed += tr.failed;
+        cfg += cr.total;
+        plan += pr.total - pr.failed; set += sr.total - sr.failed; traj += tr.total - tr.failed;
+        failed += pr.failed + sr.failed + tr.failed;
       } else if (snap.kind === 'gxt-snapshot') {
         // 存不下时照样往下走记 seen：存储满 / 单件超上限是持久状态，重拉每轮都会再失败一次，只烧流量
         if (queueGxt(m, snap)) gxt++; else failed++;
@@ -393,7 +426,10 @@ async function syncNow(opts) {
       console.error('[satsimBox] 落地失败：', m.name, e);
     }
   }
-  pruneSeen(seen, all);
+  if (!stale()) {
+    if (complete) pruneSeen(seen, all);
+    else writeSeen(seen);
+  }
 
   return {
     ok: true,
@@ -405,7 +441,10 @@ async function syncNow(opts) {
   };
 }
 
-// seen 只保留还在索引里的消息：平台撤回 / 索引滚出上限后，那些 id 永远不会再出现，留着白占空间
+// seen 只保留还在索引里的消息：平台撤回 / 索引滚出上限后，那些 id 不会再以同一个 ts 出现，留着白占空间。
+// ★ 只能拿【完整的】清单修剪（调用方据 list.complete 判）。清单缺了哪个平台的那几条 —— 云函数拉某个
+//   索引 403 / 5xx / 超时、roster 拉不到 —— 这里就会把它们当「已撤回」删掉，下一轮清单拉全了，它们又成了
+//   「没见过」：整批重放，手机上删掉的频率计划复活、改过的名字被冲回平台那份。
 function pruneSeen(seen, all) {
   const alive = new Set(all.map((m) => m && m.id));
   const next = {};

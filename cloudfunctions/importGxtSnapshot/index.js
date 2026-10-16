@@ -43,6 +43,10 @@ function normalizeKey(raw) {
   return String(raw == null ? '' : raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+// 「对象确实不存在」的错误标记。只有它能被调用方读成「空」，其余一切失败照实报失败。
+const NOT_FOUND = 'KEY_NOT_FOUND';
+const isNotFound = (e) => !!e && e.message === NOT_FOUND;
+
 function httpsGetText(url) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, {
@@ -52,8 +56,16 @@ function httpsGetText(url) {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) { res.resume(); return resolve(httpsGetText(res.headers.location)); }
       if (res.statusCode !== 200) {
         let b = '';
-        res.on('data', (c) => { b += c; });
-        res.on('end', () => reject(new Error((res.statusCode === 403 || res.statusCode === 404) ? 'KEY_NOT_FOUND' : `HTTP ${res.statusCode}`)));
+        res.on('data', (c) => { if (b.length < 4096) b += c; });
+        res.on('end', () => {
+          const code = (/<Code>([^<]+)<\/Code>/.exec(b) || [])[1] || '';
+          // ★ 只有 404（NoSuchKey）才是「确实不存在」。403 不是：桶策略 / 前缀权限被改、防盗链、欠费停服
+          //   回的都是 403，而匿名读一个不存在的键 COS 回的是 404 NoSuchKey（2026-10-16 实测）。
+          //   原先 403 与 404 一并当「不存在」，绑定同步就把「暂时拉不到」读成「平台那边是空的」——
+          //   小程序据此清掉已同步标记，下一轮整批重放：手机上删掉的复活、改过的名字被冲回原名。
+          if (res.statusCode === 404 && code !== 'NoSuchBucket') reject(new Error(NOT_FOUND));
+          else reject(new Error('HTTP ' + res.statusCode + (code ? ' ' + code : '')));
+        });
         return;
       }
       const enc = (res.headers['content-encoding'] || '').toLowerCase();
@@ -88,12 +100,21 @@ function httpsGetText(url) {
 const cleanCh = (s) => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, '');
 const cleanSeg = (s) => String(s == null ? '' : s).replace(/[^A-Za-z0-9_-]/g, '');
 
+// 解析失败【照抛】，不吞成 null：roster / 索引读成 null 就成了「这个平台什么都没投」，后果同上面的 403。
 async function fetchJson(url) {
   const text = await httpsGetText(url);
-  try { return JSON.parse(text); } catch (e) { return null; }
+  try { return JSON.parse(text); } catch (e) { throw new Error('数据损坏（非法 JSON）'); }
 }
 
-/** 清单：roster → 逐平台索引 → 合并成一张按时间倒序的消息表 */
+/**
+ * 清单：roster → 逐平台索引 → 合并成一张按时间倒序的消息表。
+ *
+ * ★ 要么给【完整的】清单（data.complete = true），要么报失败 —— 没有「拉到一半当成功」这一档。
+ *   小程序拿清单做两件事：判哪些是新的、把不在清单里的已同步标记修剪掉。清单缺了哪个平台的那几条，
+ *   修剪就把它们当「已撤回」删掉，下一轮清单拉全了，它们又成了「没见过」：整批重放。
+ *   报失败时老版本小程序在修剪之前就返回了，故这一处改动不等小程序升级就生效；
+ *   complete 是给新版本小程序的：它只按带这个标记的清单修剪（老云函数没有这个字段 → 一律不修剪）。
+ */
 async function boxList(ch) {
   const C = cleanCh(ch);
   if (!/^[A-Z0-9]{12}$/.test(C)) return { success: false, errMsg: '认证码格式不正确（应为 12 位）' };
@@ -102,27 +123,43 @@ async function boxList(ch) {
   try {
     roster = await fetchJson(`${COS_BASE}box/${C}/roster.json`);
   } catch (e) {
-    // 还没有任何平台往这个码投过东西 —— 不是错误，是「新绑定还没收到内容」的正常态
-    if (e.message === 'KEY_NOT_FOUND') return { success: true, data: { ch: C, platforms: [], msgs: [] } };
-    return { success: false, errMsg: '拉取失败：' + e.message };
+    // 404：还没有任何平台往这个码投过东西 —— 不是错误，是「新绑定还没收到内容」的正常态
+    if (isNotFound(e)) return { success: true, data: { ch: C, platforms: [], msgs: [], complete: true } };
+    return { success: false, errMsg: '平台清单拉取失败：' + e.message };
   }
-  const platforms = (roster && Array.isArray(roster.platforms) ? roster.platforms : [])
+  // 平台写的 roster 必有 platforms 数组（至少它自己一条）；没有就是坏的，不当空
+  if (!roster || typeof roster !== 'object' || !Array.isArray(roster.platforms)) {
+    return { success: false, errMsg: '平台清单拉取失败：数据损坏（格式不对）' };
+  }
+  const platforms = roster.platforms
     .filter((p) => p && cleanSeg(p.pid))
     .map((p) => ({ pid: cleanSeg(p.pid), label: String(p.label || ''), app: String(p.app || ''), lastAt: Number(p.lastAt) || 0 }));
 
+  // 逐平台并发拉索引。404 当空：平台先写 roster、后写索引（平台 share.js boxSend），两步之间拉到的就是
+  // 「登记了、还没投」。其余失败（403 / 5xx / 超时 / 损坏）任何一个都整轮报失败，理由见函数头。
+  const got = await Promise.all(platforms.map(async (p) => {
+    try {
+      const idx = await fetchJson(`${COS_BASE}box/${C}/${p.pid}/index.json`);
+      if (!idx || typeof idx !== 'object' || !Array.isArray(idx.msgs)) return { p: p, error: '数据损坏（格式不对）' };
+      return { p: p, msgs: idx.msgs };
+    } catch (e) {
+      if (isNotFound(e)) return { p: p, msgs: [] };
+      return { p: p, error: e.message };
+    }
+  }));
+  const bad = got.find((g) => g.error);
+  if (bad) return { success: false, errMsg: '「' + (bad.p.label || bad.p.pid).slice(0, 40) + '」的消息索引拉取失败：' + bad.error };
+
   const now = Date.now();
   const msgs = [];
-  // 逐平台并发拉索引；某个平台的索引缺失/损坏不该拖垮整次同步，故各自 catch 成空
-  await Promise.all(platforms.map(async (p) => {
-    let idx = null;
-    try { idx = await fetchJson(`${COS_BASE}box/${C}/${p.pid}/index.json`); } catch (e) { idx = null; }
-    for (const m of (idx && Array.isArray(idx.msgs) ? idx.msgs : [])) {
+  for (const g of got) {
+    for (const m of g.msgs) {
       if (!m || !cleanSeg(m.id)) continue;
       if (m.expiresAt && now > Number(m.expiresAt)) continue;   // 过期的不进清单（信封自带 TTL）
       msgs.push({
         id: cleanSeg(m.id),
-        pid: p.pid,
-        from: p.label || p.pid,
+        pid: g.p.pid,
+        from: g.p.label || g.p.pid,
         sync: String(m.sync || ''),
         name: String(m.name || ''),
         kind: String(m.kind || ''),
@@ -131,9 +168,9 @@ async function boxList(ch) {
         items: Array.isArray(m.items) ? m.items : []
       });
     }
-  }));
+  }
   msgs.sort((a, b) => (b.ts || 0) - (a.ts || 0));
-  return { success: true, data: { ch: C, platforms, msgs } };
+  return { success: true, data: { ch: C, platforms, msgs, complete: true } };
 }
 
 /** 一件的内容（信封原样返回，小程序侧的 importConfigs / importPlans 照收） */
@@ -146,10 +183,10 @@ async function boxMsg(ch, pid, mid) {
   try {
     snap = await fetchJson(`${COS_BASE}box/${C}/${P}/${M}.json`);
   } catch (e) {
-    if (e.message === 'KEY_NOT_FOUND') return { success: false, errMsg: '这一件已被撤回或过期' };
+    if (isNotFound(e)) return { success: false, errMsg: '这一件已被撤回或过期' };
     return { success: false, errMsg: '拉取失败：' + e.message };
   }
-  if (!snap || !snap.kind) return { success: false, errMsg: '这一件已被撤回' };   // 撤回是覆写成 {}
+  if (!snap || typeof snap !== 'object' || !snap.kind) return { success: false, errMsg: '这一件已被撤回' };   // 撤回是覆写成 {}
   if (snap.expiresAt && Date.now() > Number(snap.expiresAt)) return { success: false, errMsg: '这一件已过期' };
   return { success: true, data: snap };
 }
@@ -168,7 +205,7 @@ exports.main = async (event) => {
   try {
     text = await httpsGetText(COS_BASE + key + '.json');
   } catch (e) {
-    if (e.message === 'KEY_NOT_FOUND') return { success: false, errMsg: '未找到该密钥对应的数据（密钥错误或已失效）' };
+    if (isNotFound(e)) return { success: false, errMsg: '未找到该密钥对应的数据（密钥错误或已失效）' };
     return { success: false, errMsg: '拉取失败：' + e.message };
   }
 

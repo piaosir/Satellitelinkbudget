@@ -183,11 +183,20 @@ function readPlanIndex() {
 }
 function writePlanIndex(list) { wx.setStorageSync(FP_INDEX_KEY, list); }
 
+/**
+ * 把包里的频率计划逐份落地。返回 { total, added, replaced, failed }。
+ * failed 计的是「存不下」的件（单键超 1 MB / 存储整体满，setStorageSync 当场抛）。存不下时：
+ *   · 不往外抛：后台同步据「抛没抛」判要不要记 seen，抛了就每轮重下同一件、每轮再失败一次
+ *     （同 satsimBox 覆盖快照入队那段）
+ *   · 新到的那份三键全撤，不留 fpPlan_<id> 孤儿；已有的那份三键退回原值，旧版本照常能打开
+ *   · 索引写不进去时本次写过的键整批退回 —— 键写进去了、索引里却没有，就是没人读得到的孤儿
+ */
 function importPlans(pack) {
   const items = itemsOf(pack, 'freq-plan');
-  if (!items.length) return { total: 0, added: 0, replaced: 0 };
+  if (!items.length) return { total: 0, added: 0, replaced: 0, failed: 0 };
   const index = readPlanIndex();
-  let added = 0, replaced = 0;
+  let added = 0, replaced = 0, failed = 0;
+  const undo = [];
   for (const it of items) {
     const meta = it.meta || {};
     const id = String(meta.id || ('fp' + Date.now() + Math.floor(Math.random() * 1000)));
@@ -202,18 +211,48 @@ function importPlans(pack) {
       from: pack.from || '',
       ts: Date.now()
     };
-    wx.setStorageSync(FP_PLAN_KEY(id), {
-      meta: meta, chs: it.chs || [], beams: it.beams || [], los: it.los || [], alloc: it.alloc || null
-    });
-    wx.setStorageSync(FP_DRAW_KEY(id), it.draw || null);
-    // Excel 数据表的表模型：与绘制指令同理另存一键。它只在「导出数据表」那一下才读，
-    // 跟着明细一起存会把那一条撑到接近单键上限（一条载波一行、一行二十来格）。
-    wx.setStorageSync(FP_XLSX_KEY(id), it.xlsx || null);
+    // 明细最后写：loadPlan 认的是它，三键里它在 = 这一份齐了
+    const keys = [FP_XLSX_KEY(id), FP_DRAW_KEY(id), FP_PLAN_KEY(id)];
+    const vals = [
+      // Excel 数据表的表模型：与绘制指令同理另存一键。它只在「导出数据表」那一下才读，
+      // 跟着明细一起存会把那一条撑到接近单键上限（一条载波一行、一行二十来格）。
+      it.xlsx || null,
+      it.draw || null,
+      { meta: meta, chs: it.chs || [], beams: it.beams || [], los: it.los || [], alloc: it.alloc || null }
+    ];
     const at = index.findIndex((x) => x && x.id === id);
+    const prev = at >= 0 ? keys.map((k) => wx.getStorageSync(k)) : null;
+    const had = (i) => !!prev && prev[i] !== '' && prev[i] != null;
+    // 退回前 n 键：原来有的写回原值，原来没有的删掉。写回失败就留着新值 —— 删了这一份就打不开了
+    const restore = (n) => {
+      for (let i = 0; i < n; i++) {
+        try { if (had(i)) wx.setStorageSync(keys[i], prev[i]); else wx.removeStorageSync(keys[i]); } catch (e) { /* 见上 */ }
+      }
+    };
+    let k = 0;
+    try {
+      for (; k < keys.length; k++) wx.setStorageSync(keys[k], vals[k]);
+    } catch (e) {
+      restore(k);
+      // 失败的那一键：失败的写入按没落盘处理，原来有值就不去碰它（硬写回原值只会再抛一次、
+      // 退到删除就把旧版本删了）；原来没有的删一下，防半截
+      if (!had(k)) { try { wx.removeStorageSync(keys[k]); } catch (e2) { /* 没写进去就没得删 */ } }
+      console.error('[satsimPack] 频率计划存不下：', row.name, e);
+      failed++;
+      continue;
+    }
+    undo.push(() => restore(keys.length));
     if (at >= 0) { index[at] = row; replaced++; } else { index.unshift(row); added++; }
   }
-  writePlanIndex(index);
-  return { total: items.length, added: added, replaced: replaced };
+  try {
+    writePlanIndex(index);
+  } catch (e) {
+    // 倒着退：同一 id 在一个包里出现两次时，后一次的「原值」是前一次刚写的
+    for (let i = undo.length - 1; i >= 0; i--) undo[i]();
+    console.error('[satsimPack] 频率计划索引写不下：', e);
+    return { total: items.length, added: 0, replaced: 0, failed: items.length };
+  }
+  return { total: items.length, added: added, replaced: replaced, failed: failed };
 }
 
 function loadPlan(id) {
